@@ -10,3 +10,35 @@ error-prone.
 A user can upload one shopping receipt (image or PDF), the system uses AI
 to extract the important purchase information, and displays the result
 clearly for review.
+
+## Project Structure
+
+```
+Smart-Receipt-AI/
+├── frontend/   # React + TypeScript (Vite)
+└── backend/    # FastAPI
+```
+
+## Setup
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Runs at http://localhost:5173
+
+### Backend
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+Runs at http://localhost:8000 — check http://localhost:8000/health
