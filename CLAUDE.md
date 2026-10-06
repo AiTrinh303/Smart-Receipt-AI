@@ -25,9 +25,14 @@ the purchase info, and the result is displayed for review.
   URL is read from `VITE_API_URL` (`.env.example` / `.env`, the latter
   gitignored).
 - `backend/` — FastAPI app (`main.py`) with a Python venv and
-  `requirements.txt`/`requirements-dev.txt`. Has `/health` and
-  `POST /receipts/upload`. CORS allowed origins come from the
-  `CORS_ORIGINS` env var (default `http://localhost:5173`).
+  `requirements.txt`/`requirements-dev.txt`. Has `/health`,
+  `POST /receipts/upload`, and `POST /receipts/{receipt_id}/extract`
+  (sends the stored receipt to the OpenAI API — see `extraction.py` —
+  and returns structured data; requires `OPENAI_API_KEY`, else `503`).
+  Config (`config.py`) is read from `backend/.env`
+  (`backend/.env.example`, the former gitignored). CORS allowed origins
+  come from the `CORS_ORIGINS` env var (default `http://localhost:5173`).
+  **Note:** calling the extract endpoint sends the receipt file to OpenAI.
 
 ## Running locally
 

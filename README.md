@@ -40,6 +40,7 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env   # add your OPENAI_API_KEY
 uvicorn main:app --reload --port 8001
 ```
 
@@ -48,3 +49,15 @@ Runs at http://localhost:8001 — check http://localhost:8001/health
 The backend allows cross-origin requests from the frontend dev server via
 the `CORS_ORIGINS` environment variable (defaults to
 `http://localhost:5173`).
+
+### Endpoints
+
+- `GET /health` — liveness check.
+- `POST /receipts/upload` — accepts one JPG/PNG/PDF receipt file, stores it,
+  and returns a `receipt_id`.
+- `POST /receipts/{receipt_id}/extract` — sends the stored receipt to the
+  OpenAI API and returns structured purchase data (store, date, items,
+  discounts, taxes, total). Requires `OPENAI_API_KEY` to be set in
+  `backend/.env` (see `backend/.env.example`); without it the endpoint
+  returns `503`. **Note:** uploaded receipts are sent to OpenAI for
+  processing when this endpoint is called.

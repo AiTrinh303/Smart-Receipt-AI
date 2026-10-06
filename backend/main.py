@@ -2,8 +2,11 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+
+import config
+from extraction import ExtractionError, OpenAIReceiptExtractor, ReceiptExtractor
 
 app = FastAPI()
 
@@ -61,3 +64,28 @@ async def upload_receipt(file: UploadFile = File(...)):
         "content_type": file.content_type,
         "size_bytes": len(contents),
     }
+
+
+def get_extractor() -> ReceiptExtractor:
+    if not config.OPENAI_API_KEY:
+        raise HTTPException(status_code=503, detail="Receipt extraction is not configured.")
+    return OpenAIReceiptExtractor(api_key=config.OPENAI_API_KEY, model=config.OPENAI_MODEL)
+
+
+@app.post("/receipts/{receipt_id}/extract")
+def extract_receipt(receipt_id: str, extractor: ReceiptExtractor = Depends(get_extractor)):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    matches = list(UPLOAD_DIR.glob(f"{validated_id}.*"))
+    if not matches:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    try:
+        data = extractor.extract(matches[0])
+    except ExtractionError:
+        raise HTTPException(status_code=502, detail="Receipt extraction failed. Please try again.")
+
+    return {"receipt_id": receipt_id, **data.model_dump()}
