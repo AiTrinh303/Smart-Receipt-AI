@@ -16,6 +16,10 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
+# --- Backend uploads (temporary storage) ---
+backend/uploads/*
+!backend/uploads/.gitkeep
+
 # --- Env files ---
 .env
 .env.local
