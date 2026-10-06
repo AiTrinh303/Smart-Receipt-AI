@@ -1,6 +1,5 @@
 /** @type {import('jest').Config} */
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
   moduleNameMapper: {
@@ -8,7 +7,7 @@ module.exports = {
     '\\.(png|jpg|jpeg|gif|svg|webp|avif)$': '<rootDir>/src/test/fileMock.cjs',
   },
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.jest.json' }],
+    '^.+\\.(t|j)sx?$': '<rootDir>/jest.esbuild-transform.cjs',
   },
   testMatch: ['<rootDir>/src/**/*.test.{ts,tsx}'],
 }

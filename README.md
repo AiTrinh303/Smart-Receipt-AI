@@ -26,10 +26,12 @@ Smart-Receipt-AI/
 ```bash
 cd frontend
 npm install
+cp .env.example .env   # sets VITE_API_URL=http://localhost:8001
 npm run dev
 ```
 
-Runs at http://localhost:5173
+Runs at http://localhost:5173. The frontend reads the backend's URL from
+`VITE_API_URL` (see `.env.example`); `.env` is gitignored and not committed.
 
 ### Backend
 
@@ -38,7 +40,11 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn main:app --reload --port 8001
 ```
 
-Runs at http://localhost:8000 — check http://localhost:8000/health
+Runs at http://localhost:8001 — check http://localhost:8001/health
+
+The backend allows cross-origin requests from the frontend dev server via
+the `CORS_ORIGINS` environment variable (defaults to
+`http://localhost:5173`).

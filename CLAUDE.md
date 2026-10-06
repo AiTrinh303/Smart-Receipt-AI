@@ -20,9 +20,14 @@ the purchase info, and the result is displayed for review.
 
 - `frontend/` — Vite + React + TypeScript app, styled with Tailwind CSS.
   Jest + React Testing Library config lives here (`jest.config.cjs`,
-  `tsconfig.jest.json`, `src/setupTests.ts`).
+  `jest.esbuild-transform.cjs`, `tsconfig.jest.json`, `src/setupTests.ts`).
+  `src/api/` holds API call modules (e.g. `uploadReceipt.ts`); the backend
+  URL is read from `VITE_API_URL` (`.env.example` / `.env`, the latter
+  gitignored).
 - `backend/` — FastAPI app (`main.py`) with a Python venv and
-  `requirements.txt`. Currently just a `/health` endpoint skeleton.
+  `requirements.txt`/`requirements-dev.txt`. Has `/health` and
+  `POST /receipts/upload`. CORS allowed origins come from the
+  `CORS_ORIGINS` env var (default `http://localhost:5173`).
 
 ## Running locally
 
@@ -30,11 +35,14 @@ the purchase info, and the result is displayed for review.
 # Frontend dev server
 cd frontend && npm run dev
 
-# Backend dev server
-cd backend && source venv/bin/activate && uvicorn main:app --reload
+# Backend dev server (runs on port 8001, matching frontend's VITE_API_URL)
+cd backend && source venv/bin/activate && uvicorn main:app --reload --port 8001
 
 # Frontend tests
 cd frontend && npm test
+
+# Backend tests
+cd backend && source venv/bin/activate && pytest
 ```
 
 ## Conventions

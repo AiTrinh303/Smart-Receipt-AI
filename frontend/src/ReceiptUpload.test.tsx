@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
 
@@ -7,7 +7,23 @@ function getFileInput() {
 }
 
 function getSubmitButton() {
-  return screen.getByRole('button', { name: /submit/i })
+  return screen.getByRole('button', { name: /submit|uploading/i })
+}
+
+function jsonResponse(status: number, body: unknown) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+  }
+}
+
+async function selectValidFile() {
+  const user = userEvent.setup()
+  render(<ReceiptUpload />)
+  const validFile = new File(['dummy'], 'receipt.jpg', { type: 'image/jpeg' })
+  await user.upload(getFileInput(), validFile)
+  return { user, validFile }
 }
 
 test('initial state: Submit is disabled when no file is selected', () => {
@@ -69,25 +85,129 @@ test('invalid type: inline error shown, Submit stays disabled, filename not disp
   expect(screen.queryByText('Selected file: receipt.pdf')).not.toBeInTheDocument()
 })
 
-test('valid submit: clicking Submit logs the file and makes no network request', async () => {
-  // Given a valid file has been selected
-  const user = userEvent.setup()
-  const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
-  const fetchSpy = jest.fn()
-  global.fetch = fetchSpy as unknown as typeof fetch
+describe('submitting to the backend', () => {
+  let fetchSpy: jest.Mock
 
-  render(<ReceiptUpload />)
-  const validFile = new File(['dummy'], 'receipt.jpg', { type: 'image/jpeg' })
-  await user.upload(getFileInput(), validFile)
+  beforeEach(() => {
+    fetchSpy = jest.fn()
+    global.fetch = fetchSpy as unknown as typeof fetch
+  })
 
-  // When the user clicks Submit
-  await user.click(getSubmitButton())
+  afterEach(() => {
+    // @ts-expect-error cleaning up the test-only global fetch stub
+    delete global.fetch
+  })
 
-  // Then the file is logged to the console and no network request is made
-  expect(consoleLogSpy).toHaveBeenCalledWith(validFile)
-  expect(fetchSpy).not.toHaveBeenCalled()
+  test('valid file + server returns 201 -> success message with receipt_id shown', async () => {
+    // Given a valid file is selected and the server will accept the upload
+    fetchSpy.mockResolvedValue(
+      jsonResponse(201, {
+        receipt_id: 'abc-123',
+        filename: 'receipt.jpg',
+        content_type: 'image/jpeg',
+        size_bytes: 5,
+      }),
+    )
+    const { user } = await selectValidFile()
 
-  consoleLogSpy.mockRestore()
-  // @ts-expect-error cleaning up the test-only global fetch stub
-  delete global.fetch
+    // When the user clicks Submit
+    await user.click(getSubmitButton())
+
+    // Then a success message with the receipt_id and filename is shown
+    await waitFor(() => {
+      expect(
+        screen.getByText('Upload successful. Receipt ID: abc-123 (receipt.jpg)'),
+      ).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  test('valid file + server returns 400 with detail -> server error message shown', async () => {
+    // Given a valid file is selected and the server rejects it with a 400 and a detail message
+    fetchSpy.mockResolvedValue(jsonResponse(400, { detail: 'Unsupported file type.' }))
+    const { user } = await selectValidFile()
+
+    // When the user clicks Submit
+    await user.click(getSubmitButton())
+
+    // Then the server's detail message is shown in the inline error area
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Unsupported file type.')
+    })
+  })
+
+  test('valid file + server returns 413 -> error shown', async () => {
+    // Given a valid file is selected and the server rejects it with a 413 and a detail message
+    fetchSpy.mockResolvedValue(
+      jsonResponse(413, { detail: 'File exceeds the maximum size of 10 MB.' }),
+    )
+    const { user } = await selectValidFile()
+
+    // When the user clicks Submit
+    await user.click(getSubmitButton())
+
+    // Then the server's detail message is shown in the inline error area
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'File exceeds the maximum size of 10 MB.',
+      )
+    })
+  })
+
+  test('valid file + fetch rejects (network error) -> "Could not reach the server" message shown, Submit enabled again', async () => {
+    // Given a valid file is selected and the network request will fail outright
+    fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'))
+    const { user } = await selectValidFile()
+
+    // When the user clicks Submit
+    await user.click(getSubmitButton())
+
+    // Then a generic "could not reach the server" message is shown and Submit is enabled again for retry
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Could not reach the server. Please try again.',
+      )
+    })
+    expect(getSubmitButton()).toBeEnabled()
+  })
+
+  test('while the request is pending -> "Uploading..." shown and Submit disabled', async () => {
+    // Given a valid file is selected and the server response has not resolved yet
+    let resolveResponse: (value: unknown) => void = () => {}
+    fetchSpy.mockReturnValue(
+      new Promise((resolve) => {
+        resolveResponse = resolve
+      }),
+    )
+    const { user } = await selectValidFile()
+
+    // When the user clicks Submit
+    await user.click(getSubmitButton())
+
+    // Then the button shows "Uploading..." and is disabled while the request is in flight
+    const button = screen.getByRole('button', { name: /uploading/i })
+    expect(button).toBeDisabled()
+    expect(getFileInput()).toBeDisabled()
+
+    resolveResponse(jsonResponse(201, { receipt_id: 'id', filename: 'receipt.jpg' }))
+  })
+
+  test('request is sent to ${VITE_API_URL}/receipts/upload with a FormData body containing the file', async () => {
+    // Given a valid file is selected and the server will accept the upload
+    fetchSpy.mockResolvedValue(
+      jsonResponse(201, { receipt_id: 'abc-123', filename: 'receipt.jpg' }),
+    )
+    const { user, validFile } = await selectValidFile()
+
+    // When the user clicks Submit
+    await user.click(getSubmitButton())
+
+    // Then the request is sent to the configured API URL with a FormData body containing the file
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    const [url, options] = fetchSpy.mock.calls[0]
+    expect(url).toBe('http://localhost:8001/receipts/upload')
+    expect(options.method).toBe('POST')
+    expect(options.body).toBeInstanceOf(FormData)
+    expect((options.body as FormData).get('file')).toBe(validFile)
+  })
 })
