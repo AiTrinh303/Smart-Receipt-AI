@@ -70,17 +70,55 @@ test('invalid type: inline error shown, Submit stays disabled, filename not disp
   // Given the upload form is rendered
   render(<ReceiptUpload />)
 
-  // When the user selects a file with an unsupported type (e.g. a PDF)
+  // When the user selects a file with an unsupported type (e.g. a .txt file)
   // Note: fireEvent is used instead of userEvent.upload because userEvent
   // respects the input's `accept` attribute and would silently skip a
   // non-matching file, never exercising the component's own validation.
-  const invalidFile = new File(['dummy'], 'receipt.pdf', { type: 'application/pdf' })
+  const invalidFile = new File(['dummy'], 'notes.txt', { type: 'text/plain' })
   fireEvent.change(getFileInput(), { target: { files: [invalidFile] } })
 
   // Then an inline error is shown, Submit stays disabled, and no filename is displayed
   expect(
-    screen.getByText('Invalid file type. Please select a JPG or PNG image.'),
+    screen.getByText('Invalid file type. Please select a JPG, PNG, or PDF file.'),
   ).toBeInTheDocument()
+  expect(getSubmitButton()).toBeDisabled()
+  expect(screen.queryByText('Selected file: notes.txt')).not.toBeInTheDocument()
+})
+
+test('valid PDF: filename displayed, Submit enabled, no error shown', async () => {
+  // Given the upload form is rendered
+  const user = userEvent.setup()
+  render(<ReceiptUpload />)
+
+  // When the user selects a valid PDF (content starts with the PDF signature)
+  const validFile = new File(['%PDF-1.4 fake but valid-looking pdf content'], 'receipt.pdf', {
+    type: 'application/pdf',
+  })
+  await user.upload(getFileInput(), validFile)
+
+  // Then the filename is displayed, Submit is enabled, and no error is shown
+  await waitFor(() => {
+    expect(screen.getByText('Selected file: receipt.pdf')).toBeInTheDocument()
+  })
+  expect(getSubmitButton()).toBeEnabled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+test('invalid PDF: name ends in .pdf but content is not "%PDF-" -> inline error shown, Submit disabled, filename not displayed', async () => {
+  // Given the upload form is rendered
+  const user = userEvent.setup()
+  render(<ReceiptUpload />)
+
+  // When the user selects a file named like a PDF but whose content is not a real PDF
+  const invalidPdf = new File(['this is not actually a pdf'], 'receipt.pdf', {
+    type: 'application/pdf',
+  })
+  await user.upload(getFileInput(), invalidPdf)
+
+  // Then an inline error is shown, Submit stays disabled, and no filename is displayed
+  await waitFor(() => {
+    expect(screen.getByText('This file does not look like a valid PDF.')).toBeInTheDocument()
+  })
   expect(getSubmitButton()).toBeDisabled()
   expect(screen.queryByText('Selected file: receipt.pdf')).not.toBeInTheDocument()
 })
@@ -190,6 +228,30 @@ describe('submitting to the backend', () => {
     expect(getFileInput()).toBeDisabled()
 
     resolveResponse(jsonResponse(201, { receipt_id: 'id', filename: 'receipt.jpg' }))
+  })
+
+  test('valid PDF + server returns 201 -> success message with receipt_id shown, request body contains the PDF file', async () => {
+    // Given a valid PDF is selected and the server will accept the upload
+    fetchSpy.mockResolvedValue(jsonResponse(201, { receipt_id: 'pdf-456', filename: 'receipt.pdf' }))
+    const user = userEvent.setup()
+    render(<ReceiptUpload />)
+    const validPdf = new File(['%PDF-1.4 valid pdf content'], 'receipt.pdf', {
+      type: 'application/pdf',
+    })
+    await user.upload(getFileInput(), validPdf)
+    await waitFor(() => expect(screen.getByText('Selected file: receipt.pdf')).toBeInTheDocument())
+
+    // When the user clicks Submit
+    await user.click(getSubmitButton())
+
+    // Then a success message with the receipt_id is shown, and the request body contains the PDF file
+    await waitFor(() => {
+      expect(
+        screen.getByText('Upload successful. Receipt ID: pdf-456 (receipt.pdf)'),
+      ).toBeInTheDocument()
+    })
+    const [, options] = fetchSpy.mock.calls[0]
+    expect((options.body as FormData).get('file')).toBe(validPdf)
   })
 
   test('request is sent to ${VITE_API_URL}/receipts/upload with a FormData body containing the file', async () => {

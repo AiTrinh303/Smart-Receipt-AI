@@ -1,10 +1,42 @@
 import { useState } from 'react'
 import { ApiError, uploadReceipt } from './api/uploadReceipt'
 
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png']
+const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf']
+const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
+const PDF_SIGNATURE = '%PDF-'
+
+function getExtension(filename: string) {
+  const index = filename.lastIndexOf('.')
+  return index === -1 ? '' : filename.slice(index).toLowerCase()
+}
 
 function isValidFile(file: File) {
-  return ACCEPTED_TYPES.includes(file.type)
+  const extension = getExtension(file.name)
+  if (!ACCEPTED_EXTENSIONS.includes(extension)) {
+    return false
+  }
+
+  // Some browsers/environments don't always set `file.type`; only check it
+  // when it's present, since the extension check already narrowed the type.
+  if (file.type && !ACCEPTED_MIME_TYPES.includes(file.type)) {
+    return false
+  }
+
+  return true
+}
+
+function readAsText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'))
+    reader.readAsText(blob)
+  })
+}
+
+async function isLikelyValidPdf(file: File): Promise<boolean> {
+  const header = await readAsText(file.slice(0, PDF_SIGNATURE.length))
+  return header === PDF_SIGNATURE
 }
 
 interface UploadSuccess {
@@ -18,7 +50,7 @@ function ReceiptUpload() {
   const [success, setSuccess] = useState<UploadSuccess | null>(null)
   const [isUploading, setIsUploading] = useState(false)
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0]
     if (!selected) {
       return
@@ -28,7 +60,13 @@ function ReceiptUpload() {
 
     if (!isValidFile(selected)) {
       setFile(null)
-      setError('Invalid file type. Please select a JPG or PNG image.')
+      setError('Invalid file type. Please select a JPG, PNG, or PDF file.')
+      return
+    }
+
+    if (getExtension(selected.name) === '.pdf' && !(await isLikelyValidPdf(selected))) {
+      setFile(null)
+      setError('This file does not look like a valid PDF.')
       return
     }
 
@@ -63,12 +101,12 @@ function ReceiptUpload() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
       <label htmlFor="receipt-file" className="text-sm font-medium text-gray-700">
-        Upload receipt (JPG or PNG)
+        Upload receipt (JPG, PNG, or PDF)
       </label>
       <input
         id="receipt-file"
         type="file"
-        accept=".jpg,.jpeg,.png"
+        accept=".jpg,.jpeg,.png,.pdf"
         onChange={handleFileChange}
         disabled={isUploading}
         className="block w-full text-sm text-gray-700 file:mr-4 file:rounded file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
