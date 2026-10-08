@@ -1,4 +1,6 @@
-export class ApiError extends Error {}
+import { ApiError } from './ApiError'
+
+export { ApiError }
 
 export interface UploadReceiptResponse {
   receipt_id: string
@@ -20,7 +22,7 @@ export async function uploadReceipt(file: File): Promise<UploadReceiptResponse> 
 
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new ApiError(body?.detail ?? 'Upload failed.')
+    throw new ApiError(body?.detail ?? 'Upload failed.', response.status)
   }
 
   return response.json()

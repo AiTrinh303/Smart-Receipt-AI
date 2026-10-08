@@ -21,9 +21,11 @@ the purchase info, and the result is displayed for review.
 - `frontend/` — Vite + React + TypeScript app, styled with Tailwind CSS.
   Jest + React Testing Library config lives here (`jest.config.cjs`,
   `jest.esbuild-transform.cjs`, `tsconfig.jest.json`, `src/setupTests.ts`).
-  `src/api/` holds API call modules (e.g. `uploadReceipt.ts`); the backend
-  URL is read from `VITE_API_URL` (`.env.example` / `.env`, the latter
-  gitignored).
+  `src/api/` holds API call modules (`uploadReceipt.ts`, `extractReceipt.ts`,
+  shared `ApiError`, shared response types in `types.ts`); the backend URL
+  is read from `VITE_API_URL` (`.env.example` / `.env`, the latter
+  gitignored). `ReceiptUpload.tsx` uploads a file then automatically calls
+  extract and renders `ReceiptResult.tsx` with the structured result.
 - `backend/` — FastAPI app (`main.py`) with a Python venv and
   `requirements.txt`/`requirements-dev.txt`. Has `/health`,
   `POST /receipts/upload`, and `POST /receipts/{receipt_id}/extract`
