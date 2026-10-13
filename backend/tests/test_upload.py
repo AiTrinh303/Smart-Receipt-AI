@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 
 import adapters.file_storage as file_storage
 import main
+from adapters.sqlite_repository import SqliteReceiptRepository
+from api.routes import get_repository
 
 client = TestClient(main.app)
 
@@ -14,6 +16,18 @@ client = TestClient(main.app)
 def temp_upload_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(file_storage, "UPLOAD_DIR", tmp_path)
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def temp_repository(tmp_path_factory):
+    # Uses a directory separate from temp_upload_dir's tmp_path so the
+    # database file never shows up in the uploads-directory listing
+    # assertions below.
+    db_dir = tmp_path_factory.mktemp("db")
+    repository = SqliteReceiptRepository(db_dir / "test.db")
+    main.app.dependency_overrides[get_repository] = lambda: repository
+    yield repository
+    main.app.dependency_overrides.clear()
 
 
 def make_files(content: bytes, content_type: str, filename: str):

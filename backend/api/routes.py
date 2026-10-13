@@ -8,12 +8,22 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 import config
 from adapters.file_storage import find_file, save_file
 from adapters.openai_extractor import OpenAIReceiptExtractor
-from domain.ports import ExtractionError, ReceiptExtractor
+from adapters.sqlite_repository import SqliteReceiptRepository
+from domain.ports import ExtractionError, ReceiptExtractor, ReceiptRepository
 from domain.rules import EmptyFileError, FileTooLargeError, UnsupportedFileTypeError, validate_upload
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_repository: ReceiptRepository | None = None
+
+
+def get_repository() -> ReceiptRepository:
+    global _repository
+    if _repository is None:
+        _repository = SqliteReceiptRepository(config.DATABASE_PATH)
+    return _repository
 
 
 @router.get("/health")
@@ -22,7 +32,10 @@ def health():
 
 
 @router.post("/receipts/upload", status_code=201)
-async def upload_receipt(file: UploadFile = File(...)):
+async def upload_receipt(
+    file: UploadFile = File(...),
+    repository: ReceiptRepository = Depends(get_repository),
+):
     extension = Path(file.filename or "").suffix.lower()
     contents = await file.read()
 
@@ -39,6 +52,12 @@ async def upload_receipt(file: UploadFile = File(...)):
         raise HTTPException(status_code=413, detail="File exceeds the maximum size of 10 MB.")
 
     receipt_id = save_file(contents, extension)
+    repository.save_upload(
+        receipt_id=receipt_id,
+        original_filename=file.filename,
+        stored_filename=f"{receipt_id}{extension}",
+        content_type=file.content_type,
+    )
 
     return {
         "receipt_id": receipt_id,
@@ -55,7 +74,11 @@ def get_extractor() -> ReceiptExtractor:
 
 
 @router.post("/receipts/{receipt_id}/extract")
-def extract_receipt(receipt_id: str, extractor: ReceiptExtractor = Depends(get_extractor)):
+def extract_receipt(
+    receipt_id: str,
+    extractor: ReceiptExtractor = Depends(get_extractor),
+    repository: ReceiptRepository = Depends(get_repository),
+):
     try:
         validated_id = uuid.UUID(receipt_id)
     except ValueError:
@@ -88,4 +111,30 @@ def extract_receipt(receipt_id: str, extractor: ReceiptExtractor = Depends(get_e
         )
         raise HTTPException(status_code=502, detail="Receipt extraction failed. Please try again.")
 
+    try:
+        repository.save_receipt(receipt_id, data)
+    except Exception:
+        # Never tell the client the receipt was saved when it was not; the
+        # real cause (never the API key or file contents) is logged for
+        # developers only.
+        logger.exception("Failed to save extracted receipt: receipt_id=%s", receipt_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save the extracted receipt. Please try again.",
+        )
+
     return {"receipt_id": receipt_id, **data.model_dump()}
+
+
+@router.get("/receipts/{receipt_id}")
+def get_receipt(receipt_id: str, repository: ReceiptRepository = Depends(get_repository)):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    saved = repository.get_receipt(str(validated_id))
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    return saved.model_dump()

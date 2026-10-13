@@ -32,28 +32,49 @@ the purchase info, and the result is displayed for review.
 - `backend/` — FastAPI app with a Python venv and
   `requirements.txt`/`requirements-dev.txt`, layered per
   [docs/adr/0001-layered-backend.md](docs/adr/0001-layered-backend.md):
-  - `domain/` — `models.py` (`ReceiptData` and friends), `rules.py` (allowed
-    file types, size limit; raises domain exceptions, no HTTP/FastAPI/file
-    I/O), `ports.py` (`ReceiptExtractor` Protocol, `ExtractionError`). Must
-    never import `adapters`, `api`, `fastapi`, `openai`, `sqlite3`, or
-    `config.py`.
+  - `domain/` — `models.py` (`ReceiptData` and friends, plus `SavedUpload`
+    and `SavedReceipt` for persisted data), `rules.py` (allowed file types,
+    size limit; raises domain exceptions, no HTTP/FastAPI/file I/O),
+    `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError`,
+    `ReceiptRepository` Protocol — `save_upload`/`get_upload`/
+    `save_receipt`/`get_receipt`). Must never import `adapters`, `api`,
+    `fastapi`, `openai`, `sqlite3`, or `config.py`.
   - `adapters/` — `openai_extractor.py` (`OpenAIReceiptExtractor`, the
     OpenAI API call), `file_storage.py` (saving/finding files in
-    `uploads/` by UUID filename). Must never import `api`.
-  - `api/` — `app.py` (creates the FastAPI app, CORS middleware),
+    `uploads/` by UUID filename), `sqlite_repository.py`
+    (`SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads` and
+    `receipts` tables; schema created via `CREATE TABLE IF NOT EXISTS`).
+    Must never import `api`.
+    **Money rule:** `total` is never stored as a float — the adapter
+    converts with `Decimal(str(value))` to an exact decimal string (e.g.
+    `19.99`, not a binary-float expansion) in a dedicated column kept for
+    future search/summary use; the live API always reads `total` back from
+    `extracted_json` (the full `ReceiptData`, parsed with its original
+    float), never from that decimal-string column, so no rounding error
+    ever reaches a response.
+  - `api/` — `app.py` (creates the FastAPI app, CORS middleware, and a
+    `lifespan` handler that creates the repository — and therefore the
+    SQLite schema — at startup, not the deprecated `on_event`),
     `routes.py` (`/health`, `POST /receipts/upload`,
-    `POST /receipts/{receipt_id}/extract`; the `get_extractor` dependency;
-    server-side logging of extraction failures; maps domain exceptions to
+    `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`;
+    the `get_extractor` and `get_repository` dependencies; server-side
+    logging of extraction and save failures; maps domain exceptions to
     HTTP status codes: 400/413 from upload rules, 502 from
-    `ExtractionError`, 503 when `OPENAI_API_KEY` is missing).
+    `ExtractionError`, 503 when `OPENAI_API_KEY` is missing, 500 generic on
+    a repository save failure — raw error text is never returned to the
+    client).
   - `main.py` stays a thin entry point (`from api.app import app`) so
     `uvicorn main:app --reload --port 8001` keeps working.
   - `config.py` stays at the backend root; reads `backend/.env`
     (`backend/.env.example`, the former gitignored). CORS allowed origins
     come from `CORS_ORIGINS` (default `http://localhost:5173`).
+    `DATABASE_PATH` (default `backend/data/receipts.db`) configures the
+    SQLite file; `backend/data/` and `*.db` are gitignored.
   - Dependency direction: `api` -> `adapters` -> `domain`, and `api` ->
     `domain` directly. Enforced by import-linter (`backend/.importlinter`).
-  - **Note:** calling the extract endpoint sends the receipt file to OpenAI.
+  - **Note:** calling the extract endpoint sends the receipt file to
+    OpenAI; the resulting receipt data is then stored locally in SQLite
+    (the file itself stays in `backend/uploads/`, never in the database).
 
 ## Running locally
 

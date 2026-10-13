@@ -40,7 +40,7 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env   # add your OPENAI_API_KEY
+cp -n .env.example .env   # add your OPENAI_API_KEY (-n: never overwrite an existing .env)
 uvicorn main:app --reload --port 8001
 ```
 
@@ -50,14 +50,25 @@ The backend allows cross-origin requests from the frontend dev server via
 the `CORS_ORIGINS` environment variable (defaults to
 `http://localhost:5173`).
 
+Extracted receipts are persisted locally in a SQLite database. The file path
+comes from `DATABASE_PATH` (default `backend/data/receipts.db`, created
+automatically); `backend/data/` and `*.db` files are gitignored.
+**Note:** receipt data itself is stored locally, but the receipt image/PDF
+is still sent to OpenAI for extraction.
+
 ### Endpoints
 
 - `GET /health` — liveness check.
 - `POST /receipts/upload` — accepts one JPG/PNG/PDF receipt file, stores it,
-  and returns a `receipt_id`.
+  records it in the database, and returns a `receipt_id`.
 - `POST /receipts/{receipt_id}/extract` — sends the stored receipt to the
-  OpenAI API and returns structured purchase data (store, date, items,
-  discounts, taxes, total). Requires `OPENAI_API_KEY` to be set in
-  `backend/.env` (see `backend/.env.example`); without it the endpoint
+  OpenAI API, returns structured purchase data (store, date, items,
+  discounts, taxes, total), and saves the result (re-extracting the same
+  receipt overwrites the saved result). Requires `OPENAI_API_KEY` to be set
+  in `backend/.env` (see `backend/.env.example`); without it the endpoint
   returns `503`. **Note:** uploaded receipts are sent to OpenAI for
   processing when this endpoint is called.
+- `GET /receipts/{receipt_id}` — returns the saved receipt (same fields as
+  the extract response, plus `original_filename`, `content_type`,
+  `created_at`, `updated_at`). Unknown or not-yet-extracted receipts
+  return `404`.
