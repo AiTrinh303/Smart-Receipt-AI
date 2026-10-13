@@ -22,13 +22,15 @@ the purchase info, and the result is displayed for review.
   Jest + React Testing Library config lives here (`jest.config.cjs`,
   `jest.esbuild-transform.cjs`, `tsconfig.jest.json`, `src/setupTests.ts`).
   `src/api/` holds API call modules (`uploadReceipt.ts`, `extractReceipt.ts`,
-  `getReceipt.ts`, shared `ApiError`, shared response types in `types.ts`);
-  the backend URL is read from `VITE_API_URL` (`.env.example` / `.env`, the
+  `getReceipt.ts`, `listReceipts.ts`, shared `ApiError`, shared response
+  types in `types.ts` — including `ReceiptSummary`, the list-row shape); the
+  backend URL is read from `VITE_API_URL` (`.env.example` / `.env`, the
   latter gitignored). `ReceiptUpload.tsx` uploads a file then automatically
   calls extract and renders `ReceiptResult.tsx` with the structured result.
   Dependency direction: UI components (`App.tsx`, `ReceiptUpload.tsx`,
-  `ReceiptResult.tsx`) -> `src/api/` -> `src/api/types.ts`. `src/api/` must
-  never import a UI component — enforced by dependency-cruiser.
+  `ReceiptResult.tsx`, `ReceiptHistory.tsx`) -> `src/api/` ->
+  `src/api/types.ts`. `src/api/` must never import a UI component —
+  enforced by dependency-cruiser.
   **Reopening a saved receipt:** after a successful extraction,
   `ReceiptUpload.tsx` writes `?receipt=<id>` to the address bar via
   `window.history.replaceState` (no router library, no page reload, no new
@@ -39,6 +41,19 @@ the purchase info, and the result is displayed for review.
   reaches the server — it goes straight to "Receipt not found", the same
   message shown for a real `404`. "Upload another receipt" clears the
   `receipt` param along with all state.
+  **Navigation (`App.tsx`, `src/navigation.ts`):** no router library — a
+  tiny `navigateTo(search)` helper does `history.pushState` and dispatches a
+  synthetic `popstate` event (since `pushState`/`replaceState` never fire
+  one themselves); `App.tsx` listens for `popstate` (real browser
+  back/forward and the synthetic ones) to decide, from the URL, which of
+  `ReceiptHistory.tsx` (`?view=history`) or `ReceiptUpload.tsx` (otherwise —
+  including `?receipt=<id>`) to render, keying each on the current
+  `location.search` so external navigation remounts cleanly without
+  disturbing `ReceiptUpload`'s own internal `replaceState` calls.
+  `ReceiptHistory.tsx` lists saved receipts (store, date, total; "Not
+  detected" for anything missing) and navigates to `?receipt=<id>` on row
+  click; `ReceiptUpload.tsx` adds a "Back to history" link when showing a
+  result.
 - `backend/` — FastAPI app with a Python venv and
   `requirements.txt`/`requirements-dev.txt`, layered per
   [docs/adr/0001-layered-backend.md](docs/adr/0001-layered-backend.md):

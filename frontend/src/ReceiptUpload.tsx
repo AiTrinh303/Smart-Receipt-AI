@@ -4,6 +4,7 @@ import { extractReceipt } from './api/extractReceipt'
 import { getReceipt } from './api/getReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
 import type { ReceiptExtraction } from './api/types'
+import { navigateTo } from './navigation'
 import ReceiptResult from './ReceiptResult'
 
 const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf']
@@ -236,7 +237,21 @@ function ReceiptUpload() {
   }
 
   if (result) {
-    return <ReceiptResult data={result} onReset={handleReset} />
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <ReceiptResult data={result} onReset={handleReset} />
+        <a
+          href="/?view=history"
+          onClick={(e) => {
+            e.preventDefault()
+            navigateTo('?view=history')
+          }}
+          className="text-sm font-medium text-blue-600 underline"
+        >
+          Back to history
+        </a>
+      </div>
+    )
   }
 
   if (isLoadingReceipt) {

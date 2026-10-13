@@ -39,6 +39,13 @@ page or opening that link again fetches the already-saved result from
 `GET /receipts/{id}` and displays it directly — it does **not** call the AI
 again.
 
+Navigation is URL-based, with no router library:
+- No parameter — the upload view (default).
+- `?view=history` — the receipt history list (newest first). Clicking a row
+  navigates to `?receipt=<id>` and shows the same detail view as above
+  (also without calling the AI); a "Back to history" link returns to the
+  list. Browser back/forward works for all of these.
+
 ### Backend
 
 ```bash

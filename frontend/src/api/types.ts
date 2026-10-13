@@ -25,3 +25,13 @@ export interface ReceiptExtraction {
   taxes: Tax[]
   total: number | null
 }
+
+export interface ReceiptSummary {
+  receipt_id: string
+  original_filename: string | null
+  store_name: string | null
+  purchase_date: string | null
+  currency: string | null
+  total: number | null
+  created_at: string
+}
