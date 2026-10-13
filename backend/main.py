@@ -1,4 +1,6 @@
+import logging
 import os
+import time
 import uuid
 from pathlib import Path
 
@@ -7,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import config
 from extraction import ExtractionError, OpenAIReceiptExtractor, ReceiptExtractor
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -83,9 +87,28 @@ def extract_receipt(receipt_id: str, extractor: ReceiptExtractor = Depends(get_e
     if not matches:
         raise HTTPException(status_code=404, detail="Receipt not found.")
 
+    file_path = matches[0]
+    started_at = time.perf_counter()
     try:
-        data = extractor.extract(matches[0])
-    except ExtractionError:
+        data = extractor.extract(file_path)
+    except ExtractionError as exc:
+        elapsed_seconds = time.perf_counter() - started_at
+        # The chained cause (e.g. the real OpenAI SDK exception) carries the
+        # actual diagnostic detail; it is logged server-side only and never
+        # included in the HTTP response, which stays a generic 502.
+        cause = exc.__cause__ or exc
+        logger.error(
+            "Receipt extraction failed: receipt_id=%s extension=%s size_bytes=%s "
+            "model=%s elapsed_seconds=%.3f exception_type=%s exception_message=%s",
+            receipt_id,
+            file_path.suffix,
+            file_path.stat().st_size,
+            config.OPENAI_MODEL,
+            elapsed_seconds,
+            type(cause).__name__,
+            cause,
+            exc_info=True,
+        )
         raise HTTPException(status_code=502, detail="Receipt extraction failed. Please try again.")
 
     return {"receipt_id": receipt_id, **data.model_dump()}

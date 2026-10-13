@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 import pytest
@@ -161,6 +162,29 @@ def test_extractor_error_returns_502_without_leaking_raw_error(temp_upload_dir):
     # Then the response is 502 and the raw error text is never leaked to the client
     assert response.status_code == 502
     assert "sk-shouldnotleak" not in response.text
+
+
+def test_extraction_failure_logs_real_cause_server_side_without_leaking_to_response(
+    temp_upload_dir, caplog
+):
+    # Given a stored receipt and an extractor that fails with a sensitive-looking error
+    receipt_id = store_file(temp_upload_dir, ".jpg")
+    override_extractor(
+        FakeExtractor(error=ExtractionError("secret provider detail: sk-shouldnotleak"))
+    )
+
+    # When the extract endpoint is called for that receipt
+    with caplog.at_level(logging.ERROR):
+        response = client.post(f"/receipts/{receipt_id}/extract")
+
+    # Then the HTTP response stays generic, with no provider error text leaked
+    assert response.status_code == 502
+    assert "sk-shouldnotleak" not in response.text
+
+    # And the real cause is logged server-side, including the exception type
+    assert "ExtractionError" in caplog.text
+    assert "sk-shouldnotleak" in caplog.text
+    assert receipt_id in caplog.text
 
 
 def test_missing_api_key_returns_503(temp_upload_dir, monkeypatch):
