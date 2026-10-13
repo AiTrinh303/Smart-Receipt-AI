@@ -1,9 +1,10 @@
 import base64
 from pathlib import Path
-from typing import Protocol
 
 from openai import OpenAI
-from pydantic import BaseModel
+
+from domain.models import ReceiptData
+from domain.ports import ExtractionError
 
 REQUEST_TIMEOUT_SECONDS = 60
 
@@ -24,41 +25,6 @@ EXTRACTION_INSTRUCTIONS = (
     "value, set it to null (or an empty list for the items/discounts/taxes "
     "lists). Never guess or invent values that are not present on the receipt."
 )
-
-
-class LineItem(BaseModel):
-    name: str | None
-    quantity: float | None
-    unit_price: float | None
-    line_total: float | None
-
-
-class Discount(BaseModel):
-    description: str | None
-    amount: float | None
-
-
-class Tax(BaseModel):
-    description: str | None
-    amount: float | None
-
-
-class ReceiptData(BaseModel):
-    store_name: str | None
-    purchase_date: str | None
-    currency: str | None
-    items: list[LineItem]
-    discounts: list[Discount]
-    taxes: list[Tax]
-    total: float | None
-
-
-class ExtractionError(Exception):
-    """Raised when a receipt's data could not be extracted."""
-
-
-class ReceiptExtractor(Protocol):
-    def extract(self, file_path: Path) -> ReceiptData: ...
 
 
 class OpenAIReceiptExtractor:

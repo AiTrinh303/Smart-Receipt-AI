@@ -4,6 +4,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
+import adapters.file_storage as file_storage
 import main
 
 client = TestClient(main.app)
@@ -11,7 +12,7 @@ client = TestClient(main.app)
 
 @pytest.fixture(autouse=True)
 def temp_upload_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(main, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(file_storage, "UPLOAD_DIR", tmp_path)
     return tmp_path
 
 

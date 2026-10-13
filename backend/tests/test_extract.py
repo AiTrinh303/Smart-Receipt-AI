@@ -4,16 +4,19 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
+import adapters.file_storage as file_storage
 import config
 import main
-from extraction import ExtractionError, ReceiptData
+from api.routes import get_extractor
+from domain.models import ReceiptData
+from domain.ports import ExtractionError
 
 client = TestClient(main.app)
 
 
 @pytest.fixture(autouse=True)
 def temp_upload_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(main, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(file_storage, "UPLOAD_DIR", tmp_path)
     return tmp_path
 
 
@@ -35,7 +38,7 @@ class FakeExtractor:
 
 
 def override_extractor(extractor: FakeExtractor):
-    main.app.dependency_overrides[main.get_extractor] = lambda: extractor
+    main.app.dependency_overrides[get_extractor] = lambda: extractor
 
 
 def store_file(upload_dir, extension: str, content: bytes = b"fake-bytes") -> str:
