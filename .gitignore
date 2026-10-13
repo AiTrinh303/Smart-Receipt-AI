@@ -20,6 +20,10 @@ __pycache__/
 backend/uploads/*
 !backend/uploads/.gitkeep
 
+# --- Backend database ---
+backend/data/
+*.db
+
 # --- Env files ---
 .env
 .env.local

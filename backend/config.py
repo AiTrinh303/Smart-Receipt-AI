@@ -7,3 +7,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-6-astra")
+
+DATABASE_PATH = Path(
+    os.environ.get("DATABASE_PATH", str(Path(__file__).parent / "data" / "receipts.db"))
+)

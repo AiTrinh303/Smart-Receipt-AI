@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Protocol
 
-from domain.models import ReceiptData
+from domain.models import ReceiptData, SavedReceipt, SavedUpload
 
 
 class ExtractionError(Exception):
@@ -10,3 +10,19 @@ class ExtractionError(Exception):
 
 class ReceiptExtractor(Protocol):
     def extract(self, file_path: Path) -> ReceiptData: ...
+
+
+class ReceiptRepository(Protocol):
+    def save_upload(
+        self,
+        receipt_id: str,
+        original_filename: str | None,
+        stored_filename: str,
+        content_type: str | None,
+    ) -> None: ...
+
+    def get_upload(self, receipt_id: str) -> SavedUpload | None: ...
+
+    def save_receipt(self, receipt_id: str, data: ReceiptData) -> None: ...
+
+    def get_receipt(self, receipt_id: str) -> SavedReceipt | None: ...

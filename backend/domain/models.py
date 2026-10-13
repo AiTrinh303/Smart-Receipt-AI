@@ -26,3 +26,19 @@ class ReceiptData(BaseModel):
     discounts: list[Discount]
     taxes: list[Tax]
     total: float | None
+
+
+class SavedUpload(BaseModel):
+    receipt_id: str
+    original_filename: str | None
+    stored_filename: str
+    content_type: str | None
+    created_at: str
+
+
+class SavedReceipt(ReceiptData):
+    receipt_id: str
+    original_filename: str | None
+    content_type: str | None
+    created_at: str
+    updated_at: str
