@@ -1,0 +1,26 @@
+[importlinter]
+root_packages =
+    domain
+    adapters
+    api
+include_external_packages = True
+
+[importlinter:contract:domain-independence]
+name = Domain must not depend on adapters, api, or outside-world frameworks
+type = forbidden
+source_modules =
+    domain
+forbidden_modules =
+    adapters
+    api
+    fastapi
+    openai
+    sqlite3
+
+[importlinter:contract:adapters-independence]
+name = Adapters must not depend on api
+type = forbidden
+source_modules =
+    adapters
+forbidden_modules =
+    api
