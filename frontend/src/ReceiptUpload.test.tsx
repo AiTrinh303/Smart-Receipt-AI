@@ -2,6 +2,17 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
 
+// A successful extraction now updates the address bar with ?receipt=<id>
+// (history.replaceState), and jsdom's window.location persists across tests
+// within the same file. Reset it so one test's URL never leaks into the next.
+beforeEach(() => {
+  window.history.replaceState({}, '', '/')
+})
+
+afterEach(() => {
+  window.history.replaceState({}, '', '/')
+})
+
 function getFileInput() {
   return screen.getByLabelText(/upload receipt/i)
 }

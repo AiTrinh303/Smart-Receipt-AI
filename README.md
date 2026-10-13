@@ -33,6 +33,12 @@ npm run dev
 Runs at http://localhost:5173. The frontend reads the backend's URL from
 `VITE_API_URL` (see `.env.example`); `.env` is gitignored and not committed.
 
+After a receipt is uploaded and extracted, the address bar is updated to
+`?receipt=<id>` (via `history.replaceState`, no page reload). Reloading the
+page or opening that link again fetches the already-saved result from
+`GET /receipts/{id}` and displays it directly — it does **not** call the AI
+again.
+
 ### Backend
 
 ```bash

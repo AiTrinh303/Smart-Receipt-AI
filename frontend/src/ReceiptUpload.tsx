@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ApiError } from './api/ApiError'
 import { extractReceipt } from './api/extractReceipt'
+import { getReceipt } from './api/getReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
 import type { ReceiptExtraction } from './api/types'
 import ReceiptResult from './ReceiptResult'
@@ -8,6 +9,8 @@ import ReceiptResult from './ReceiptResult'
 const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf']
 const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
 const PDF_SIGNATURE = '%PDF-'
+const RECEIPT_QUERY_PARAM = 'receipt'
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function getExtension(filename: string) {
   const index = filename.lastIndexOf('.')
@@ -43,6 +46,34 @@ async function isLikelyValidPdf(file: File): Promise<boolean> {
   return header === PDF_SIGNATURE
 }
 
+function isValidUuid(value: string): boolean {
+  return UUID_PATTERN.test(value)
+}
+
+function getReceiptIdFromUrl(): { id: string | null; invalid: boolean } {
+  const params = new URLSearchParams(window.location.search)
+  const raw = params.get(RECEIPT_QUERY_PARAM)
+  if (raw === null) {
+    return { id: null, invalid: false }
+  }
+  return isValidUuid(raw) ? { id: raw, invalid: false } : { id: null, invalid: true }
+}
+
+function setReceiptIdInUrl(id: string) {
+  const params = new URLSearchParams(window.location.search)
+  params.set(RECEIPT_QUERY_PARAM, id)
+  const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`
+  window.history.replaceState({}, '', newUrl)
+}
+
+function removeReceiptIdFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  params.delete(RECEIPT_QUERY_PARAM)
+  const query = params.toString()
+  const newUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
+  window.history.replaceState({}, '', newUrl)
+}
+
 interface UploadSuccess {
   receiptId: string
   filename: string
@@ -53,6 +84,7 @@ const EXTRACTION_FAILED_MESSAGE =
   'We could not read this receipt. Please try again or upload a clearer image.'
 const EXTRACTION_NOT_CONFIGURED_MESSAGE =
   'The AI service is not configured. Please try again later.'
+const LOAD_RECEIPT_FAILED_MESSAGE = 'Could not load this receipt. Please try again.'
 
 function ReceiptUpload() {
   const [file, setFile] = useState<File | null>(null)
@@ -65,6 +97,41 @@ function ReceiptUpload() {
   const [extractionError, setExtractionError] = useState<string | null>(null)
   const [result, setResult] = useState<ReceiptExtraction | null>(null)
 
+  const initialReceipt = getReceiptIdFromUrl()
+  const [isLoadingReceipt, setIsLoadingReceipt] = useState(initialReceipt.id !== null)
+  const [notFound, setNotFound] = useState(initialReceipt.invalid)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const loadSavedReceipt = async (id: string) => {
+    setIsLoadingReceipt(true)
+    setLoadError(null)
+    setNotFound(false)
+    setReceiptId(id)
+
+    try {
+      const data = await getReceipt(id)
+      setResult(data)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setNotFound(true)
+      } else if (err instanceof ApiError) {
+        setLoadError(LOAD_RECEIPT_FAILED_MESSAGE)
+      } else {
+        setLoadError(NETWORK_ERROR_MESSAGE)
+      }
+    } finally {
+      setIsLoadingReceipt(false)
+    }
+  }
+
+  useEffect(() => {
+    if (initialReceipt.id) {
+      loadSavedReceipt(initialReceipt.id)
+    }
+    // Only ever run once, on mount, to read the URL's initial state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const runExtraction = async (id: string) => {
     setIsExtracting(true)
     setExtractionError(null)
@@ -72,6 +139,7 @@ function ReceiptUpload() {
     try {
       const data = await extractReceipt(id)
       setResult(data)
+      setReceiptIdInUrl(id)
     } catch (err) {
       if (err instanceof ApiError && err.status === 503) {
         setExtractionError(EXTRACTION_NOT_CONFIGURED_MESSAGE)
@@ -146,6 +214,12 @@ function ReceiptUpload() {
     }
   }
 
+  const handleRetryLoad = () => {
+    if (receiptId) {
+      loadSavedReceipt(receiptId)
+    }
+  }
+
   const handleReset = () => {
     setFile(null)
     setError(null)
@@ -155,10 +229,54 @@ function ReceiptUpload() {
     setIsExtracting(false)
     setExtractionError(null)
     setResult(null)
+    setIsLoadingReceipt(false)
+    setNotFound(false)
+    setLoadError(null)
+    removeReceiptIdFromUrl()
   }
 
   if (result) {
     return <ReceiptResult data={result} onReset={handleReset} />
+  }
+
+  if (isLoadingReceipt) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
+        <p className="text-sm text-gray-600">Loading receipt...</p>
+      </div>
+    )
+  }
+
+  if (notFound) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
+        <p className="text-sm text-gray-600">Receipt not found</p>
+        <button
+          type="button"
+          onClick={handleReset}
+          className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+        >
+          Upload a receipt
+        </button>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
+        <p role="alert" className="text-sm text-red-600">
+          {loadError}
+        </p>
+        <button
+          type="button"
+          onClick={handleRetryLoad}
+          className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+        >
+          Retry
+        </button>
+      </div>
+    )
   }
 
   const isBusy = isUploading || isExtracting
