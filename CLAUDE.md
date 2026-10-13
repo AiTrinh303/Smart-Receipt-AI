@@ -42,19 +42,25 @@ the purchase info, and the result is displayed for review.
 - `backend/` — FastAPI app with a Python venv and
   `requirements.txt`/`requirements-dev.txt`, layered per
   [docs/adr/0001-layered-backend.md](docs/adr/0001-layered-backend.md):
-  - `domain/` — `models.py` (`ReceiptData` and friends, plus `SavedUpload`
-    and `SavedReceipt` for persisted data), `rules.py` (allowed file types,
-    size limit; raises domain exceptions, no HTTP/FastAPI/file I/O),
+  - `domain/` — `models.py` (`ReceiptData` and friends, plus `SavedUpload`,
+    `SavedReceipt` and `ReceiptSummary` — the last a small list-row model:
+    receipt_id, original_filename, store_name, purchase_date, currency,
+    total, created_at — for persisted data), `rules.py` (allowed file
+    types, size limit; raises domain exceptions, no HTTP/FastAPI/file I/O),
     `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError`,
     `ReceiptRepository` Protocol — `save_upload`/`get_upload`/
-    `save_receipt`/`get_receipt`). Must never import `adapters`, `api`,
-    `fastapi`, `openai`, `sqlite3`, or `config.py`.
+    `save_receipt`/`get_receipt`/`list_receipts`). Must never import
+    `adapters`, `api`, `fastapi`, `openai`, `sqlite3`, or `config.py`.
   - `adapters/` — `openai_extractor.py` (`OpenAIReceiptExtractor`, the
     OpenAI API call), `file_storage.py` (saving/finding files in
     `uploads/` by UUID filename), `sqlite_repository.py`
     (`SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads` and
     `receipts` tables; schema created via `CREATE TABLE IF NOT EXISTS`).
-    Must never import `api`.
+    `list_receipts` orders by `created_at DESC, receipt_id ASC` (stable
+    tie-break) and builds each row from `extracted_json` (same source as
+    `get_receipt`, so `total`'s JSON type matches); a row with unparseable
+    `extracted_json` is logged (receipt_id only) and skipped rather than
+    failing the whole list. Must never import `api`.
     **Money rule:** `total` is never stored as a float — the adapter
     converts with `Decimal(str(value))` to an exact decimal string (e.g.
     `19.99`, not a binary-float expansion) in a dedicated column kept for
@@ -66,7 +72,10 @@ the purchase info, and the result is displayed for review.
     `lifespan` handler that creates the repository — and therefore the
     SQLite schema — at startup, not the deprecated `on_event`),
     `routes.py` (`/health`, `POST /receipts/upload`,
-    `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`;
+    `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`,
+    `GET /receipts?limit=N` — list, newest first, `limit` default 50
+    (1–200, else `422`), `{"items": [...], "count": N}`, empty DB ->
+    `{"items": [], "count": 0}` never `404`;
     the `get_extractor` and `get_repository` dependencies; server-side
     logging of extraction and save failures; maps domain exceptions to
     HTTP status codes: 400/413 from upload rules, 502 from

@@ -3,7 +3,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 import config
 from adapters.file_storage import find_file, save_file
@@ -65,6 +65,15 @@ async def upload_receipt(
         "content_type": file.content_type,
         "size_bytes": len(contents),
     }
+
+
+@router.get("/receipts")
+def list_receipts(
+    limit: int = Query(default=50, ge=1, le=200),
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    items = repository.list_receipts(limit)
+    return {"items": [item.model_dump() for item in items], "count": len(items)}
 
 
 def get_extractor() -> ReceiptExtractor:

@@ -78,3 +78,10 @@ is still sent to OpenAI for extraction.
   the extract response, plus `original_filename`, `content_type`,
   `created_at`, `updated_at`). Unknown or not-yet-extracted receipts
   return `404`.
+- `GET /receipts?limit=N` — lists saved receipts newest first, as
+  `{"items": [{receipt_id, original_filename, store_name, purchase_date,
+  currency, total, created_at}, ...], "count": <number>}` (no items,
+  discounts or taxes — use `GET /receipts/{id}` for the full detail).
+  `limit` defaults to 50 (1–200); an out-of-range or non-integer value
+  returns `422`. An empty database returns `{"items": [], "count": 0}`,
+  never `404`.

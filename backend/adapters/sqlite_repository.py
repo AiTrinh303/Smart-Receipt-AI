@@ -1,10 +1,13 @@
+import logging
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from domain.models import ReceiptData, SavedReceipt, SavedUpload
+from domain.models import ReceiptData, ReceiptSummary, SavedReceipt, SavedUpload
+
+logger = logging.getLogger(__name__)
 
 
 def _utc_now_iso() -> str:
@@ -192,3 +195,44 @@ class SqliteReceiptRepository:
             taxes=extracted.taxes,
             total=extracted.total,
         )
+
+    def list_receipts(self, limit: int) -> list[ReceiptSummary]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT r.receipt_id, r.extracted_json, r.created_at, u.original_filename
+                FROM receipts r
+                LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
+                ORDER BY r.created_at DESC, r.receipt_id ASC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+        summaries: list[ReceiptSummary] = []
+        for receipt_id, extracted_json, created_at, original_filename in rows:
+            try:
+                # Same source (extracted_json) as get_receipt(), so `total`
+                # carries the same JSON type here as in the extract/GET
+                # responses -- never the decimal-string column or a
+                # recomputed float.
+                extracted = ReceiptData.model_validate_json(extracted_json)
+            except Exception:
+                # One corrupted row must never break the whole list; skip it
+                # and keep going, logging only the receipt_id.
+                logger.error("Skipping receipt with unparseable extracted_json: receipt_id=%s", receipt_id)
+                continue
+
+            summaries.append(
+                ReceiptSummary(
+                    receipt_id=receipt_id,
+                    original_filename=original_filename,
+                    store_name=extracted.store_name,
+                    purchase_date=extracted.purchase_date,
+                    currency=extracted.currency,
+                    total=extracted.total,
+                    created_at=created_at,
+                )
+            )
+
+        return summaries

@@ -42,3 +42,13 @@ class SavedReceipt(ReceiptData):
     content_type: str | None
     created_at: str
     updated_at: str
+
+
+class ReceiptSummary(BaseModel):
+    receipt_id: str
+    original_filename: str | None
+    store_name: str | None
+    purchase_date: str | None
+    currency: str | None
+    total: float | None
+    created_at: str
