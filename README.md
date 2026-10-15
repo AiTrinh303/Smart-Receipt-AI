@@ -77,10 +77,20 @@ is still sent to OpenAI for extraction.
 - `POST /receipts/{receipt_id}/extract` — sends the stored receipt to the
   OpenAI API, returns structured purchase data (store, date, items,
   discounts, taxes, total), and saves the result (re-extracting the same
-  receipt overwrites the saved result). Requires `OPENAI_API_KEY` to be set
-  in `backend/.env` (see `backend/.env.example`); without it the endpoint
-  returns `503`. **Note:** uploaded receipts are sent to OpenAI for
-  processing when this endpoint is called.
+  receipt overwrites the saved result). **Note:** uploaded receipts are sent
+  to OpenAI for processing when this endpoint is called. Error responses:
+  - `503` — the AI *service* isn't usable right now: `OPENAI_API_KEY` is
+    missing, empty, or still the `.env.example` placeholder
+    (`your-key-here`) — none of these ever reach the provider — or the
+    provider itself rejected the request for a reason unrelated to the
+    receipt (bad/invalid key, no credit, unknown model, rate limited).
+  - `502` — the receipt itself could not be read (unparseable image/PDF,
+    provider timeout, or any other extraction failure).
+
+  Both keep the existing behavior of logging the real cause server-side
+  (exception type, message, receipt_id, file info, elapsed time) while
+  never including provider error text, the key, or file contents in the
+  response or the log; nothing is saved to the database on either failure.
 - `GET /receipts/{receipt_id}` — returns the saved receipt (same fields as
   the extract response, plus `original_filename`, `content_type`,
   `created_at`, `updated_at`). Unknown or not-yet-extracted receipts

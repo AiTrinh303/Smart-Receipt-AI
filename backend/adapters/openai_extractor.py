@@ -1,12 +1,24 @@
 import base64
 from pathlib import Path
 
-from openai import OpenAI
+from openai import AuthenticationError, NotFoundError, OpenAI, PermissionDeniedError, RateLimitError
 
 from domain.models import ReceiptData
-from domain.ports import ExtractionError
+from domain.ports import ExtractionError, ExtractionUnavailableError
 
 REQUEST_TIMEOUT_SECONDS = 60
+
+# These mean the AI service itself is not usable right now (bad/missing key,
+# no credit, unknown model, rate limited) -- not that the receipt was
+# unreadable. RateLimitError covers both literal rate limiting and
+# insufficient-quota/no-credit responses, which OpenAI reports with the same
+# exception class. NotFoundError covers an unknown/misconfigured model name.
+UNAVAILABLE_EXCEPTION_TYPES = (
+    AuthenticationError,
+    PermissionDeniedError,
+    NotFoundError,
+    RateLimitError,
+)
 
 # PDFs are sent as native file input (not rendered to an image first): the
 # configured model is a vision-capable "and later" model per OpenAI's docs,
@@ -68,10 +80,17 @@ class OpenAIReceiptExtractor:
                 ],
                 text_format=ReceiptData,
             )
+        except UNAVAILABLE_EXCEPTION_TYPES as exc:
+            # The AI service itself is not usable (auth, permissions, unknown
+            # model, rate limit/no credit) -- distinct from the receipt being
+            # unreadable. The endpoint maps this to a 503, never leaking the
+            # raw provider error or the key.
+            raise ExtractionUnavailableError("The AI service is not available.") from exc
         except Exception as exc:
-            # Provider errors, timeouts, and unparseable output are all
-            # collapsed into one error here; the endpoint maps this to a
-            # generic 502 without leaking the raw provider error or the key.
+            # Everything else (timeout, bad request, unparseable output,
+            # unknown errors) means the receipt itself could not be read.
+            # The endpoint maps this to a generic 502 without leaking the
+            # raw provider error or the key.
             raise ExtractionError("Receipt extraction failed.") from exc
 
         parsed = response.output_parsed

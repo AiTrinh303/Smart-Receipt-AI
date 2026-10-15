@@ -62,13 +62,22 @@ the purchase info, and the result is displayed for review.
     receipt_id, original_filename, store_name, purchase_date, currency,
     total, created_at — for persisted data), `rules.py` (allowed file
     types, size limit; raises domain exceptions, no HTTP/FastAPI/file I/O),
-    `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError`,
-    `ReceiptRepository` Protocol — `save_upload`/`get_upload`/
-    `save_receipt`/`get_receipt`/`list_receipts`). Must never import
-    `adapters`, `api`, `fastapi`, `openai`, `sqlite3`, or `config.py`.
+    `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError` /
+    `ExtractionUnavailableError`, `ReceiptRepository` Protocol —
+    `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
+    `list_receipts`). `ExtractionError` means the receipt itself couldn't
+    be read (unparseable output, timeout, bad request);
+    `ExtractionUnavailableError` means the AI *service* isn't usable (bad
+    key, no credit, unknown model, rate limit) — they map to `502` and
+    `503` respectively in `api/routes.py`, so a misconfigured key doesn't
+    look like an unreadable receipt. Must never import `adapters`, `api`,
+    `fastapi`, `openai`, `sqlite3`, or `config.py`.
   - `adapters/` — `openai_extractor.py` (`OpenAIReceiptExtractor`, the
-    OpenAI API call), `file_storage.py` (saving/finding files in
-    `uploads/` by UUID filename), `sqlite_repository.py`
+    OpenAI API call — maps `AuthenticationError`/`PermissionDeniedError`/
+    `NotFoundError`/`RateLimitError` to `ExtractionUnavailableError`,
+    everything else to `ExtractionError`, always via `raise ... from exc`
+    so the real cause is still logged), `file_storage.py` (saving/finding
+    files in `uploads/` by UUID filename), `sqlite_repository.py`
     (`SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads` and
     `receipts` tables; schema created via `CREATE TABLE IF NOT EXISTS`).
     `list_receipts` orders by `created_at DESC, receipt_id ASC` (stable
@@ -94,14 +103,18 @@ the purchase info, and the result is displayed for review.
     the `get_extractor` and `get_repository` dependencies; server-side
     logging of extraction and save failures; maps domain exceptions to
     HTTP status codes: 400/413 from upload rules, 502 from
-    `ExtractionError`, 503 when `OPENAI_API_KEY` is missing, 500 generic on
-    a repository save failure — raw error text is never returned to the
-    client).
+    `ExtractionError`, 503 from `ExtractionUnavailableError` or when
+    `OPENAI_API_KEY` is not configured, 500 generic on a repository save
+    failure — raw error text is never returned to the client).
   - `main.py` stays a thin entry point (`from api.app import app`) so
     `uvicorn main:app --reload --port 8001` keeps working.
   - `config.py` stays at the backend root; reads `backend/.env`
     (`backend/.env.example`, the former gitignored). CORS allowed origins
     come from `CORS_ORIGINS` (default `http://localhost:5173`).
+    `OPENAI_API_KEY` is normalized to `None` ("not configured") when
+    missing, empty, or equal to the `.env.example` placeholder
+    (`your-key-here`) — so a forgotten placeholder key behaves exactly
+    like a missing one (503, no provider call) instead of reaching OpenAI.
     `DATABASE_PATH` (default `backend/data/receipts.db`) configures the
     SQLite file; `backend/data/` and `*.db` are gitignored.
   - Dependency direction: `api` -> `adapters` -> `domain`, and `api` ->

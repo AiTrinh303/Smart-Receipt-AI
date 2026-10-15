@@ -5,7 +5,15 @@ from domain.models import ReceiptData, ReceiptSummary, SavedReceipt, SavedUpload
 
 
 class ExtractionError(Exception):
-    """Raised when a receipt's data could not be extracted."""
+    """Raised when a receipt's data could not be extracted (e.g. unreadable
+    image, timeout, or output that doesn't parse) -- the AI service itself
+    is reachable and usable."""
+
+
+class ExtractionUnavailableError(Exception):
+    """Raised when the AI service itself is not usable right now (bad or
+    missing API key, no credit, unknown model, rate limited) -- distinct
+    from the receipt being unreadable."""
 
 
 class ReceiptExtractor(Protocol):

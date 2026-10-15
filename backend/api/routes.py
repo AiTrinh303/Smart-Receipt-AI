@@ -9,7 +9,12 @@ import config
 from adapters.file_storage import find_file, save_file
 from adapters.openai_extractor import OpenAIReceiptExtractor
 from adapters.sqlite_repository import SqliteReceiptRepository
-from domain.ports import ExtractionError, ReceiptExtractor, ReceiptRepository
+from domain.ports import (
+    ExtractionError,
+    ExtractionUnavailableError,
+    ReceiptExtractor,
+    ReceiptRepository,
+)
 from domain.rules import EmptyFileError, FileTooLargeError, UnsupportedFileTypeError, validate_upload
 
 logger = logging.getLogger(__name__)
@@ -100,11 +105,11 @@ def extract_receipt(
     started_at = time.perf_counter()
     try:
         data = extractor.extract(file_path)
-    except ExtractionError as exc:
+    except (ExtractionError, ExtractionUnavailableError) as exc:
         elapsed_seconds = time.perf_counter() - started_at
         # The chained cause (e.g. the real OpenAI SDK exception) carries the
         # actual diagnostic detail; it is logged server-side only and never
-        # included in the HTTP response, which stays a generic 502.
+        # included in the HTTP response, which stays generic either way.
         cause = exc.__cause__ or exc
         logger.error(
             "Receipt extraction failed: receipt_id=%s extension=%s size_bytes=%s "
@@ -118,6 +123,17 @@ def extract_receipt(
             cause,
             exc_info=True,
         )
+        if isinstance(exc, ExtractionUnavailableError):
+            # The AI service itself is not usable (bad key, no credit, model
+            # not available, rate limit) -- distinct from the receipt being
+            # unreadable, so callers don't waste time debugging the image.
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "The AI service is not available (not configured or out of "
+                    "credit). Check the server configuration."
+                ),
+            )
         raise HTTPException(status_code=502, detail="Receipt extraction failed. Please try again.")
 
     try:
