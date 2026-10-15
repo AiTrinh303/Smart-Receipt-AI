@@ -46,6 +46,17 @@ Navigation is URL-based, with no router library:
   (also without calling the AI); a "Back to history" link returns to the
   list. Browser back/forward works for all of these.
 
+On any saved-receipt view, an "Edit" button opens a form (prefilled from the
+current data) for correcting store name, date, currency, items, discounts,
+taxes and total. **Save** sends a `PUT` with only those fields and shows the
+updated data directly from the response (no extra `GET`); **Cancel**
+discards the changes and sends no request. Empty fields are saved as
+`null`; non-numeric amounts are caught client-side before any request is
+sent, and the server's validation messages are shown for anything it
+rejects. If the stored date isn't a valid ISO date, the field shows an
+"Original: ..." hint so it can be corrected. Editing and saving never call
+the extract endpoint — no AI call, no cost.
+
 ### Backend
 
 ```bash

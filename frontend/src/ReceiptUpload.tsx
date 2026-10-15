@@ -5,6 +5,7 @@ import { getReceipt } from './api/getReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
 import type { ReceiptExtraction } from './api/types'
 import { navigateTo } from './navigation'
+import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
 
 const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf']
@@ -97,6 +98,7 @@ function ReceiptUpload() {
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionError, setExtractionError] = useState<string | null>(null)
   const [result, setResult] = useState<ReceiptExtraction | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
 
   const initialReceipt = getReceiptIdFromUrl()
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(initialReceipt.id !== null)
@@ -162,6 +164,7 @@ function ReceiptUpload() {
 
     setSuccess(null)
     setResult(null)
+    setIsEditing(false)
     setExtractionError(null)
     setReceiptId(null)
 
@@ -191,6 +194,7 @@ function ReceiptUpload() {
     setError(null)
     setSuccess(null)
     setResult(null)
+    setIsEditing(false)
     setExtractionError(null)
 
     try {
@@ -230,16 +234,38 @@ function ReceiptUpload() {
     setIsExtracting(false)
     setExtractionError(null)
     setResult(null)
+    setIsEditing(false)
     setIsLoadingReceipt(false)
     setNotFound(false)
     setLoadError(null)
     removeReceiptIdFromUrl()
   }
 
+  if (result && isEditing) {
+    return (
+      <ReceiptEditForm
+        receiptId={result.receipt_id}
+        data={result}
+        onSave={(updated) => {
+          setResult(updated)
+          setIsEditing(false)
+        }}
+        onCancel={() => setIsEditing(false)}
+      />
+    )
+  }
+
   if (result) {
     return (
       <div className="flex flex-col items-center gap-3">
         <ReceiptResult data={result} onReset={handleReset} />
+        <button
+          type="button"
+          onClick={() => setIsEditing(true)}
+          className="text-sm font-medium text-blue-600 underline"
+        >
+          Edit
+        </button>
         <a
           href="/?view=history"
           onClick={(e) => {

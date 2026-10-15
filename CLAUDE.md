@@ -54,6 +54,21 @@ the purchase info, and the result is displayed for review.
   detected" for anything missing) and navigates to `?receipt=<id>` on row
   click; `ReceiptUpload.tsx` adds a "Back to history" link when showing a
   result.
+  **Editing (`ReceiptEditForm.tsx`, `src/api/updateReceipt.ts`):** an
+  "Edit" button on any saved-receipt view (unchanged `ReceiptResult.tsx`
+  itself is not touched; the button lives in the surrounding container)
+  opens a form prefilled from the current data, with add/remove rows for
+  items/discounts/taxes. **Save** sends `PUT /receipts/{id}` with *only*
+  the editable fields (never `receipt_id`/`created_at`/
+  `original_filename`/etc.) and updates the view straight from the
+  response — no extra `GET`. Empty text/number inputs are sent as `null`;
+  non-numeric amounts are caught client-side (inline error, no request
+  sent) before anything reaches the server; a `422` is turned into
+  readable per-field messages via `updateReceipt.ts`. **Cancel** discards
+  all changes and sends no request. A stored `purchase_date` that isn't a
+  valid ISO date renders as a plain text input (not `<input type="date">`,
+  which would just show blank) with an "Original: ..." hint below it.
+  Never calls the extract endpoint.
 - `backend/` — FastAPI app with a Python venv and
   `requirements.txt`/`requirements-dev.txt`, layered per
   [docs/adr/0001-layered-backend.md](docs/adr/0001-layered-backend.md):

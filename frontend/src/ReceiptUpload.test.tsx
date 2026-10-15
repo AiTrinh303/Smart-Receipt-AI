@@ -559,4 +559,37 @@ describe('submitting to the backend', () => {
     expect(options.body).toBeInstanceOf(FormData)
     expect((options.body as FormData).get('file')).toBe(validFile)
   })
+
+  test('after extraction, clicking "Edit" shows a form prefilled with the current values', async () => {
+    // Given upload and extraction have succeeded
+    routeFetch(fetchSpy, {
+      upload: () => Promise.resolve(jsonResponse(201, { receipt_id: 'abc-123', filename: 'receipt.jpg' })),
+      extract: () =>
+        Promise.resolve(
+          jsonResponse(200, {
+            receipt_id: 'abc-123',
+            store_name: 'Corner Store',
+            purchase_date: '2026-01-15',
+            currency: 'USD',
+            items: [],
+            discounts: [],
+            taxes: [],
+            total: 9.99,
+          }),
+        ),
+    })
+    const { user } = await selectValidFile()
+    await user.click(getSubmitButton())
+    await waitFor(() => {
+      expect(screen.getByText('Corner Store')).toBeInTheDocument()
+    })
+
+    // When the user clicks "Edit"
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+
+    // Then an edit form prefilled with the current values is shown, and extract was never called again
+    expect(screen.getByDisplayValue('Corner Store')).toBeInTheDocument()
+    expect(screen.getByLabelText('Total')).toHaveValue('9.99')
+    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes('/extract'))).toHaveLength(1)
+  })
 })
