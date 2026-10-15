@@ -84,7 +84,7 @@ const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
 const EXTRACTION_FAILED_MESSAGE =
   'We could not read this receipt. Please try again or upload a clearer image.'
 const EXTRACTION_NOT_CONFIGURED_MESSAGE =
-  'The AI service is not configured. Please try again later.'
+  'The AI service is not available (not configured or out of credit). Please check the server settings.'
 const LOAD_RECEIPT_FAILED_MESSAGE = 'Could not load this receipt. Please try again.'
 
 function ReceiptUpload() {

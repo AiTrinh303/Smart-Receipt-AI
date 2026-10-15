@@ -375,25 +375,95 @@ describe('submitting to the backend', () => {
     expect(extractCallCount).toBe(2)
   })
 
-  test('extraction returns 503 -> "AI service is not configured" message shown', async () => {
-    // Given upload succeeds and extraction fails because the AI service has no key configured
+  test('extraction returns 503 -> "AI service is not available" message shown, not the "could not read" text', async () => {
+    // Given upload succeeds and extraction fails because the AI service itself is unavailable
+    // (bad key, no credit, unknown model, or rate limit -- mapped by the backend to 503)
     routeFetch(fetchSpy, {
       upload: () => Promise.resolve(jsonResponse(201, { receipt_id: 'abc-123', filename: 'receipt.jpg' })),
       extract: () =>
-        Promise.resolve(jsonResponse(503, { detail: 'Receipt extraction is not configured.' })),
+        Promise.resolve(
+          jsonResponse(503, {
+            detail:
+              'The AI service is not available (not configured or out of credit). Check the server configuration.',
+          }),
+        ),
     })
     const { user } = await selectValidFile()
 
     // When the user clicks Submit
     await user.click(getSubmitButton())
 
-    // Then a message specifically about the AI service not being configured is shown
+    // Then the distinct "AI service unavailable" message is shown, not the "could not read" one
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'The AI service is not configured. Please try again later.',
+        'The AI service is not available (not configured or out of credit). Please check the server settings.',
       )
     })
+    expect(screen.queryByText(/could not read this receipt/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+  })
+
+  test('extraction returns 502 -> "could not read this receipt" message still shown', async () => {
+    // Given upload succeeds and extraction fails because the receipt itself could not be read
+    routeFetch(fetchSpy, {
+      upload: () => Promise.resolve(jsonResponse(201, { receipt_id: 'abc-123', filename: 'receipt.jpg' })),
+      extract: () =>
+        Promise.resolve(jsonResponse(502, { detail: 'Receipt extraction failed. Please try again.' })),
+    })
+    const { user } = await selectValidFile()
+
+    // When the user clicks Submit
+    await user.click(getSubmitButton())
+
+    // Then the existing "could not read this receipt" message is shown, not the AI-unavailable one
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'We could not read this receipt. Please try again or upload a clearer image.',
+      )
+    })
+    expect(screen.queryByText(/AI service is not available/i)).not.toBeInTheDocument()
+  })
+
+  test('Retry after a 503 calls only the extract endpoint again, not upload', async () => {
+    // Given upload succeeds and the first extraction attempt returns 503
+    let extractCallCount = 0
+    routeFetch(fetchSpy, {
+      upload: () => Promise.resolve(jsonResponse(201, { receipt_id: 'abc-123', filename: 'receipt.jpg' })),
+      extract: () => {
+        extractCallCount += 1
+        if (extractCallCount === 1) {
+          return Promise.resolve(
+            jsonResponse(503, {
+              detail: 'The AI service is not available (not configured or out of credit).',
+            }),
+          )
+        }
+        return Promise.resolve(
+          jsonResponse(200, { receipt_id: 'abc-123', store_name: 'Corner Store', items: [], discounts: [], taxes: [] }),
+        )
+      },
+    })
+    const { user } = await selectValidFile()
+    await user.click(getSubmitButton())
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('The AI service is not available')
+    })
+    const uploadCallsBeforeRetry = fetchSpy.mock.calls.filter(([url]) =>
+      String(url).endsWith('/receipts/upload'),
+    ).length
+
+    // When the user clicks Retry
+    await user.click(screen.getByRole('button', { name: /retry/i }))
+
+    // Then only the extract endpoint is called again (no second upload), and the result is shown
+    await waitFor(() => {
+      expect(screen.getByText('Corner Store')).toBeInTheDocument()
+    })
+    const uploadCallsAfterRetry = fetchSpy.mock.calls.filter(([url]) =>
+      String(url).endsWith('/receipts/upload'),
+    ).length
+    expect(uploadCallsAfterRetry).toBe(uploadCallsBeforeRetry)
+    expect(extractCallCount).toBe(2)
   })
 
   test('extraction network failure -> "Could not reach the server" message shown', async () => {
