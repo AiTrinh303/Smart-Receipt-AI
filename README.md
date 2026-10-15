@@ -57,6 +57,17 @@ rejects. If the stored date isn't a valid ISO date, the field shows an
 "Original: ..." hint so it can be corrected. Editing and saving never call
 the extract endpoint — no AI call, no cost.
 
+A "Delete" button sits next to "Edit" on any saved-receipt view (hidden
+while the edit form is open) and requires confirmation via an in-page
+prompt — not `window.confirm` — before sending anything. On success, it
+navigates to `?view=history` with a fresh list and a "Receipt deleted."
+notice; if the receipt was already gone (`404`), it navigates there with
+"This receipt no longer exists." instead. A network failure or server
+error keeps you on the receipt with the error shown, so you can try again.
+**Privacy note:** delete only removes the local database record and the
+local file — the receipt image/PDF was already sent to OpenAI for
+extraction, and this app has no way to delete that copy.
+
 ### Backend
 
 ```bash

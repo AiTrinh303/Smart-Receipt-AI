@@ -69,6 +69,17 @@ the purchase info, and the result is displayed for review.
   valid ISO date renders as a plain text input (not `<input type="date">`,
   which would just show blank) with an "Original: ..." hint below it.
   Never calls the extract endpoint.
+  **Deleting (`src/api/deleteReceipt.ts`):** a "Delete" button next to
+  "Edit" (hidden while the edit form is open) opens an in-page
+  confirmation (not `window.confirm`) — no request until "Yes, delete".
+  A `204` navigates to `?view=history&notice=deleted` (a one-shot URL
+  param `ReceiptHistory.tsx` reads once on mount, displays as "Receipt
+  deleted.", then immediately strips via `replaceState` so a reload never
+  redisplays it); a `404` navigates there with `notice=gone` ->
+  "This receipt no longer exists." instead. Network/5xx failures keep the
+  receipt on screen with the error shown so the user can retry — nothing
+  is navigated away on failure. `deleteReceipt` never parses a body on
+  success (a `204` has none).
 - `backend/` — FastAPI app with a Python venv and
   `requirements.txt`/`requirements-dev.txt`, layered per
   [docs/adr/0001-layered-backend.md](docs/adr/0001-layered-backend.md):

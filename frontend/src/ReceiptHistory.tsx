@@ -22,7 +22,28 @@ function displayAmount(value: number | null | undefined, currency: string | null
 const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
 const LIST_FAILED_MESSAGE = 'Could not load receipt history. Please try again.'
 
+/** Reads a one-shot `?notice=` param (set by ReceiptUpload after a delete)
+ * and strips it from the URL immediately, so reloading or navigating back
+ * never redisplays it. */
+function getAndClearNotice(): string | null {
+  const params = new URLSearchParams(window.location.search)
+  const notice = params.get('notice')
+  if (notice === null) {
+    return null
+  }
+
+  params.delete('notice')
+  const query = params.toString()
+  const newUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
+  window.history.replaceState({}, '', newUrl)
+
+  if (notice === 'deleted') return 'Receipt deleted.'
+  if (notice === 'gone') return 'This receipt no longer exists.'
+  return null
+}
+
 function ReceiptHistory() {
+  const [notice] = useState(getAndClearNotice)
   const [items, setItems] = useState<ReceiptSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -60,9 +81,12 @@ function ReceiptHistory() {
     navigateTo('')
   }
 
+  const noticeBanner = notice ? <p className="text-sm text-green-600">{notice}</p> : null
+
   if (isLoading) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
+        {noticeBanner}
         <p className="text-sm text-gray-600">Loading receipts...</p>
       </div>
     )
@@ -71,6 +95,7 @@ function ReceiptHistory() {
   if (error) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
+        {noticeBanner}
         <p role="alert" className="text-sm text-red-600">
           {error}
         </p>
@@ -88,6 +113,7 @@ function ReceiptHistory() {
   if (items && items.length === 0) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
+        {noticeBanner}
         <p className="text-sm text-gray-600">No receipts yet. Upload your first receipt.</p>
         <a
           href="/"
@@ -102,6 +128,7 @@ function ReceiptHistory() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-3 rounded-lg border border-gray-300 p-6">
+      {noticeBanner}
       <h2 className="text-lg font-semibold text-gray-900">Receipt history</h2>
       <ul className="flex flex-col gap-2">
         {items?.map((item) => (

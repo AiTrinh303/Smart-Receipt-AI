@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ApiError } from './api/ApiError'
+import { deleteReceipt } from './api/deleteReceipt'
 import { extractReceipt } from './api/extractReceipt'
 import { getReceipt } from './api/getReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
@@ -99,6 +100,9 @@ function ReceiptUpload() {
   const [extractionError, setExtractionError] = useState<string | null>(null)
   const [result, setResult] = useState<ReceiptExtraction | null>(null)
   const [isEditing, setIsEditing] = useState(false)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const initialReceipt = getReceiptIdFromUrl()
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(initialReceipt.id !== null)
@@ -225,6 +229,30 @@ function ReceiptUpload() {
     }
   }
 
+  const handleConfirmDelete = async () => {
+    if (!result) {
+      return
+    }
+
+    setIsDeleting(true)
+    setDeleteError(null)
+
+    try {
+      await deleteReceipt(result.receipt_id)
+      navigateTo('?view=history&notice=deleted')
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        navigateTo('?view=history&notice=gone')
+      } else if (err instanceof ApiError) {
+        setDeleteError(err.message)
+      } else {
+        setDeleteError(NETWORK_ERROR_MESSAGE)
+      }
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const handleReset = () => {
     setFile(null)
     setError(null)
@@ -235,6 +263,9 @@ function ReceiptUpload() {
     setExtractionError(null)
     setResult(null)
     setIsEditing(false)
+    setIsConfirmingDelete(false)
+    setIsDeleting(false)
+    setDeleteError(null)
     setIsLoadingReceipt(false)
     setNotFound(false)
     setLoadError(null)
@@ -259,23 +290,68 @@ function ReceiptUpload() {
     return (
       <div className="flex flex-col items-center gap-3">
         <ReceiptResult data={result} onReset={handleReset} />
-        <button
-          type="button"
-          onClick={() => setIsEditing(true)}
-          className="text-sm font-medium text-blue-600 underline"
-        >
-          Edit
-        </button>
-        <a
-          href="/?view=history"
-          onClick={(e) => {
-            e.preventDefault()
-            navigateTo('?view=history')
-          }}
-          className="text-sm font-medium text-blue-600 underline"
-        >
-          Back to history
-        </a>
+
+        {isConfirmingDelete ? (
+          <div className="mx-auto flex max-w-md flex-col gap-3 rounded-lg border border-gray-300 p-4">
+            <p className="text-sm text-gray-700">
+              Delete this receipt? This removes the saved data and the uploaded file from this
+              app. This cannot be undone.
+            </p>
+            {deleteError && (
+              <p role="alert" className="text-sm text-red-600">
+                {deleteError}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {isDeleting ? 'Deleting...' : 'Yes, delete'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(false)}
+                disabled={isDeleting}
+                className="rounded bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="text-sm font-medium text-blue-600 underline"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteError(null)
+                setIsConfirmingDelete(true)
+              }}
+              className="text-sm font-medium text-red-600 underline"
+            >
+              Delete
+            </button>
+            <a
+              href="/?view=history"
+              onClick={(e) => {
+                e.preventDefault()
+                navigateTo('?view=history')
+              }}
+              className="text-sm font-medium text-blue-600 underline"
+            >
+              Back to history
+            </a>
+          </div>
+        )}
       </div>
     )
   }
