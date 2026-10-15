@@ -23,3 +23,54 @@ def test_unlisted_origin_does_not_get_cors_header():
     # Then the response does not include an Access-Control-Allow-Origin header
     assert response.status_code == 200
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_preflight_for_put_on_a_receipt_succeeds_with_put_allowed():
+    # Given a browser about to send a PUT request (e.g. the edit form's Save)
+    # When it sends the CORS preflight OPTIONS request first
+    response = client.options(
+        "/receipts/11111111-1111-1111-1111-111111111111",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    # Then the preflight succeeds, echoes the allowed origin, and allows PUT
+    assert response.status_code in (200, 204)
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert "PUT" in response.headers.get("access-control-allow-methods", "")
+
+
+def test_preflight_for_delete_on_a_receipt_succeeds_with_delete_allowed():
+    # Given a browser about to send a DELETE request (e.g. the delete button)
+    # When it sends the CORS preflight OPTIONS request first
+    response = client.options(
+        "/receipts/11111111-1111-1111-1111-111111111111",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "DELETE",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    # Then the preflight succeeds, echoes the allowed origin, and allows DELETE
+    assert response.status_code in (200, 204)
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert "DELETE" in response.headers.get("access-control-allow-methods", "")
+
+
+def test_preflight_from_unlisted_origin_does_not_get_cors_header():
+    # Given a preflight request from an origin that is not in CORS_ORIGINS
+    # When it requests permission to send a PUT
+    response = client.options(
+        "/receipts/11111111-1111-1111-1111-111111111111",
+        headers={
+            "Origin": "http://evil.example.com",
+            "Access-Control-Request-Method": "PUT",
+        },
+    )
+
+    # Then no Access-Control-Allow-Origin header is returned
+    assert "access-control-allow-origin" not in response.headers
