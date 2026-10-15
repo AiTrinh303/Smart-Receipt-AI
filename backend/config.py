@@ -17,6 +17,13 @@ OPENAI_API_KEY = (
 )
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-6-astra")
 
-DATABASE_PATH = Path(
-    os.environ.get("DATABASE_PATH", str(Path(__file__).parent / "data" / "receipts.db"))
+_BACKEND_DIR = Path(__file__).parent
+_raw_database_path = Path(os.environ.get("DATABASE_PATH", "data/receipts.db"))
+# A relative DATABASE_PATH (including the default) is resolved against the
+# backend/ directory itself, not the current working directory -- otherwise
+# starting uvicorn from a different folder would silently create a second,
+# empty database. An absolute DATABASE_PATH is used exactly as given.
+DATABASE_PATH = (
+    _raw_database_path if _raw_database_path.is_absolute() else _BACKEND_DIR / _raw_database_path
 )
+DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)

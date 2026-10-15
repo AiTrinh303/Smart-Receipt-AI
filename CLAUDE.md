@@ -115,8 +115,12 @@ the purchase info, and the result is displayed for review.
     missing, empty, or equal to the `.env.example` placeholder
     (`your-key-here`) — so a forgotten placeholder key behaves exactly
     like a missing one (503, no provider call) instead of reaching OpenAI.
-    `DATABASE_PATH` (default `backend/data/receipts.db`) configures the
-    SQLite file; `backend/data/` and `*.db` are gitignored.
+    `DATABASE_PATH` (default `data/receipts.db`) configures the SQLite
+    file; a relative value is resolved against `backend/` (the folder
+    containing `config.py`), not the current working directory, so
+    starting `uvicorn` from elsewhere (e.g. `--app-dir backend` from the
+    repo root) never creates a second, empty database — an absolute value
+    is used as given. `backend/data/` and `*.db` are gitignored.
   - Dependency direction: `api` -> `adapters` -> `domain`, and `api` ->
     `domain` directly. Enforced by import-linter (`backend/.importlinter`).
   - **Note:** calling the extract endpoint sends the receipt file to

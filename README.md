@@ -64,8 +64,13 @@ the `CORS_ORIGINS` environment variable (defaults to
 `http://localhost:5173`).
 
 Extracted receipts are persisted locally in a SQLite database. The file path
-comes from `DATABASE_PATH` (default `backend/data/receipts.db`, created
-automatically); `backend/data/` and `*.db` files are gitignored.
+comes from `DATABASE_PATH` (default `data/receipts.db`, created
+automatically); `backend/data/` and `*.db` files are gitignored. A relative
+`DATABASE_PATH` is always resolved against the `backend/` folder itself, not
+the current working directory — so running `uvicorn` from elsewhere (e.g.
+`uvicorn --app-dir backend main:app` from the repo root) still uses the same
+database instead of silently creating a second, empty one. An absolute
+`DATABASE_PATH` is used exactly as given.
 **Note:** receipt data itself is stored locally, but the receipt image/PDF
 is still sent to OpenAI for extraction.
 
