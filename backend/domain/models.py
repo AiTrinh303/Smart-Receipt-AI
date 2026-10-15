@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from datetime import date
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LineItem(BaseModel):
@@ -52,3 +54,54 @@ class ReceiptSummary(BaseModel):
     currency: str | None
     total: float | None
     created_at: str
+
+
+# --- Editable-field models (user corrections), deliberately separate from
+# ReceiptData/LineItem/Discount/Tax above: those parse lenient AI output and
+# must stay lenient, while these validate strictly against user input. ---
+
+
+class LineItemUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    quantity: float | None = Field(strict=True, allow_inf_nan=False, gt=0)
+    unit_price: float | None = Field(strict=True, allow_inf_nan=False)
+    line_total: float | None = Field(strict=True, allow_inf_nan=False)
+
+
+class DiscountUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    description: str = Field(min_length=1)
+    amount: float | None = Field(strict=True, allow_inf_nan=False)
+
+
+class TaxUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    description: str = Field(min_length=1)
+    amount: float | None = Field(strict=True, allow_inf_nan=False)
+
+
+class ReceiptUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    store_name: str | None = Field(max_length=200)
+    purchase_date: str | None
+    currency: str | None = Field(max_length=10)
+    items: list[LineItemUpdate] = Field(max_length=200)
+    discounts: list[DiscountUpdate] = Field(max_length=50)
+    taxes: list[TaxUpdate] = Field(max_length=50)
+    total: float | None = Field(strict=True, allow_inf_nan=False)
+
+    @field_validator("purchase_date")
+    @classmethod
+    def _validate_purchase_date(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            raise ValueError("purchase_date must be null or a valid ISO date (YYYY-MM-DD).")
+        return value

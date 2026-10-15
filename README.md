@@ -107,3 +107,17 @@ is still sent to OpenAI for extraction.
   `limit` defaults to 50 (1–200); an out-of-range or non-integer value
   returns `422`. An empty database returns `{"items": [], "count": 0}`,
   never `404`.
+- `PUT /receipts/{receipt_id}` — corrects a saved receipt's editable fields
+  (`store_name`, `purchase_date`, `currency`, `items`, `discounts`, `taxes`,
+  `total`). Returns `200` with the same shape/types as `GET /receipts/{id}`.
+  `400` for a non-UUID id; `404` for an unknown id or one that was uploaded
+  but never extracted (PUT never creates a receipt); `422` for invalid
+  input; `500` (generic, nothing partially saved) on a database failure.
+  Validation rules: unknown extra fields are rejected; `purchase_date` must
+  be `null` or a valid ISO date (`YYYY-MM-DD`); every amount/quantity must
+  be a finite JSON number or `null` (no strings, `NaN`, or `Infinity`) —
+  amounts may be negative (refunds/discounts), but `quantity`, when given,
+  must be greater than `0`; item names and discount/tax descriptions must
+  be non-empty; at most 200 items, 50 discounts, 50 taxes. **The original
+  AI output (`ai_result_json`) is never modified by an edit** — only the
+  displayed data changes — so a future "reset to AI result" stays possible.

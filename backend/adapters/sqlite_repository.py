@@ -5,7 +5,16 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from domain.models import ReceiptData, ReceiptSummary, SavedReceipt, SavedUpload
+from domain.models import (
+    Discount,
+    LineItem,
+    ReceiptData,
+    ReceiptSummary,
+    ReceiptUpdate,
+    SavedReceipt,
+    SavedUpload,
+    Tax,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -236,3 +245,47 @@ class SqliteReceiptRepository:
             )
 
         return summaries
+
+    def update_receipt(self, receipt_id: str, update: ReceiptUpdate) -> SavedReceipt | None:
+        corrected = ReceiptData(
+            store_name=update.store_name,
+            purchase_date=update.purchase_date,
+            currency=update.currency,
+            items=[LineItem(**item.model_dump()) for item in update.items],
+            discounts=[Discount(**d.model_dump()) for d in update.discounts],
+            taxes=[Tax(**t.model_dump()) for t in update.taxes],
+            total=update.total,
+        )
+        extracted_json = corrected.model_dump_json()
+        total_str = _to_decimal_string(update.total)
+        now = _utc_now_iso()
+
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM receipts WHERE receipt_id = ?", (receipt_id,)
+            ).fetchone()
+            if existing is None:
+                return None
+
+            # A single UPDATE in this one transaction: created_at and
+            # ai_result_json (the original, byte-for-byte AI output) are
+            # never touched, so a later "reset to AI result" stays possible.
+            conn.execute(
+                """
+                UPDATE receipts
+                SET store_name = ?, purchase_date = ?, currency = ?, total = ?,
+                    extracted_json = ?, updated_at = ?
+                WHERE receipt_id = ?
+                """,
+                (
+                    update.store_name,
+                    update.purchase_date,
+                    update.currency,
+                    total_str,
+                    extracted_json,
+                    now,
+                    receipt_id,
+                ),
+            )
+
+        return self.get_receipt(receipt_id)

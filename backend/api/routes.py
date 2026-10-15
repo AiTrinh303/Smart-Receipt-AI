@@ -9,6 +9,7 @@ import config
 from adapters.file_storage import find_file, save_file
 from adapters.openai_extractor import OpenAIReceiptExtractor
 from adapters.sqlite_repository import SqliteReceiptRepository
+from domain.models import ReceiptUpdate
 from domain.ports import (
     ExtractionError,
     ExtractionUnavailableError,
@@ -159,6 +160,35 @@ def get_receipt(receipt_id: str, repository: ReceiptRepository = Depends(get_rep
         raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
 
     saved = repository.get_receipt(str(validated_id))
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    return saved.model_dump()
+
+
+@router.put("/receipts/{receipt_id}")
+def update_receipt(
+    receipt_id: str,
+    update: ReceiptUpdate,
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    try:
+        saved = repository.update_receipt(str(validated_id), update)
+    except Exception:
+        # Never tell the client the correction was saved when it was not;
+        # the real cause (never the API key or file contents) is logged for
+        # developers only.
+        logger.exception("Failed to update receipt: receipt_id=%s", receipt_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save the updated receipt. Please try again.",
+        )
+
     if saved is None:
         raise HTTPException(status_code=404, detail="Receipt not found.")
 

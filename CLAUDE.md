@@ -65,7 +65,11 @@ the purchase info, and the result is displayed for review.
     `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError` /
     `ExtractionUnavailableError`, `ReceiptRepository` Protocol —
     `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
-    `list_receipts`). `ExtractionError` means the receipt itself couldn't
+    `list_receipts`/`update_receipt`, plus the strict, separate
+    `ReceiptUpdate`/`LineItemUpdate`/`DiscountUpdate`/`TaxUpdate` models in
+    `models.py` for user-submitted corrections — deliberately distinct from
+    the lenient `ReceiptData` family used to parse AI output, which must
+    stay lenient). `ExtractionError` means the receipt itself couldn't
     be read (unparseable output, timeout, bad request);
     `ExtractionUnavailableError` means the AI *service* isn't usable (bad
     key, no credit, unknown model, rate limit) — they map to `502` and
@@ -84,7 +88,12 @@ the purchase info, and the result is displayed for review.
     tie-break) and builds each row from `extracted_json` (same source as
     `get_receipt`, so `total`'s JSON type matches); a row with unparseable
     `extracted_json` is logged (receipt_id only) and skipped rather than
-    failing the whole list. Must never import `api`.
+    failing the whole list. `update_receipt` replaces `extracted_json` and
+    the four denormalized columns in one transaction, refreshes
+    `updated_at`, and **never touches `ai_result_json` or `created_at`** —
+    the original AI output stays byte-for-byte intact so a future "reset to
+    AI result" stays possible; returns `None` (never creates a row) if the
+    receipt doesn't exist. Must never import `api`.
     **Money rule:** `total` is never stored as a float — the adapter
     converts with `Decimal(str(value))` to an exact decimal string (e.g.
     `19.99`, not a binary-float expansion) in a dedicated column kept for
@@ -99,13 +108,21 @@ the purchase info, and the result is displayed for review.
     `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`,
     `GET /receipts?limit=N` — list, newest first, `limit` default 50
     (1–200, else `422`), `{"items": [...], "count": N}`, empty DB ->
-    `{"items": [], "count": 0}` never `404`;
+    `{"items": [], "count": 0}` never `404`, `PUT /receipts/{receipt_id}`
+    — corrects the editable fields, `FastAPI`-validates the body against
+    `ReceiptUpdate` (auto-`422`), 404 if the receipt doesn't exist (PUT
+    never creates one), 200 with the same shape/types as GET;
     the `get_extractor` and `get_repository` dependencies; server-side
-    logging of extraction and save failures; maps domain exceptions to
-    HTTP status codes: 400/413 from upload rules, 502 from
+    logging of extraction, save, and update failures; maps domain
+    exceptions to HTTP status codes: 400/413 from upload rules, 502 from
     `ExtractionError`, 503 from `ExtractionUnavailableError` or when
-    `OPENAI_API_KEY` is not configured, 500 generic on a repository save
-    failure — raw error text is never returned to the client).
+    `OPENAI_API_KEY` is not configured, 500 generic on a repository
+    save/update failure — raw error text is never returned to the client).
+    A custom `RequestValidationError` handler in `app.py` stringifies any
+    non-finite float (`NaN`/`Infinity`) echoed back in a `422` error's
+    `"input"` field — otherwise Starlette's own JSON encoder crashes
+    trying to serialize the error response itself, since stdlib `json`
+    accepts `NaN` as *input* but refuses to emit it as *output*.
   - `main.py` stays a thin entry point (`from api.app import app`) so
     `uvicorn main:app --reload --port 8001` keeps working.
   - `config.py` stays at the backend root; reads `backend/.env`
