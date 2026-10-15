@@ -289,3 +289,18 @@ class SqliteReceiptRepository:
             )
 
         return self.get_receipt(receipt_id)
+
+    def delete_receipt(self, receipt_id: str) -> bool:
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM receipts WHERE receipt_id = ?", (receipt_id,)
+            ).fetchone()
+            existed = existing is not None
+
+            # Both tables cleared in this one transaction, regardless of
+            # whether a receipts row existed (an uploads-only row for this
+            # id, if any, is cleaned up too).
+            conn.execute("DELETE FROM receipts WHERE receipt_id = ?", (receipt_id,))
+            conn.execute("DELETE FROM uploads WHERE receipt_id = ?", (receipt_id,))
+
+        return existed

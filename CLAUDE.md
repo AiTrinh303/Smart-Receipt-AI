@@ -96,7 +96,11 @@ the purchase info, and the result is displayed for review.
     `NotFoundError`/`RateLimitError` to `ExtractionUnavailableError`,
     everything else to `ExtractionError`, always via `raise ... from exc`
     so the real cause is still logged), `file_storage.py` (saving/finding
-    files in `uploads/` by UUID filename), `sqlite_repository.py`
+    files in `uploads/` by UUID filename; `delete_file` looks up the file
+    the same way `find_file` does — by the validated UUID, inside
+    `UPLOAD_DIR` only, never a client-supplied path — and treats an
+    already-missing file as a no-op, not an error, so a retry is safe),
+    `sqlite_repository.py`
     (`SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads` and
     `receipts` tables; schema created via `CREATE TABLE IF NOT EXISTS`).
     `list_receipts` orders by `created_at DESC, receipt_id ASC` (stable
@@ -108,7 +112,9 @@ the purchase info, and the result is displayed for review.
     `updated_at`, and **never touches `ai_result_json` or `created_at`** —
     the original AI output stays byte-for-byte intact so a future "reset to
     AI result" stays possible; returns `None` (never creates a row) if the
-    receipt doesn't exist. Must never import `api`.
+    receipt doesn't exist. `delete_receipt` removes the row from both
+    `receipts` and `uploads` in one transaction, returning whether a
+    `receipts` row existed. Must never import `api`.
     **Money rule:** `total` is never stored as a float — the adapter
     converts with `Decimal(str(value))` to an exact decimal string (e.g.
     `19.99`, not a binary-float expansion) in a dedicated column kept for
@@ -116,9 +122,14 @@ the purchase info, and the result is displayed for review.
     `extracted_json` (the full `ReceiptData`, parsed with its original
     float), never from that decimal-string column, so no rounding error
     ever reaches a response.
-  - `api/` — `app.py` (creates the FastAPI app, CORS middleware, and a
-    `lifespan` handler that creates the repository — and therefore the
-    SQLite schema — at startup, not the deprecated `on_event`),
+  - `api/` — `app.py` (creates the FastAPI app, CORS middleware — origins
+    from `CORS_ORIGINS`, methods `GET`/`POST`/`PUT`/`DELETE` (not `"*"`;
+    PUT and DELETE were added for Issue 10 — PUT was missing before then,
+    so the edit form's Save was silently blocked by the browser's CORS
+    preflight even though curl and Jest's mocked `fetch` never exercise
+    real CORS enforcement and so never caught it) — and a `lifespan`
+    handler that creates the repository — and therefore the SQLite schema
+    — at startup, not the deprecated `on_event`),
     `routes.py` (`/health`, `POST /receipts/upload`,
     `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`,
     `GET /receipts?limit=N` — list, newest first, `limit` default 50
@@ -126,13 +137,20 @@ the purchase info, and the result is displayed for review.
     `{"items": [], "count": 0}` never `404`, `PUT /receipts/{receipt_id}`
     — corrects the editable fields, `FastAPI`-validates the body against
     `ReceiptUpdate` (auto-`422`), 404 if the receipt doesn't exist (PUT
-    never creates one), 200 with the same shape/types as GET;
+    never creates one), 200 with the same shape/types as GET,
+    `DELETE /receipts/{receipt_id}` — 204 (empty body) on success, 400 for
+    a non-UUID id, 404 if no `receipts` row exists (unknown id, or
+    uploaded-but-never-extracted — nothing touched on disk or in the DB);
+    order of operations is confirm-exists -> remove file -> remove DB
+    rows, so a failure partway through always leaves a state a retry can
+    finish (an already-gone file is a no-op, not an error);
     the `get_extractor` and `get_repository` dependencies; server-side
-    logging of extraction, save, and update failures; maps domain
+    logging of extraction, save, update, and delete failures; maps domain
     exceptions to HTTP status codes: 400/413 from upload rules, 502 from
     `ExtractionError`, 503 from `ExtractionUnavailableError` or when
     `OPENAI_API_KEY` is not configured, 500 generic on a repository
-    save/update failure — raw error text is never returned to the client).
+    save/update/delete or file-removal failure — raw error text is never
+    returned to the client).
     A custom `RequestValidationError` handler in `app.py` stringifies any
     non-finite float (`NaN`/`Infinity`) echoed back in a `422` error's
     `"input"` field — otherwise Starlette's own JSON encoder crashes
@@ -158,6 +176,9 @@ the purchase info, and the result is displayed for review.
   - **Note:** calling the extract endpoint sends the receipt file to
     OpenAI; the resulting receipt data is then stored locally in SQLite
     (the file itself stays in `backend/uploads/`, never in the database).
+    **Delete only removes local state** (the database record and the
+    local file) — it cannot and does not delete the copy OpenAI already
+    received when the receipt was extracted.
 
 ## Running locally
 

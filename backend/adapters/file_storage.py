@@ -19,3 +19,14 @@ def save_file(contents: bytes, extension: str) -> str:
 def find_file(receipt_id: uuid.UUID) -> Path | None:
     matches = list(UPLOAD_DIR.glob(f"{receipt_id}.*"))
     return matches[0] if matches else None
+
+
+def delete_file(receipt_id: uuid.UUID) -> None:
+    # Looked up the same way extract/find_file do (by the validated UUID,
+    # inside UPLOAD_DIR only) -- never a path built from client input, and
+    # never anything outside the uploads directory.
+    file_path = find_file(receipt_id)
+    if file_path is None:
+        # Already missing is not an error: safe to call again on retry.
+        return
+    file_path.unlink(missing_ok=True)

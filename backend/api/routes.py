@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 import config
-from adapters.file_storage import find_file, save_file
+from adapters.file_storage import delete_file, find_file, save_file
 from adapters.openai_extractor import OpenAIReceiptExtractor
 from adapters.sqlite_repository import SqliteReceiptRepository
 from domain.models import ReceiptUpdate
@@ -193,3 +193,41 @@ def update_receipt(
         raise HTTPException(status_code=404, detail="Receipt not found.")
 
     return saved.model_dump()
+
+
+@router.delete("/receipts/{receipt_id}", status_code=204)
+def delete_receipt(receipt_id: str, repository: ReceiptRepository = Depends(get_repository)):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    # (a) confirm the receipt exists -- nothing on disk or in the database
+    # is touched if it doesn't (unknown id, or uploaded but never extracted).
+    existing = repository.get_receipt(str(validated_id))
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    # (b) remove the file first: if this fails, the database is left
+    # untouched so a retry can still finish the job.
+    try:
+        delete_file(validated_id)
+    except Exception:
+        logger.exception("Failed to remove file for receipt: receipt_id=%s", receipt_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not delete the receipt. Please try again.",
+        )
+
+    # (c) remove the database rows. If this fails, the file is already
+    # gone; a retry will find no file (a no-op) and can still succeed.
+    try:
+        repository.delete_receipt(str(validated_id))
+    except Exception:
+        logger.exception("Failed to remove database record for receipt: receipt_id=%s", receipt_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not delete the receipt. Please try again.",
+        )
+
+    return None

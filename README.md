@@ -132,3 +132,16 @@ is still sent to OpenAI for extraction.
   be non-empty; at most 200 items, 50 discounts, 50 taxes. **The original
   AI output (`ai_result_json`) is never modified by an edit** — only the
   displayed data changes — so a future "reset to AI result" stays possible.
+- `DELETE /receipts/{receipt_id}` — removes the saved receipt's database
+  record and its stored file. `204` (empty body) on success; `400` for a
+  non-UUID id; `404` for an unknown id or one that was uploaded but never
+  extracted (nothing on disk or in the database is touched in that case);
+  `500` (generic message) if the file or database removal fails — safe to
+  retry either way (an already-removed file is not an error, so retrying
+  after a database-removal failure still completes with `204`). Order of
+  operations: confirm the receipt exists, remove the file, then remove the
+  database rows — so a failure after the file is gone never leaves an
+  orphaned reference to it.
+  **Privacy note:** this only removes the local database record and the
+  local file. The receipt image/PDF was already sent to OpenAI for
+  extraction, and this app has no way to delete that copy from OpenAI.
