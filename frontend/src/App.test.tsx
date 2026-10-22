@@ -27,6 +27,44 @@ test('both nav items are present, with aria-current="page" on the active one', (
   expect(historyLink).not.toHaveAttribute('aria-current')
 })
 
+test('neither nav tab is marked current when viewing a saved receipt', async () => {
+  // Given a saved receipt is open via ?receipt=<id>
+  const VALID_UUID = '11111111-1111-1111-1111-111111111111'
+  window.history.replaceState({}, '', `/?receipt=${VALID_UUID}`)
+  const fetchSpy = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: () =>
+      Promise.resolve({
+        receipt_id: VALID_UUID,
+        store_name: 'Corner Store',
+        purchase_date: null,
+        currency: null,
+        items: [],
+        discounts: [],
+        taxes: [],
+        total: null,
+        original_filename: null,
+        content_type: null,
+        created_at: '2026-01-15T10:00:00+00:00',
+        updated_at: '2026-01-15T10:00:00+00:00',
+      }),
+  })
+  global.fetch = fetchSpy as unknown as typeof fetch
+
+  render(<App />)
+  await waitFor(() => {
+    expect(screen.getByText('Corner Store')).toBeInTheDocument()
+  })
+
+  // Then neither "Upload" nor "History" is marked as the current tab
+  expect(screen.getByRole('link', { name: /^upload$/i })).not.toHaveAttribute('aria-current')
+  expect(screen.getByRole('link', { name: /^history$/i })).not.toHaveAttribute('aria-current')
+
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
+})
+
 test('document.title reflects the current view', async () => {
   // Given the upload view
   render(<App />)

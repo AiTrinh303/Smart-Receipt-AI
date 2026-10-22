@@ -13,7 +13,7 @@ these tokens, never hardcoded hex colors.
 | `brand-soft`     | `#eef2ff` | Info background               | — (background)     |
 | `ink`            | `#0f172a` | Primary text                  | 17.9:1             |
 | `ink-muted`      | `#475569` | Secondary/helper text         | 7.6:1              |
-| `border`         | `#cbd5e1` | Borders, dividers             | — (non-text)        |
+| `border`         | `#64748b` | Borders, dividers             | 4.76:1 (non-text)   |
 | `success`        | `#15803d` | Success text/icons            | 5.1:1              |
 | `success-soft`   | `#f0fdf4` | Success background            | — (background)      |
 | `warning`        | `#a16207` | Warning text/icons            | 5.4:1              |
@@ -24,6 +24,39 @@ these tokens, never hardcoded hex colors.
 All text-on-background combinations above meet WCAG AA (4.5:1 for normal
 text). A disabled `Button` uses `slate-300`/`slate-600` text, which still
 meets 4.5:1.
+
+## Changelog
+
+- **`border` darkened from `#cbd5e1` (slate-300) to `#64748b` (slate-500).**
+  The old value measured 1.48:1 against white — far below the 3:1 WCAG
+  minimum for UI component borders — which is why cards, the dropzone and
+  inputs "barely separated from the page" in practice. `#64748b` measures
+  4.76:1. This one token change fixes contrast everywhere it's used
+  (`Card`, `Button` secondary, the dropzone, the file-row border, inputs)
+  without touching each component.
+- **`Card` shadow raised from `shadow-sm` to `shadow-md`** for a clearer lift
+  off the page background, on top of the stronger border.
+- **Nav active-tab style**: the active tab previously relied on a very
+  light `bg-brand-soft` tint (`#eef2ff`, only ~1.1:1 against white) as its
+  only visual cue — essentially invisible in a screenshot. It's now `text-brand`
+  (6.3:1) + `font-semibold` + a 2px `border-brand` bottom border (inactive
+  tabs keep a same-height transparent border so nothing shifts), so the
+  state is conveyed by weight and shape as well as color, not color alone.
+  Separately, `aria-current` was being computed from the `?view=` query
+  param alone, so opening a saved receipt (`?receipt=<id>`, which renders
+  the same `upload` view component) left the "Upload" tab marked current
+  even though the person isn't on the plain upload screen. Fixed by
+  deriving the active tab from an explicit `upload | history | null`
+  state instead of the raw view, so a receipt-detail view marks neither
+  tab.
+- **Logo mark**: replaced a 15%-opacity outline icon (read as grey) with a
+  solid `fill-brand` rounded square and a white glyph, so the brand color
+  is actually visible in the header.
+- **Dropzone**: added a `hover:border-brand hover:bg-brand-soft` state (it
+  already used a brand-colored icon and `border-brand`/`bg-brand-soft` on
+  drag-over); the OpenAI/local-storage note moved inside the upload
+  `Card`, under the submit button, with a small info icon, instead of
+  sitting below the card as unstyled body text.
 
 ## Type scale
 

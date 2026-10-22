@@ -12,27 +12,37 @@ function getView(): 'upload' | 'history' {
   return params.get('view') === 'history' ? 'history' : 'upload'
 }
 
+function isReceiptDetailView(): boolean {
+  const receiptId = new URLSearchParams(window.location.search).get(RECEIPT_QUERY_PARAM)
+  return receiptId !== null && UUID_PATTERN.test(receiptId)
+}
+
+// Which nav tab is "active" is a distinct question from which view renders:
+// `?receipt=<id>` renders the upload component (it owns the saved-receipt
+// view), but it is not the plain upload screen, so neither tab should claim
+// it -- otherwise "Upload" stays marked current while looking at a receipt.
+function getActiveNav(view: 'upload' | 'history'): 'upload' | 'history' | null {
+  if (view === 'history') {
+    return 'history'
+  }
+  return isReceiptDetailView() ? null : 'upload'
+}
+
 function getPageName(view: 'upload' | 'history'): string {
   if (view === 'history') {
     return 'History'
   }
 
-  const receiptId = new URLSearchParams(window.location.search).get(RECEIPT_QUERY_PARAM)
-  return receiptId && UUID_PATTERN.test(receiptId) ? 'Receipt' : 'Upload'
+  return isReceiptDetailView() ? 'Receipt' : 'Upload'
 }
 
 function AppMark() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="h-7 w-7 flex-shrink-0 text-brand"
-      fill="none"
-    >
-      <rect x="4" y="2" width="16" height="20" rx="2" fill="currentColor" opacity="0.15" />
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-8 w-8 flex-shrink-0">
+      <rect x="1" y="1" width="22" height="22" rx="6" className="fill-brand" />
       <path
-        d="M7 7h10M7 11h10M7 15h6"
-        stroke="currentColor"
+        d="M7 7h10M7 11.5h10M7 16h6"
+        stroke="white"
         strokeWidth="1.75"
         strokeLinecap="round"
       />
@@ -47,6 +57,10 @@ interface NavLinkProps {
   children: string
 }
 
+const NAV_LINK_BASE =
+  'border-b-2 px-1 py-2 text-sm focus-visible:outline focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2 focus-visible:outline-brand'
+
 function NavLink({ href, search, active, children }: NavLinkProps) {
   return (
     <a
@@ -56,8 +70,10 @@ function NavLink({ href, search, active, children }: NavLinkProps) {
         e.preventDefault()
         navigateTo(search)
       }}
-      className={`rounded-md px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-        active ? 'bg-brand-soft text-brand' : 'text-ink-muted hover:bg-slate-100 hover:text-ink'
+      className={`${NAV_LINK_BASE} ${
+        active
+          ? 'border-brand font-semibold text-brand'
+          : 'border-transparent font-medium text-ink-muted hover:border-slate-300 hover:text-ink'
       }`}
     >
       {children}
@@ -75,6 +91,7 @@ function App() {
   }, [])
 
   const view = getView()
+  const activeNav = getActiveNav(view)
 
   useEffect(() => {
     document.title = `${getPageName(view)} · Smart Receipt AI`
@@ -96,11 +113,11 @@ function App() {
             <h1 className="text-lg font-bold text-ink sm:text-xl">Smart Receipt AI</h1>
           </div>
 
-          <nav className="flex gap-1 text-sm font-medium">
-            <NavLink href="/" search="" active={view === 'upload'}>
+          <nav className="flex gap-4 text-sm">
+            <NavLink href="/" search="" active={activeNav === 'upload'}>
               Upload
             </NavLink>
-            <NavLink href="/?view=history" search="?view=history" active={view === 'history'}>
+            <NavLink href="/?view=history" search="?view=history" active={activeNav === 'history'}>
               History
             </NavLink>
           </nav>

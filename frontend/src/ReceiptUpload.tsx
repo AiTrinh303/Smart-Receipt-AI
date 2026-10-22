@@ -520,7 +520,7 @@ function ReceiptUpload() {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-            isBusy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+            isBusy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-soft'
           } ${isDragOver ? 'border-brand bg-brand-soft' : 'border-border'}`}
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-brand" fill="none">
@@ -608,11 +608,20 @@ function ReceiptUpload() {
         >
           Read receipt
         </Button>
-      </Card>
 
-      <p className="text-sm text-ink-muted">
-        The file is sent to OpenAI to read it. The extracted data is saved in this app.
-      </p>
+        <p className="flex items-start gap-1.5 text-sm text-ink-muted">
+          <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none">
+            <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
+            <path
+              d="M10 9v4.5M10 6.75h.01"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+          The file is sent to OpenAI to read it. The extracted data is saved in this app.
+        </p>
+      </Card>
     </div>
   )
 }

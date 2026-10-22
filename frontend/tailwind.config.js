@@ -14,7 +14,7 @@ export default {
           muted: '#475569', // slate-600 (secondary text)
         },
         border: {
-          DEFAULT: '#cbd5e1', // slate-300
+          DEFAULT: '#64748b', // slate-500 (4.76:1 on white -- slate-300 was 1.48:1, failing the 3:1 non-text minimum)
         },
         surface: {
           DEFAULT: '#ffffff',
