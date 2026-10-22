@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { receiptFileUrl } from './api/receiptFileUrl'
+import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 
 const MIN_ZOOM = 50
@@ -8,6 +9,12 @@ const ZOOM_STEP = 25
 const DEFAULT_ZOOM = 100
 
 const NOT_AVAILABLE_MESSAGE = 'The original file is not available.'
+
+const LINK_BUTTON_CLASSES =
+  'inline-flex min-h-[44px] flex-shrink-0 items-center justify-center gap-1.5 rounded-md border ' +
+  'border-border bg-white px-3 py-2 text-sm font-semibold text-ink hover:bg-slate-50 ' +
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ' +
+  'sm:min-h-0 sm:py-1.5'
 
 function getExtension(name: string): string {
   const index = name.lastIndexOf('.')
@@ -39,6 +46,43 @@ function decideKind(contentType: string | null, fileName: string | null): FileKi
   return 'image'
 }
 
+function ZoomOutIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+      <circle cx="8.5" cy="8.5" r="6" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M13 13l4 4M6 8.5h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function ZoomInIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+      <circle cx="8.5" cy="8.5" r="6" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M13 13l4 4M8.5 6v5M6 8.5h5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+      <path
+        d="M8 4H4v12h12v-4M11 3h6v6M9 11l8-8"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 interface ReceiptFileViewerProps {
   receiptId: string
   fileName: string | null
@@ -60,69 +104,78 @@ function ReceiptFileViewer({ receiptId, fileName, contentType }: ReceiptFileView
   const imageAlt = fileName ? `Original receipt image (${fileName})` : 'Original receipt image'
 
   return (
-    <div className="flex flex-col gap-3">
-      {kind === 'image' && !hasError && (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            aria-label="Zoom out"
-            onClick={zoomOut}
-            disabled={zoom <= MIN_ZOOM}
-          >
-            −
-          </Button>
-          <span className="min-w-[3.5rem] text-center text-sm text-ink-muted">{zoom}%</span>
-          <Button
-            variant="secondary"
-            size="sm"
-            aria-label="Zoom in"
-            onClick={zoomIn}
-            disabled={zoom >= MAX_ZOOM}
-          >
-            +
-          </Button>
-          <Button variant="secondary" size="sm" aria-label="Fit" onClick={fit}>
-            Fit
-          </Button>
-        </div>
-      )}
+    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-md">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+        {fileName ? (
+          <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={fileName}>
+            {fileName}
+          </p>
+        ) : (
+          <span className="flex-1" />
+        )}
 
-      {hasError ? (
-        <p className="text-sm text-ink-muted">{NOT_AVAILABLE_MESSAGE}</p>
-      ) : kind === 'pdf' ? (
-        <iframe
-          src={fileUrl}
-          title={fileName ? `Original receipt PDF (${fileName})` : 'Original receipt PDF'}
-          className="h-[600px] w-full rounded-md border border-border"
-        />
-      ) : (
-        <div className="max-h-[600px] overflow-auto rounded-md border border-border bg-surface-page">
-          {!isLoaded && (
-            <div className="flex h-48 items-center justify-center text-sm text-ink-muted">
-              Loading image...
+        <div className="flex flex-shrink-0 items-center gap-2">
+          {kind === 'image' && !hasError && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Zoom out"
+                onClick={zoomOut}
+                disabled={zoom <= MIN_ZOOM}
+              >
+                <ZoomOutIcon />
+              </Button>
+              <span className="min-w-[3rem] text-center text-sm text-ink-muted">{zoom}%</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Zoom in"
+                onClick={zoomIn}
+                disabled={zoom >= MAX_ZOOM}
+              >
+                <ZoomInIcon />
+              </Button>
+              <Button variant="secondary" size="sm" aria-label="Fit" onClick={fit}>
+                Fit
+              </Button>
             </div>
           )}
-          <img
-            src={fileUrl}
-            alt={imageAlt}
-            style={{ width: `${zoom}%`, display: isLoaded ? 'block' : 'none' }}
-            onLoad={() => setIsLoaded(true)}
-            onError={() => setHasError(true)}
-          />
-        </div>
-      )}
 
-      {!hasError && (
-        <a
-          href={fileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-medium text-brand underline"
-        >
-          Open original
-        </a>
-      )}
+          {!hasError && (
+            <a href={fileUrl} target="_blank" rel="noopener noreferrer" className={LINK_BUTTON_CLASSES}>
+              <ExternalLinkIcon />
+              Open original
+            </a>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto bg-slate-100">
+        {hasError ? (
+          <div className="p-4">
+            <Alert variant="info">{NOT_AVAILABLE_MESSAGE}</Alert>
+          </div>
+        ) : kind === 'pdf' ? (
+          <iframe
+            src={fileUrl}
+            title={fileName ? `Original receipt PDF (${fileName})` : 'Original receipt PDF'}
+            className="h-[600px] w-full lg:h-full lg:min-h-[600px]"
+          />
+        ) : (
+          <div className="flex min-h-[200px] items-center justify-center p-4">
+            {!isLoaded && <p className="text-sm text-ink-muted">Loading image...</p>}
+            <img
+              src={fileUrl}
+              alt={imageAlt}
+              style={{ width: `${zoom}%`, display: isLoaded ? 'block' : 'none' }}
+              className="mx-auto"
+              onLoad={() => setIsLoaded(true)}
+              onError={() => setHasError(true)}
+            />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

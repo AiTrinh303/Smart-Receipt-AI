@@ -92,6 +92,7 @@ function App() {
 
   const view = getView()
   const activeNav = getActiveNav(view)
+  const mainSize = view === 'upload' && isReceiptDetailView() ? 'xl' : 'lg'
 
   useEffect(() => {
     document.title = `${getPageName(view)} · Smart Receipt AI`
@@ -125,7 +126,7 @@ function App() {
       </header>
 
       <main id="main-content" className="flex-1 py-8">
-        <Container size="lg">
+        <Container size={mainSize}>
           {view === 'history' ? (
             <ReceiptHistory key={locationKey} />
           ) : (

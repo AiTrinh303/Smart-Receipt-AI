@@ -4,6 +4,25 @@ import ReceiptFileViewer from './ReceiptFileViewer'
 const RECEIPT_ID = '11111111-1111-1111-1111-111111111111'
 const EXPECTED_URL = `http://localhost:8001/receipts/${RECEIPT_ID}/file`
 
+test('the file name is shown, truncated, with the full name in a title attribute', () => {
+  render(
+    <ReceiptFileViewer
+      receiptId={RECEIPT_ID}
+      fileName="a-very-long-original-receipt-filename.jpg"
+      contentType="image/jpeg"
+    />,
+  )
+
+  const name = screen.getByTitle('a-very-long-original-receipt-filename.jpg')
+  expect(name).toHaveTextContent('a-very-long-original-receipt-filename.jpg')
+  expect(name.className).toMatch(/truncate/)
+})
+
+test('when the file name is unknown, no name element is shown', () => {
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName={null} contentType="image/jpeg" />)
+  expect(screen.queryByTitle(/.+/)).not.toBeInTheDocument()
+})
+
 test('an image content type renders an <img> whose src is the file URL', () => {
   // Given a receipt known to be an image
   render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)

@@ -68,9 +68,9 @@ the purchase info, and the result is displayed for review.
   click; `ReceiptUpload.tsx` adds a "Back to history" link when showing a
   result.
   **Editing (`ReceiptEditForm.tsx`, `src/api/updateReceipt.ts`):** an
-  "Edit" button on any saved-receipt view (unchanged `ReceiptResult.tsx`
-  itself is not touched; the button lives in the surrounding container)
-  opens a form prefilled from the current data, with add/remove rows for
+  "Edit" button in `ReceiptResult.tsx`'s own header (next to the store
+  name, which is the page's `<h1>`) opens a form prefilled from the
+  current data, with add/remove rows for
   items/discounts/taxes. **Save** sends `PUT /receipts/{id}` with *only*
   the editable fields (never `receipt_id`/`created_at`/
   `original_filename`/etc.) and updates the view straight from the
@@ -87,22 +87,37 @@ the purchase info, and the result is displayed for review.
   `GET /receipts/{id}/file` URL (no `fetch` — an `<img src>`/`<iframe src>`
   loads it directly, so no CORS is needed). `ReceiptFileViewer` decides
   image vs. PDF from `contentType` first, then the filename extension,
-  else defaults to image; images get a 50%–300% zoom/fit toolbar, PDFs an
-  iframe, and either an "Open original" link; a failed image load shows
-  "The original file is not available." instead of a broken image.
+  else defaults to image. Renders as a framed card: a header row with the
+  (truncated, `title`-attributed) file name, icon zoom/fit controls for
+  images (`aria-label`s "Zoom out"/"Zoom in"/"Fit", 50%–300%), and an
+  "Open original" link-styled `<a>` (kept a real anchor, not the `Button`
+  component, so it stays `role="link"` for `target="_blank"`); a body with
+  a `slate-100` background (so a white receipt stands out) that is either
+  the image/iframe or, on a failed image load, an `Alert` with "The
+  original file is not available." instead of a broken image.
   `ReceiptDetailLayout` wraps the saved-receipt view (`ReceiptResult`) and
-  the edit view (`ReceiptEditForm`) in a shared two-column layout (file
-  left, data right) from the `lg` breakpoint up; below that it renders
-  "Receipt data"/"Original" tabs (`role="tablist"`/`role="tab"`,
-  `aria-selected`) that toggle visibility with CSS only — both panels stay
-  mounted, so typed edit-form input survives switching tabs. The extract
-  response has no `original_filename`/`content_type` (only
-  `GET /receipts/{id}` does), so right after extraction the viewer's
-  filename falls back to the just-uploaded `File`/upload response and its
-  content type is treated as unknown (extension-based detection).
-  **Deleting (`src/api/deleteReceipt.ts`):** a "Delete" button next to
-  "Edit" (hidden while the edit form is open) opens an in-page
-  confirmation (not `window.confirm`) — no request until "Yes, delete".
+  the edit view (`ReceiptEditForm`) in a shared two-column layout
+  (`lg:grid-cols-[5fr_6fr]`, file left/data right, file panel `sticky`
+  with its own scroll area near viewport height) from the `lg` breakpoint
+  up, inside the shell's wider `xl` `Container` size; below `lg` it
+  renders a "Receipt data"/"Original" segmented control
+  (`role="tablist"`/`role="tab"`, `aria-selected`) that toggles visibility
+  with CSS only — both panels stay mounted, so typed edit-form input
+  survives switching tabs. The extract response has no
+  `original_filename`/`content_type` (only `GET /receipts/{id}` does), so
+  right after extraction the viewer's filename falls back to the
+  just-uploaded `File`/upload response and its content type is treated as
+  unknown (extension-based detection). Every conditional class name here
+  (and throughout the app) picks between complete static strings — never
+  built by concatenating a variable into a class name — since Tailwind's
+  JIT only generates CSS for literal class-name text it finds in the
+  source.
+  **Deleting (`src/api/deleteReceipt.ts`):** a `danger-ghost` "Delete"
+  button, in the surrounding container below `ReceiptResult` (separated
+  from it by a divider — destructive and comparatively rare, unlike Edit,
+  which is primary and in the header), hidden while the edit form is open,
+  opens an in-page confirmation styled as a danger `Alert` (not
+  `window.confirm`) — no request until "Yes, delete".
   A `204` navigates to `?view=history&notice=deleted` (a one-shot URL
   param `ReceiptHistory.tsx` reads once on mount, displays as "Receipt
   deleted.", then immediately strips via `replaceState` so a reload never

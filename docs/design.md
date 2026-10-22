@@ -58,6 +58,35 @@ meets 4.5:1.
   `Card`, under the submit button, with a small info icon, instead of
   sitting below the card as unstyled body text.
 
+## Decisions: receipt view
+
+- **Numbers right-aligned, currency in headers.** The items table shows
+  each amount as a plain, right-aligned, `tabular-nums` number
+  (`whitespace-nowrap` so it never wraps); the currency code appears once,
+  in the "Unit price"/"Line total" column headers, instead of repeating it
+  in every cell. Discounts/Taxes rows and the Total keep the currency on
+  the amount itself, since each is a single value, not a repeated column.
+- **Action hierarchy.** Edit is the primary action, in the card's header
+  next to the store name — the thing you're most likely to do with a
+  receipt you're reviewing. Delete is destructive and comparatively rare,
+  so it's pushed to the bottom of the card, separated by a divider, and
+  styled `danger-ghost` rather than a prominent button. "Back to history"
+  is navigation, not an action on the receipt, so it sits above the
+  two-column layout entirely.
+- **No dynamic Tailwind class names, ever.** Every conditional className in
+  this codebase picks between complete, static string literals (see
+  `NavLink`/`AmountRow`/the tab/segmented-control styles) — never
+  string-builds a class from a variable (e.g. `` `text-${color}-600` ``).
+  Tailwind's JIT scans source text for literal class-name strings; a
+  built-up name is invisible to it and silently never generates any CSS,
+  which was the underlying mechanism behind "the active tab has no visible
+  style" even though the logic driving it was otherwise correct.
+- **Container width.** The receipt-detail view (saved receipt or
+  right-after-extraction) uses the shell's new `Container` `xl` size
+  (`max-w-6xl`) instead of the default `lg` (`max-w-3xl`), so the
+  two-column layout (file : data ≈ 5 : 6) has room to breathe; every other
+  view keeps `lg`.
+
 ## Type scale
 
 - Page title: `text-2xl font-bold`
@@ -75,12 +104,23 @@ meets 4.5:1.
 ## Components (`src/components/ui/`)
 
 - **`Button`** — variants `primary` (main action), `secondary` (alternate
-  action), `danger` (destructive), `ghost` (low-emphasis/text-like action).
-  Supports `size` (`sm`/`md`), `loading` (shows `Spinner` + optional
-  `loadingText`), and standard `disabled`. All sizes keep a 44px minimum
-  touch target on small screens.
+  action), `danger` (destructive), `ghost` (low-emphasis/text-like action),
+  `danger-ghost` (low-emphasis destructive, e.g. a Delete button that
+  shouldn't compete visually with the primary action). Supports `size`
+  (`sm`/`md`), `loading` (shows `Spinner` + optional `loadingText`), and
+  standard `disabled`. All sizes keep a 44px minimum touch target on small
+  screens.
 - **`Card`** — a bordered, padded, white surface for grouping content (forms,
   dropzones, confirmation panels).
+- **`Container`** — `size` `md` (`max-w-md`), `lg` (`max-w-3xl`, the app
+  shell's default), or `xl` (`max-w-6xl`, used for the two-column receipt
+  view).
+- **`formatMoney(value, currency, { includeCurrency })`** —
+  `Intl.NumberFormat`-based: a valid ISO 4217 code gets that currency's own
+  decimal precision; a malformed code (`Intl` throws a `RangeError`) falls
+  back to a plain 2-decimal amount instead of crashing; `null`/`NaN` shows
+  "Not detected". `includeCurrency: false` omits the code prefix, for a
+  repeated column where the header already states the currency once.
 - **`Alert`** — variants `info`/`success`/`warning`/`error`. `error` renders
   `role="alert"` (interrupts screen readers); the others render
   `role="status"` (polite). Never relies on color alone — pair with text.
