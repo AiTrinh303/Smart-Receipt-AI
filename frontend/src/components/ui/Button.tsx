@@ -27,8 +27,35 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   secondary:
     'bg-white text-ink border border-border hover:bg-slate-50 disabled:text-slate-400 disabled:bg-slate-100',
   danger: 'bg-danger text-white hover:bg-red-800 disabled:bg-slate-300 disabled:text-slate-600',
-  ghost: 'bg-transparent text-brand hover:bg-brand-soft disabled:text-slate-400',
-  'danger-ghost': 'bg-transparent text-danger hover:bg-danger-soft disabled:text-slate-400',
+  ghost:
+    'bg-transparent text-brand border border-brand hover:bg-brand-soft disabled:border-slate-300 disabled:text-slate-400',
+  'danger-ghost':
+    'bg-transparent text-danger border border-danger hover:bg-danger-soft disabled:border-slate-300 disabled:text-slate-400',
+}
+
+/**
+ * Single source of truth for each variant's enabled-state color tokens
+ * (token names, matching the token names used in VARIANT_CLASSES above --
+ * e.g. "brand" <-> "bg-brand"/"border-brand"). `Button.contrast.test.ts`
+ * resolves these against the real Tailwind theme and checks every pair for
+ * valid colors and WCAG contrast, so a future token/variant change that
+ * breaks visibility (an invalid token, or a background/text pair that no
+ * longer contrasts) fails a fast, colorless-jsdom-safe test instead of only
+ * showing up as an invisible button in a real browser.
+ */
+export interface VariantColorTokens {
+  /** null for a variant that relies on its border + text, not a fill. */
+  background: string | null
+  text: string
+  border?: string
+}
+
+export const VARIANT_COLOR_TOKENS: Record<Variant, VariantColorTokens> = {
+  primary: { background: 'brand', text: 'white' },
+  secondary: { background: 'white', text: 'ink', border: 'border' },
+  danger: { background: 'danger', text: 'white' },
+  ghost: { background: null, text: 'brand', border: 'brand' },
+  'danger-ghost': { background: null, text: 'danger', border: 'danger' },
 }
 
 function Button({

@@ -25,7 +25,70 @@ All text-on-background combinations above meet WCAG AA (4.5:1 for normal
 text). A disabled `Button` uses `slate-300`/`slate-600` text, which still
 meets 4.5:1.
 
+## Verified against the real built CSS
+
+The values above are also checked mechanically, not just by eye:
+`src/components/ui/Button.contrast.test.ts` resolves the actual merged
+Tailwind theme (`resolveConfig`) for every token in `Button.tsx`'s
+`VARIANT_COLOR_TOKENS` (the single source of truth for each variant's
+enabled-state colors) and for the full palette above, and asserts each
+resolves to a real hex color (catching an invalid/undefined/empty token —
+the specific failure mode that produces an invisible element a real
+browser shows but jsdom cannot) and that every variant's text/background
+(or text/border, for a no-fill variant) pair meets its required contrast
+ratio. As of this check, every `Button` variant passes:
+
+| Variant        | Background | Text    | Border   | Text/bg contrast |
+| -------------- | ---------- | ------- | -------- | ----------------- |
+| `primary`      | `brand`    | `white` | —        | 6.29:1 (fill)      |
+| `secondary`    | `white`    | `ink`   | `border` | 17.85:1 (fill)     |
+| `danger`       | `danger`   | `white` | —        | 6.47:1 (fill)      |
+| `ghost`        | none       | `brand` | `brand`  | 6.29:1 (vs. page); border 6.29:1 (vs. page) |
+| `danger-ghost` | none       | `danger`| `danger` | 6.47:1 (vs. page); border 6.47:1 (vs. page) |
+
+`ghost`/`danger-ghost` gained a matching-color border (they previously had
+`bg-transparent` and no border — visible only via their text color, which
+doesn't satisfy "every variant has a clearly visible background or
+border").
+
+Also confirmed directly against a `npm run build` output (not just the
+Tailwind config): `.bg-brand`, `.text-white`,
+`hover\:bg-brand-hover:hover`, `disabled\:bg-slate-300:disabled`,
+`.fill-brand`, `.border-brand`, `.bg-danger`, `.bg-white`, and the new
+`.border-danger` all compile to real, distinct, non-conflicting
+`background-color`/`color`/`border-color`/`fill` declarations — i.e. a
+visual bug report describing an invisible enabled primary button could
+not be reproduced from this codebase's current source or build output.
+See the "Invisible button investigation" entry in the Changelog below for
+the full trail of evidence.
+
 ## Changelog
+
+- **Invisible button investigation (unresolved as a reproducible bug):**
+  given a report that the enabled primary "Read receipt" button was
+  invisible with a ~50px empty gap in its place, and a suspected cause of
+  unresolved/invalid brand color tokens: `tailwind.config.js`'s color
+  tokens are plain hex strings (no CSS variables); `npm run build`'s
+  actual output shows `.bg-brand`, `.text-white`,
+  `hover:bg-brand-hover`, `disabled:bg-slate-300`, `.fill-brand` and
+  `.border-brand` all compiling to correct, valid, distinct
+  `rgb(79 70 229/...)`/`rgb(255 255 255/...)` declarations; Tailwind's own
+  `preflight.css` does reset `button { background-color: transparent }`
+  at the base layer, but a class selector (`.bg-brand`, specificity 0,1,0)
+  always outranks an element selector (`button`, specificity 0,0,1)
+  regardless of source order, so that reset cannot be overriding it either
+  in a production build or in Vite dev mode (Tailwind's three `@tailwind`
+  directives compile into one ordered stylesheet either way). No
+  conditional class, `hidden`/`opacity-0`, or stray wrapping element was
+  found around the button in `ReceiptUpload.tsx` that would explain a
+  layout gap. In short: the suspected cause doesn't hold up against the
+  evidence, and the bug could not be reproduced from source. The
+  regression tests and the `ghost`/`danger-ghost` border fix below were
+  added regardless, since they're correct hardening independent of
+  whether this specific report reproduces, and a real-browser check (hard
+  refresh, since a stale cached stylesheet matching an older commit is one
+  explanation this investigation can't rule out) is still worth doing.
+- **`border` darkened from `#cbd5e1` (slate-300) to `#64748b` (slate-500).**
 
 - **`border` darkened from `#cbd5e1` (slate-300) to `#64748b` (slate-500).**
   The old value measured 1.48:1 against white — far below the 3:1 WCAG

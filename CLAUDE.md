@@ -289,3 +289,16 @@ cd frontend && npm run check:deps
   any API key.
 - Current phase: early MVP build. Features are being added incrementally
   per ticket — see GitHub Issues for the backlog.
+- **Color or style changes must be verified against the built CSS, not
+  just the Tailwind config or component source.** jsdom cannot see
+  colors, layout, or contrast — all 100+ frontend tests can pass while a
+  button is genuinely invisible in a real browser. After any such change,
+  run `npm run build` and grep the generated `dist/assets/*.css` for the
+  actual classes involved (e.g. `grep -o '\.bg-brand{[^}]*}' dist/assets/*.css`)
+  and read the real `background-color`/`color`/`border-color` value —
+  don't assume a class exists or resolves correctly just because it's
+  spelled correctly in the source. Delete `dist/` afterward; never commit
+  it. See `src/components/ui/Button.contrast.test.ts` for a test-level
+  version of this same check (resolves the real Tailwind theme and
+  verifies every token/contrast pair), and open `?view=styleguide` (dev
+  only) to look at every component state directly.
