@@ -82,3 +82,66 @@ test('a malformed currency code renders without throwing', () => {
   const data = { ...FULL_DATA, currency: 'US$' }
   expect(() => render(<ReceiptResult data={data} onReset={() => {}} onEdit={() => {}} />)).not.toThrow()
 })
+
+function mockMatchMedia(matches: boolean) {
+  window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+    matches,
+    media: query,
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+  }))
+}
+
+afterEach(() => {
+  // @ts-expect-error cleaning up the test-only global matchMedia stub
+  delete window.matchMedia
+})
+
+test('small screen (matchMedia matches): items render as cards, not a table', () => {
+  // Given the small-screen media query matches
+  mockMatchMedia(true)
+
+  // When the result is rendered
+  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
+
+  // Then each item is a labelled list item, not a table row -- two item
+  // cards plus the existing discount and tax list items (4 total)
+  expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  const listItems = screen.getAllByRole('listitem')
+  expect(listItems).toHaveLength(4)
+  const milkCard = listItems.find((el) => el.textContent?.includes('Milk')) as HTMLElement
+  expect(milkCard).toHaveTextContent('Qty')
+  expect(milkCard).toHaveTextContent('2')
+  expect(milkCard).toHaveTextContent('Unit price (USD)')
+  expect(milkCard).toHaveTextContent('2.50')
+  expect(milkCard).toHaveTextContent('Line total (USD)')
+  expect(milkCard).toHaveTextContent('5.00')
+})
+
+test('large screen (matchMedia does not match): the table renders, no item cards', () => {
+  // Given the small-screen media query does not match
+  mockMatchMedia(false)
+
+  // When the result is rendered
+  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
+
+  // Then the table renders, and only the (unrelated) discount/tax list items exist
+  expect(screen.getByRole('table')).toBeInTheDocument()
+  expect(screen.getAllByRole('listitem')).toHaveLength(2)
+})
+
+test('small screen with null item fields: "Not detected" shown, never NaN/null/undefined', () => {
+  mockMatchMedia(true)
+  const data = {
+    ...EMPTY_DATA,
+    items: [{ name: null, quantity: null, unit_price: null, line_total: null }],
+  }
+
+  render(<ReceiptResult data={data} onReset={() => {}} onEdit={() => {}} />)
+
+  const card = screen.getAllByRole('listitem')[0]
+  expect(card).toHaveTextContent('Not detected')
+  expect(document.body.textContent).not.toMatch(/\bnull\b/i)
+  expect(document.body.textContent).not.toMatch(/\bundefined\b/i)
+  expect(document.body.textContent).not.toMatch(/\bNaN\b/i)
+})

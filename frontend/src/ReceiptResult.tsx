@@ -1,6 +1,7 @@
-import type { ReceiptExtraction } from './api/types'
+import type { LineItem, ReceiptExtraction } from './api/types'
 import Button from './components/ui/Button'
 import { formatMoney } from './components/ui/formatMoney'
+import { useMediaQuery } from './hooks/useMediaQuery'
 
 const NOT_DETECTED = 'Not detected'
 
@@ -23,6 +24,32 @@ function PencilIcon() {
         strokeLinejoin="round"
       />
     </svg>
+  )
+}
+
+interface ItemCardProps {
+  item: LineItem
+  currency: string | null
+  currencyLabel: string
+}
+
+function ItemCard({ item, currency, currencyLabel }: ItemCardProps) {
+  return (
+    <li className="rounded-md border border-border p-3">
+      <p className="font-medium text-ink">{displayText(item.name)}</p>
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+        <dt className="text-ink-muted">Qty</dt>
+        <dd className="text-right tabular-nums">{displayQuantity(item.quantity)}</dd>
+        <dt className="whitespace-nowrap text-ink-muted">Unit price{currencyLabel}</dt>
+        <dd className="whitespace-nowrap text-right tabular-nums">
+          {formatMoney(item.unit_price, currency, { includeCurrency: false })}
+        </dd>
+        <dt className="whitespace-nowrap text-ink-muted">Line total{currencyLabel}</dt>
+        <dd className="whitespace-nowrap text-right tabular-nums">
+          {formatMoney(item.line_total, currency, { includeCurrency: false })}
+        </dd>
+      </dl>
+    </li>
   )
 }
 
@@ -49,6 +76,7 @@ interface ReceiptResultProps {
 
 function ReceiptResult({ data, onReset, onEdit }: ReceiptResultProps) {
   const currencyLabel = data.currency ? ` (${data.currency})` : ''
+  const isSmallScreen = useMediaQuery('(max-width: 639px)')
 
   return (
     <div className="flex flex-col gap-5 rounded-lg border border-border bg-surface p-6 shadow-md">
@@ -68,51 +96,63 @@ function ReceiptResult({ data, onReset, onEdit }: ReceiptResultProps) {
         </Button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <caption className="sr-only">Receipt items</caption>
-          <thead>
-            <tr className="border-b border-border text-ink-muted">
-              <th scope="col" className="py-1 pr-2 font-medium">
-                Item
-              </th>
-              <th scope="col" className="py-1 pr-2 text-right font-medium">
-                Qty
-              </th>
-              <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
-                Unit price{currencyLabel}
-              </th>
-              <th scope="col" className="whitespace-nowrap py-1 text-right font-medium">
-                Line total{currencyLabel}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="py-2 text-ink-muted">
-                  None detected
-                </td>
+      {isSmallScreen ? (
+        data.items.length === 0 ? (
+          <p className="text-sm text-ink-muted">None detected</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {data.items.map((item, index) => (
+              <ItemCard key={index} item={item} currency={data.currency} currencyLabel={currencyLabel} />
+            ))}
+          </ul>
+        )
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <caption className="sr-only">Receipt items</caption>
+            <thead>
+              <tr className="border-b border-border text-ink-muted">
+                <th scope="col" className="py-1 pr-2 font-medium">
+                  Item
+                </th>
+                <th scope="col" className="py-1 pr-2 text-right font-medium">
+                  Qty
+                </th>
+                <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
+                  Unit price{currencyLabel}
+                </th>
+                <th scope="col" className="whitespace-nowrap py-1 text-right font-medium">
+                  Line total{currencyLabel}
+                </th>
               </tr>
-            ) : (
-              data.items.map((item, index) => (
-                <tr key={index} className="border-b border-border/40">
-                  <td className="py-1 pr-2">{displayText(item.name)}</td>
-                  <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
-                    {displayQuantity(item.quantity)}
-                  </td>
-                  <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
-                    {formatMoney(item.unit_price, data.currency, { includeCurrency: false })}
-                  </td>
-                  <td className="whitespace-nowrap py-1 text-right tabular-nums">
-                    {formatMoney(item.line_total, data.currency, { includeCurrency: false })}
+            </thead>
+            <tbody>
+              {data.items.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-2 text-ink-muted">
+                    None detected
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                data.items.map((item, index) => (
+                  <tr key={index} className="border-b border-border/40">
+                    <td className="py-1 pr-2">{displayText(item.name)}</td>
+                    <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
+                      {displayQuantity(item.quantity)}
+                    </td>
+                    <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
+                      {formatMoney(item.unit_price, data.currency, { includeCurrency: false })}
+                    </td>
+                    <td className="whitespace-nowrap py-1 text-right tabular-nums">
+                      {formatMoney(item.line_total, data.currency, { includeCurrency: false })}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 text-sm">
         <div>

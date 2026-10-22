@@ -215,6 +215,7 @@ function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormP
 
       <div>
         <h3 className="mb-1 text-sm font-medium text-gray-700">Items</h3>
+        <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="text-gray-500">
@@ -293,6 +294,7 @@ function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormP
             ))}
           </tbody>
         </table>
+        </div>
         <button
           type="button"
           onClick={addItem}
