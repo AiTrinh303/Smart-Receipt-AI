@@ -100,7 +100,10 @@ the purchase info, and the result is displayed for review.
     `SavedReceipt` and `ReceiptSummary` — the last a small list-row model:
     receipt_id, original_filename, store_name, purchase_date, currency,
     total, created_at — for persisted data), `rules.py` (allowed file
-    types, size limit; raises domain exceptions, no HTTP/FastAPI/file I/O),
+    types, size limit, and `media_type_for_extension()` — a pure
+    extension -> fixed media type map used by the file-serving endpoint, so
+    `Content-Type` is never taken from client input; raises domain
+    exceptions, no HTTP/FastAPI/file I/O),
     `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError` /
     `ExtractionUnavailableError`, `ReceiptRepository` Protocol —
     `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
@@ -167,7 +170,19 @@ the purchase info, and the result is displayed for review.
     uploaded-but-never-extracted — nothing touched on disk or in the DB);
     order of operations is confirm-exists -> remove file -> remove DB
     rows, so a failure partway through always leaves a state a retry can
-    finish (an already-gone file is a no-op, not an error);
+    finish (an already-gone file is a no-op, not an error),
+    `GET /receipts/{receipt_id}/file` — serves the original upload via
+    `FileResponse` for a saved receipt (same existence check as GET); 400
+    for a non-UUID id, 404 if no saved receipt exists or the file is
+    missing from disk (logged server-side with the receipt_id only).
+    `Content-Type` always comes from `domain.rules.media_type_for_extension`
+    on the *stored* file's extension — never the client-supplied
+    `content_type` and never sniffed — plus `X-Content-Type-Options:
+    nosniff`, `Content-Disposition: inline` (no filename, ever) and
+    `Cache-Control: private, no-cache`. No `X-Frame-Options` is set, since
+    the frontend may show a PDF in a same-origin iframe. **No
+    authentication**, same as every other endpoint here: anyone who can
+    reach the server and knows a receipt id can fetch its file;
     the `get_extractor` and `get_repository` dependencies; server-side
     logging of extraction, save, update, and delete failures; maps domain
     exceptions to HTTP status codes: 400/413 from upload rules, 502 from

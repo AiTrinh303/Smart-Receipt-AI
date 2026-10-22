@@ -130,6 +130,21 @@ is still sent to OpenAI for extraction.
   the extract response, plus `original_filename`, `content_type`,
   `created_at`, `updated_at`). Unknown or not-yet-extracted receipts
   return `404`.
+- `GET /receipts/{receipt_id}/file` — serves the original uploaded file
+  (image or PDF) for a saved receipt, so it can be shown next to the
+  extracted data. `400` for a non-UUID id; `404` if no saved receipt exists
+  for that id (unknown id, uploaded-but-never-extracted, or already
+  deleted), or if the file is missing from disk. The response's
+  `Content-Type` is always derived from the stored file's extension
+  (`.jpg`/`.jpeg` → `image/jpeg`, `.png` → `image/png`, `.pdf` →
+  `application/pdf`) — **never** the content type the client sent at
+  upload time and never sniffed from the file's contents, since either
+  could be spoofed. Also sets `X-Content-Type-Options: nosniff`,
+  `Content-Disposition: inline` (the original filename is never included in
+  any response header), and `Cache-Control: private, no-cache`.
+  **Note:** like the other endpoints, this one has no authentication yet —
+  anyone who can reach the server and knows a receipt's id can fetch its
+  original file.
 - `GET /receipts?limit=N` — lists saved receipts newest first, as
   `{"items": [{receipt_id, original_filename, store_name, purchase_date,
   currency, total, created_at}, ...], "count": <number>}` (no items,

@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 
 import config
 from adapters.file_storage import delete_file, find_file, save_file
@@ -16,7 +17,13 @@ from domain.ports import (
     ReceiptExtractor,
     ReceiptRepository,
 )
-from domain.rules import EmptyFileError, FileTooLargeError, UnsupportedFileTypeError, validate_upload
+from domain.rules import (
+    EmptyFileError,
+    FileTooLargeError,
+    UnsupportedFileTypeError,
+    media_type_for_extension,
+    validate_upload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +171,45 @@ def get_receipt(receipt_id: str, repository: ReceiptRepository = Depends(get_rep
         raise HTTPException(status_code=404, detail="Receipt not found.")
 
     return saved.model_dump()
+
+
+@router.get("/receipts/{receipt_id}/file")
+def get_receipt_file(receipt_id: str, repository: ReceiptRepository = Depends(get_repository)):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    # A saved (extracted) receipt must exist -- same lookup as GET
+    # /receipts/{id} -- so an unknown id or one that was uploaded but never
+    # extracted behaves the same way as that endpoint.
+    existing = repository.get_receipt(str(validated_id))
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    file_path = find_file(validated_id)
+    if file_path is None:
+        logger.warning("Receipt file missing on disk: receipt_id=%s", receipt_id)
+        raise HTTPException(status_code=404, detail="Receipt file not found.")
+
+    media_type = media_type_for_extension(file_path.suffix)
+    if media_type is None:
+        logger.warning(
+            "Stored receipt file has no mapped media type: receipt_id=%s extension=%s",
+            receipt_id,
+            file_path.suffix,
+        )
+        raise HTTPException(status_code=404, detail="Receipt file not found.")
+
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "inline",
+            "Cache-Control": "private, no-cache",
+        },
+    )
 
 
 @router.put("/receipts/{receipt_id}")
