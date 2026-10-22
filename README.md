@@ -33,6 +33,14 @@ npm run dev
 Runs at http://localhost:5173. The frontend reads the backend's URL from
 `VITE_API_URL` (see `.env.example`); `.env` is gitignored and not committed.
 
+The upload screen is a dropzone: click it, press Enter/Space, or drag a
+receipt onto it to choose a file; dropping more than one file at once shows
+an error asking for one receipt at a time. On small screens, a "Take photo"
+button opens the device camera directly. The selected file is shown with its
+name and size and a "Remove" button. See
+[docs/design.md](docs/design.md) for the design system (tokens, shared
+components, accessibility rules) used throughout the UI.
+
 After a receipt is uploaded and extracted, the address bar is updated to
 `?receipt=<id>` (via `history.replaceState`, no page reload). Reloading the
 page or opening that link again fetches the already-saved result from

@@ -21,6 +21,19 @@ the purchase info, and the result is displayed for review.
 - `frontend/` — Vite + React + TypeScript app, styled with Tailwind CSS.
   Jest + React Testing Library config lives here (`jest.config.cjs`,
   `jest.esbuild-transform.cjs`, `tsconfig.jest.json`, `src/setupTests.ts`).
+  **Design system:** semantic color/radius/shadow tokens live in
+  `tailwind.config.js` (`theme.extend`) — components must use these tokens
+  (e.g. `bg-brand`, `text-ink-muted`, `border-border`), never hardcoded hex
+  colors; see [docs/design.md](docs/design.md) for the palette, contrast
+  ratios, and when to use each shared component. Shared UI components live
+  in `src/components/ui/` (`Button`, `Card`, `Alert`, `Spinner`, `Container`,
+  `formatFileSize`) — reach for these instead of ad hoc markup. All
+  interactive elements need a visible `focus-visible` ring and a minimum
+  44px touch target on small screens; never convey state with color alone.
+  User-visible strings and roles that existing tests assert on (e.g.
+  "Uploading...", "Extracting receipt data...", "Receipt not found",
+  "Upload another receipt", the 502/503 messages) must stay exactly as they
+  are unless a task explicitly asks to change them.
   `src/api/` holds API call modules (`uploadReceipt.ts`, `extractReceipt.ts`,
   `getReceipt.ts`, `listReceipts.ts`, shared `ApiError`, shared response
   types in `types.ts` — including `ReceiptSummary`, the list-row shape); the
