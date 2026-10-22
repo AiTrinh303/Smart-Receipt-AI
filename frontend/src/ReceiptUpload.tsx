@@ -17,6 +17,7 @@ import { formatFileSize } from './components/ui/formatFileSize'
 
 const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf']
 const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png']
 const PDF_SIGNATURE = '%PDF-'
 const RECEIPT_QUERY_PARAM = 'receipt'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -142,6 +143,30 @@ function ReceiptUpload() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
+  const [previewUrl, setPreviewUrlState] = useState<string | null>(null)
+  const previewUrlRef = useRef<string | null>(null)
+
+  // Always revokes the previous object URL (if any) before adopting the
+  // next one, so there is at most one live object URL for the selected
+  // file at any time -- the only way to avoid leaking them. A ref (not
+  // just the state) is used so the unmount cleanup below always sees the
+  // latest URL rather than a stale closure.
+  const setPreviewUrl = (next: string | null) => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+    }
+    previewUrlRef.current = next
+    setPreviewUrlState(next)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current)
+      }
+    }
+  }, [])
+
   const loadSavedReceipt = async (id: string) => {
     setIsLoadingReceipt(true)
     setLoadError(null)
@@ -202,17 +227,22 @@ function ReceiptUpload() {
 
     if (!isValidFile(selected)) {
       setFile(null)
+      setPreviewUrl(null)
       setError('Invalid file type. Please select a JPG, PNG, or PDF file.')
       return
     }
 
-    if (getExtension(selected.name) === '.pdf' && !(await isLikelyValidPdf(selected))) {
+    const extension = getExtension(selected.name)
+
+    if (extension === '.pdf' && !(await isLikelyValidPdf(selected))) {
       setFile(null)
+      setPreviewUrl(null)
       setError('This file does not look like a valid PDF.')
       return
     }
 
     setFile(selected)
+    setPreviewUrl(IMAGE_EXTENSIONS.includes(extension) ? URL.createObjectURL(selected) : null)
     setError(null)
   }
 
@@ -227,6 +257,7 @@ function ReceiptUpload() {
 
   const handleRemoveFile = () => {
     setFile(null)
+    setPreviewUrl(null)
     setError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -270,6 +301,7 @@ function ReceiptUpload() {
       setExtractionError(null)
       setReceiptId(null)
       setFile(null)
+      setPreviewUrl(null)
       setError('Please drop one receipt at a time.')
       return
     }
@@ -347,6 +379,7 @@ function ReceiptUpload() {
 
   const handleReset = () => {
     setFile(null)
+    setPreviewUrl(null)
     setError(null)
     setSuccess(null)
     setIsUploading(false)
@@ -563,19 +596,27 @@ function ReceiptUpload() {
 
         {file && (
           <div className="flex items-center gap-3 rounded-md border border-border bg-surface-page px-3 py-2">
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-5 w-5 flex-shrink-0 text-ink-muted"
-              fill="none"
-            >
-              <path
-                d="M6 2h8l4 4v16H6z"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinejoin="round"
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt="Preview of the selected receipt"
+                className="h-16 w-16 flex-shrink-0 rounded-md border border-border bg-slate-100 object-contain sm:h-20 sm:w-20"
               />
-            </svg>
+            ) : (
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-5 w-5 flex-shrink-0 text-ink-muted"
+                fill="none"
+              >
+                <path
+                  d="M6 2h8l4 4v16H6z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
             <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={file.name}>
               <span>Selected file: {file.name}</span>{' '}
               <span className="text-ink-muted">({formatFileSize(file.size)})</span>

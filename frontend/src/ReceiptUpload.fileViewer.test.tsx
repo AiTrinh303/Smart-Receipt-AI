@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
+import { mockObjectUrl } from './test/objectUrl'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -8,6 +9,16 @@ beforeEach(() => {
 
 afterEach(() => {
   window.history.replaceState({}, '', '/')
+})
+
+// jsdom has neither URL.createObjectURL nor URL.revokeObjectURL; selecting a
+// JPG/PNG now creates a preview object URL, so every test here needs this.
+let objectUrl: ReturnType<typeof mockObjectUrl>
+beforeEach(() => {
+  objectUrl = mockObjectUrl()
+})
+afterEach(() => {
+  objectUrl.restore()
 })
 
 function jsonResponse(status: number, body: unknown) {

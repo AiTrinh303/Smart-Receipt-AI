@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
+import { mockObjectUrl } from './test/objectUrl'
 
 const VALID_UUID = '11111111-1111-1111-1111-111111111111'
 
@@ -14,6 +15,16 @@ beforeEach(() => {
 
 afterEach(() => {
   window.history.replaceState({}, '', '/')
+})
+
+// jsdom has neither URL.createObjectURL nor URL.revokeObjectURL; selecting a
+// JPG/PNG now creates a preview object URL, so every test here needs this.
+let objectUrl: ReturnType<typeof mockObjectUrl>
+beforeEach(() => {
+  objectUrl = mockObjectUrl()
+})
+afterEach(() => {
+  objectUrl.restore()
 })
 
 function jsonResponse(status: number, body: unknown) {

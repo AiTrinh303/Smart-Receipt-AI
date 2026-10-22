@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import ReceiptUpload from './ReceiptUpload'
+import { mockObjectUrl } from './test/objectUrl'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -7,6 +8,16 @@ beforeEach(() => {
 
 afterEach(() => {
   window.history.replaceState({}, '', '/')
+})
+
+// jsdom has neither URL.createObjectURL nor URL.revokeObjectURL; a dropped
+// JPG/PNG now creates a preview object URL, so every test here needs this.
+let objectUrl: ReturnType<typeof mockObjectUrl>
+beforeEach(() => {
+  objectUrl = mockObjectUrl()
+})
+afterEach(() => {
+  objectUrl.restore()
 })
 
 function getDropzone() {
