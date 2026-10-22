@@ -4,6 +4,20 @@ Design tokens live in `frontend/tailwind.config.js` (`theme.extend.colors`) and
 shared components live in `frontend/src/components/ui/`. Components must use
 these tokens, never hardcoded hex colors.
 
+## Checking a visual change
+
+Open `?view=styleguide` in a local `npm run dev` session (e.g.
+`http://localhost:5173/?view=styleguide`) to see every `Button` variant
+(enabled, disabled, loading), every `Alert` variant, the nav tab's active and
+inactive states, the logo mark, the dropzone's idle/drag-over/file-selected
+states, and a `Card`, all at once, with static sample data and no network
+calls. It's dev-only (gated on `import.meta.env.DEV`, via the mockable
+`src/env.ts`), not linked from the header, and excluded from production
+builds (`npm run build` and grep `dist/assets/*.js` for "StyleGuide" to
+confirm after changing anything about how it's wired in). After any visual
+change, look at this page, and also see "Verified against the real built
+CSS" below -- jsdom's 100+ passing tests say nothing about layout or color.
+
 ## Palette (with contrast checked against white `#ffffff` / token `surface`)
 
 | Token            | Hex       | Use                          | Contrast vs white |

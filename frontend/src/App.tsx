@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import Container from './components/ui/Container'
+import { isDev } from './env'
 import { navigateTo } from './navigation'
 import ReceiptHistory from './ReceiptHistory'
 import ReceiptUpload from './ReceiptUpload'
@@ -7,8 +8,24 @@ import ReceiptUpload from './ReceiptUpload'
 const RECEIPT_QUERY_PARAM = 'receipt'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function getView(): 'upload' | 'history' {
+// Dev-only style guide page (?view=styleguide). This dynamic import() must
+// use the literal `import.meta.env.DEV` (not the mockable `isDev` below) --
+// Vite statically replaces that exact expression with `false` in a
+// production build, which lets Rollup's dead-code elimination drop both
+// this reference and the entire StyleGuide chunk from the build (verified
+// by grepping the built output, not assumed); an indirection through
+// another module's export defeats that static analysis and leaves the
+// chunk in dist/. `isDev` (from ./env, mockable in tests) separately gates
+// whether the route/render logic below ever reaches it at runtime.
+const StyleGuide = import.meta.env.DEV ? lazy(() => import('./StyleGuide')) : null
+
+type View = 'upload' | 'history' | 'styleguide'
+
+function getView(): View {
   const params = new URLSearchParams(window.location.search)
+  if (isDev && params.get('view') === 'styleguide') {
+    return 'styleguide'
+  }
   return params.get('view') === 'history' ? 'history' : 'upload'
 }
 
@@ -21,16 +38,22 @@ function isReceiptDetailView(): boolean {
 // `?receipt=<id>` renders the upload component (it owns the saved-receipt
 // view), but it is not the plain upload screen, so neither tab should claim
 // it -- otherwise "Upload" stays marked current while looking at a receipt.
-function getActiveNav(view: 'upload' | 'history'): 'upload' | 'history' | null {
+function getActiveNav(view: View): 'upload' | 'history' | null {
   if (view === 'history') {
     return 'history'
+  }
+  if (view === 'styleguide') {
+    return null
   }
   return isReceiptDetailView() ? null : 'upload'
 }
 
-function getPageName(view: 'upload' | 'history'): string {
+function getPageName(view: View): string {
   if (view === 'history') {
     return 'History'
+  }
+  if (view === 'styleguide') {
+    return 'Style Guide'
   }
 
   return isReceiptDetailView() ? 'Receipt' : 'Upload'
@@ -127,7 +150,11 @@ function App() {
 
       <main id="main-content" className="flex-1 py-8">
         <Container size={mainSize}>
-          {view === 'history' ? (
+          {view === 'styleguide' && StyleGuide ? (
+            <Suspense fallback={null}>
+              <StyleGuide />
+            </Suspense>
+          ) : view === 'history' ? (
             <ReceiptHistory key={locationKey} />
           ) : (
             <ReceiptUpload key={locationKey} />

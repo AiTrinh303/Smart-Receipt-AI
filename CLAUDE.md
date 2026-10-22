@@ -126,6 +126,20 @@ the purchase info, and the result is displayed for review.
   receipt on screen with the error shown so the user can retry — nothing
   is navigated away on failure. `deleteReceipt` never parses a body on
   success (a `204` has none).
+  **Style guide (`StyleGuide.tsx`, `env.ts`, `?view=styleguide`):**
+  dev-only page showing every `Button`/`Alert` variant, the nav tab's
+  active/inactive states, the logo mark, and the dropzone's
+  idle/drag-over/file-selected states with static sample data (no network
+  calls) — open it after any visual change, since jsdom cannot see
+  colors or layout. Gated on `env.ts`'s `isDev` (`import.meta.env.DEV`,
+  isolated into its own module specifically so tests can
+  `jest.doMock('./env', ...)` to flip it — `import.meta.env.DEV` itself is
+  a compile-time constant, not something a single test run can toggle).
+  Not linked from the header. `App.tsx`'s dynamic `import('./StyleGuide')`
+  must use the literal `import.meta.env.DEV` (not `isDev`) specifically so
+  Vite's dead-code elimination can drop it from a production build —
+  confirmed by grepping `dist/assets/*.js` for "StyleGuide" after a build,
+  not assumed.
 - `backend/` — FastAPI app with a Python venv and
   `requirements.txt`/`requirements-dev.txt`, layered per
   [docs/adr/0001-layered-backend.md](docs/adr/0001-layered-backend.md):

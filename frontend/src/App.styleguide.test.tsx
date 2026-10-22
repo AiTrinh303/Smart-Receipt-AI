@@ -1,0 +1,34 @@
+import { render, screen, waitFor } from '@testing-library/react'
+import App from './App'
+
+beforeEach(() => {
+  window.history.replaceState({}, '', '/?view=styleguide')
+})
+
+afterEach(() => {
+  window.history.replaceState({}, '', '/')
+})
+
+test('the style guide page renders every Button variant, Alert variant, the logo and a Card', async () => {
+  // Given dev mode is on (the default in this test environment) and the URL requests the style guide
+  render(<App />)
+
+  // Then every Button variant renders in its enabled, disabled and loading groups
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { name: 'Style guide' })).toBeInTheDocument()
+  })
+  for (const variant of ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost']) {
+    expect(screen.getByRole('button', { name: variant })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `${variant} (disabled)` })).toBeInTheDocument()
+  }
+  expect(screen.getAllByRole('button', { name: /loading/i }).length).toBeGreaterThan(0)
+
+  // And every Alert variant renders
+  expect(screen.getByText('This is a info alert.')).toBeInTheDocument()
+  expect(screen.getByText('This is a success alert.')).toBeInTheDocument()
+  expect(screen.getByText('This is a warning alert.')).toBeInTheDocument()
+  expect(screen.getByText('This is a error alert.')).toBeInTheDocument()
+
+  // And the Card sample content renders
+  expect(screen.getByText('A basic Card with some sample content.')).toBeInTheDocument()
+})
