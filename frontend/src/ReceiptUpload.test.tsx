@@ -318,10 +318,15 @@ describe('submitting to the backend', () => {
     // When the user clicks Submit
     await user.click(getSubmitButton())
 
-    // Then "Extracting receipt data..." is shown and Submit is disabled
+    // Then "Extracting receipt data..." is shown, inside a busy status
+    // region with skeleton placeholders next to it, and Submit is disabled
+    // (the Spinner itself is a second, nested role="status", hence getAllBy)
     await waitFor(() => {
       expect(screen.getByText('Extracting receipt data...')).toBeInTheDocument()
     })
+    const busyStatus = screen.getAllByRole('status').find((el) => el.getAttribute('aria-busy'))
+    expect(busyStatus).toBeTruthy()
+    expect(busyStatus?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(1)
     expect(getSubmitButton()).toBeDisabled()
     expect(getFileInput()).toBeDisabled()
 

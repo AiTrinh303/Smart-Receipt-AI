@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { ApiError } from './api/ApiError'
 import { listReceipts } from './api/listReceipts'
 import type { ReceiptSummary } from './api/types'
+import Skeleton from './components/ui/Skeleton'
 import { navigateTo } from './navigation'
+
+const LOADING_ROW_COUNT = 4
 
 const NOT_DETECTED = 'Not detected'
 
@@ -85,9 +88,16 @@ function ReceiptHistory() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
+      <div
+        role="status"
+        aria-busy="true"
+        className="mx-auto flex max-w-md flex-col gap-3 rounded-lg border border-gray-300 p-6"
+      >
         {noticeBanner}
-        <p className="text-sm text-gray-600">Loading receipts...</p>
+        <span className="sr-only">Loading receipts...</span>
+        {Array.from({ length: LOADING_ROW_COUNT }).map((_, index) => (
+          <Skeleton key={index} className="h-12 w-full" />
+        ))}
       </div>
     )
   }

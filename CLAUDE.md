@@ -126,10 +126,35 @@ the purchase info, and the result is displayed for review.
   receipt on screen with the error shown so the user can retry — nothing
   is navigated away on failure. `deleteReceipt` never parses a body on
   success (a `204` has none).
+  **Mobile-friendly items (`useMediaQuery`, `ReceiptResult.tsx`):**
+  `src/hooks/useMediaQuery.ts` wraps `window.matchMedia`, returns `false`
+  when it doesn't exist (jsdom's default — existing tests need no mock),
+  and updates live on change with listener cleanup. Below `sm`
+  (`max-width: 639px`), `ReceiptResult` renders items as cards
+  (name heading, a Qty/Unit price/Line total definition list, currency
+  shown once in the labels) instead of the table — only one variant is
+  ever in the DOM, never both hidden with CSS.
+  **Image preview (`ReceiptUpload.tsx`):** a valid JPG/PNG gets a thumbnail
+  via `URL.createObjectURL` in the selected-file row (PDFs keep the file
+  icon). The previous object URL is always revoked before the next one
+  is created or discarded — on Remove, on replacing the file, after
+  "Upload another receipt", and on unmount (via a ref, so the cleanup
+  sees the latest URL) — at most one live URL at a time. jsdom has
+  neither `URL.createObjectURL` nor `URL.revokeObjectURL`;
+  `src/test/objectUrl.ts` is an explicit per-file mock (not a global
+  polyfill) used by every test that selects an image.
+  **Skeleton loading states (`components/ui/Skeleton.tsx`):** every
+  loading area (the history list, the saved-receipt view, next to the
+  extraction status) is a `role="status" aria-busy="true"` region that
+  keeps the exact original loading string in the DOM (visible or
+  `sr-only`) next to `animate-pulse`/`motion-reduce:animate-none`
+  skeleton blocks — the region (and `aria-busy`) disappears once loading
+  ends.
   **Style guide (`StyleGuide.tsx`, `env.ts`, `?view=styleguide`):**
   dev-only page showing every `Button`/`Alert` variant, the nav tab's
-  active/inactive states, the logo mark, and the dropzone's
-  idle/drag-over/file-selected states with static sample data (no network
+  active/inactive states, the logo mark, the dropzone's
+  idle/drag-over/file-selected states, a `Skeleton` sample, and the
+  card-variant items list, with static sample data (no network
   calls) — open it after any visual change, since jsdom cannot see
   colors or layout. Gated on `env.ts`'s `isDev` (`import.meta.env.DEV`,
   isolated into its own module specifically so tests can

@@ -12,6 +12,7 @@ import ReceiptResult from './ReceiptResult'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
+import Skeleton from './components/ui/Skeleton'
 import Spinner from './components/ui/Spinner'
 import { formatFileSize } from './components/ui/formatFileSize'
 
@@ -491,8 +492,18 @@ function ReceiptUpload() {
 
   if (isLoadingReceipt) {
     return (
-      <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
-        <p className="text-sm text-gray-600">Loading receipt...</p>
+      <div role="status" aria-busy="true" className="flex flex-col gap-4">
+        <span className="sr-only">Loading receipt...</span>
+        <div className="grid gap-6 lg:grid-cols-[5fr_6fr]">
+          <Skeleton className="h-64 w-full lg:order-1" />
+          <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-6 shadow-md lg:order-2">
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
+        </div>
       </div>
     )
   }
@@ -636,9 +647,13 @@ function ReceiptUpload() {
         )}
 
         {isBusy && (
-          <div className="flex items-center gap-2 text-sm text-ink-muted">
-            <Spinner size="sm" label={isUploading ? 'Uploading' : 'Reading receipt'} />
-            <span>{isUploading ? 'Uploading...' : 'Extracting receipt data...'}</span>
+          <div role="status" aria-busy="true" className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-sm text-ink-muted">
+              <Spinner size="sm" label={isUploading ? 'Uploading' : 'Reading receipt'} />
+              <span>{isUploading ? 'Uploading...' : 'Extracting receipt data...'}</span>
+            </div>
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-2/3" />
           </div>
         )}
 

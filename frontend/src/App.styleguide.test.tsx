@@ -31,4 +31,10 @@ test('the style guide page renders every Button variant, Alert variant, the logo
 
   // And the Card sample content renders
   expect(screen.getByText('A basic Card with some sample content.')).toBeInTheDocument()
+
+  // And the Skeleton section and the card-variant items list render
+  expect(screen.getByRole('heading', { name: /skeleton/i })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: /items as cards/i })).toBeInTheDocument()
+  expect(screen.getAllByText('Unit price (USD)').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('Line total (USD)').length).toBeGreaterThan(0)
 })

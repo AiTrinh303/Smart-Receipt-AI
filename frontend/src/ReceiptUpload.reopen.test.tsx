@@ -124,7 +124,7 @@ describe('reopening a saved receipt from its link', () => {
     expect(options?.method ?? 'GET').toBe('GET')
   })
 
-  test('while loading -> "Loading receipt..." is shown', async () => {
+  test('while loading -> "Loading receipt..." is shown in a busy status region with skeletons', async () => {
     // Given the URL has a valid receipt id and the GET response has not resolved yet
     setUrl(`?receipt=${VALID_UUID}`)
     const deferred = createDeferred<unknown>()
@@ -133,12 +133,20 @@ describe('reopening a saved receipt from its link', () => {
     // When the app loads
     render(<ReceiptUpload />)
 
-    // Then "Loading receipt..." is shown
+    // Then "Loading receipt..." is shown inside a busy status region with
+    // skeleton placeholders (a card placeholder and a viewer placeholder)
+    const status = screen.getByRole('status')
+    expect(status).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByText('Loading receipt...')).toBeInTheDocument()
+    expect(status.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0)
 
-    // Cleanup: resolve so the test doesn't leave a dangling promise
+    // When the GET resolves
     deferred.resolve(jsonResponse(200, SAVED_RECEIPT))
+
+    // Then the status region is gone and the real content is shown
     await waitFor(() => expect(screen.getByText('Corner Store')).toBeInTheDocument())
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText('Loading receipt...')).not.toBeInTheDocument()
   })
 
   test('GET returns 404 -> "Receipt not found" is shown', async () => {

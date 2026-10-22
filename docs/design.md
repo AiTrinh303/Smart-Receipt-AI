@@ -76,6 +76,35 @@ not be reproduced from this codebase's current source or build output.
 See the "Invisible button investigation" entry in the Changelog below for
 the full trail of evidence.
 
+## Mobile-friendly patterns
+
+- **Items as cards below `sm`.** `ReceiptResult` renders the items table from
+  the `sm` breakpoint up, and below it (via `useMediaQuery('(max-width:
+  639px)')`, `src/hooks/useMediaQuery.ts`) a list of cards instead -- never
+  both. The hook returns `false` when `window.matchMedia` doesn't exist
+  (jsdom's default here), so it falls back to the table and existing tests
+  never need to mock it. The currency code is shown once per amount label
+  (e.g. "Unit price (USD)"), the same convention the table already used,
+  rather than repeated in each value.
+- **Image preview, with real cleanup.** After a JPG/PNG passes validation,
+  `ReceiptUpload` shows a thumbnail via `URL.createObjectURL` (PDFs keep the
+  file icon; an invalid file is never previewed). The one rule that matters
+  here: revoke the previous object URL *before* creating or discarding the
+  next one, so there is at most one live URL at a time -- on Remove, when a
+  new file replaces the old one, after "Upload another receipt", and on
+  unmount (tracked via a ref, so the unmount cleanup sees the latest URL
+  rather than a stale closure from the render that scheduled it). jsdom
+  implements neither `URL.createObjectURL` nor `URL.revokeObjectURL` --
+  `src/test/objectUrl.ts` is an explicit per-test-file mock (never a global
+  polyfill), so a test suite that forgets to add it fails loudly.
+- **Skeleton loading states.** `src/components/ui/Skeleton.tsx` is a plain
+  `animate-pulse` block (`motion-reduce:animate-none`, `aria-hidden` --
+  purely decorative). Every loading area is a `role="status"
+  aria-busy="true"` region that still contains the exact original loading
+  string (visible or `sr-only`) alongside the skeleton blocks, so existing
+  text-based tests and screen readers both keep working; the whole region
+  unmounts (and `aria-busy` disappears with it) once loading ends.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
@@ -198,6 +227,10 @@ the full trail of evidence.
   back to a plain 2-decimal amount instead of crashing; `null`/`NaN` shows
   "Not detected". `includeCurrency: false` omits the code prefix, for a
   repeated column where the header already states the currency once.
+- **`Skeleton`** — a decorative, `aria-hidden`, `animate-pulse` placeholder
+  block (`motion-reduce:animate-none`). Used inside a `role="status"
+  aria-busy="true"` region that also keeps the real loading string in the
+  DOM (see "Skeleton loading states" above) — never on its own.
 - **`Alert`** — variants `info`/`success`/`warning`/`error`. `error` renders
   `role="alert"` (interrupts screen readers); the others render
   `role="status"` (polite). Never relies on color alone — pair with text.

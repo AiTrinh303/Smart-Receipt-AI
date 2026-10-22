@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
+import Skeleton from './components/ui/Skeleton'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 const ALERT_VARIANTS = ['info', 'success', 'warning', 'error'] as const
@@ -101,6 +102,35 @@ function StyleGuide() {
         <Card>
           <p className="text-sm text-ink">A basic Card with some sample content.</p>
         </Card>
+      </Section>
+
+      <Section title="Skeleton (loading placeholders)">
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+          <Skeleton className="h-6 w-1/2" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+        </div>
+      </Section>
+
+      <Section title="Items as cards (below the sm breakpoint)">
+        <ul className="flex max-w-xs flex-col gap-2">
+          {[
+            { name: 'Milk', quantity: 2, unit_price: '2.50', line_total: '5.00' },
+            { name: 'Bread', quantity: 1, unit_price: '3.00', line_total: '3.00' },
+          ].map((item) => (
+            <li key={item.name} className="rounded-md border border-border p-3">
+              <p className="font-medium text-ink">{item.name}</p>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <dt className="text-ink-muted">Qty</dt>
+                <dd className="text-right tabular-nums">{item.quantity}</dd>
+                <dt className="whitespace-nowrap text-ink-muted">Unit price (USD)</dt>
+                <dd className="whitespace-nowrap text-right tabular-nums">{item.unit_price}</dd>
+                <dt className="whitespace-nowrap text-ink-muted">Line total (USD)</dt>
+                <dd className="whitespace-nowrap text-right tabular-nums">{item.line_total}</dd>
+              </dl>
+            </li>
+          ))}
+        </ul>
       </Section>
 
       <Section title="Dropzone (idle / drag-over / file-selected)">

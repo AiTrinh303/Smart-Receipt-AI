@@ -141,14 +141,22 @@ describe('ReceiptHistory', () => {
     // When the history view is rendered
     render(<ReceiptHistory />)
 
-    // Then "Loading receipts..." is shown
+    // Then "Loading receipts..." is shown inside a busy status region with
+    // skeleton placeholder rows
+    const status = screen.getByRole('status')
+    expect(status).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByText('Loading receipts...')).toBeInTheDocument()
+    expect(status.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0)
 
-    // Cleanup
+    // When the request resolves
     deferred.resolve(jsonResponse(200, { items: [], count: 0 }))
+
+    // Then the status region and skeletons are gone and the real content shows
     await waitFor(() =>
       expect(screen.getByText('No receipts yet. Upload your first receipt.')).toBeInTheDocument(),
     )
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText('Loading receipts...')).not.toBeInTheDocument()
   })
 
   test('error response -> error shown, Retry calls the list again', async () => {
