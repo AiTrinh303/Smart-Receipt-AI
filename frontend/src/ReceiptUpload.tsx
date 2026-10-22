@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError } from './api/ApiError'
 import { deleteReceipt } from './api/deleteReceipt'
 import { extractReceipt } from './api/extractReceipt'
@@ -8,6 +8,11 @@ import type { ReceiptExtraction } from './api/types'
 import { navigateTo } from './navigation'
 import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
+import Alert from './components/ui/Alert'
+import Button from './components/ui/Button'
+import Card from './components/ui/Card'
+import Spinner from './components/ui/Spinner'
+import { formatFileSize } from './components/ui/formatFileSize'
 
 const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf']
 const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
@@ -109,6 +114,10 @@ function ReceiptUpload() {
   const [notFound, setNotFound] = useState(initialReceipt.invalid)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+
   const loadSavedReceipt = async (id: string) => {
     setIsLoadingReceipt(true)
     setLoadError(null)
@@ -160,12 +169,7 @@ function ReceiptUpload() {
     }
   }
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0]
-    if (!selected) {
-      return
-    }
-
+  const processFile = async (selected: File) => {
     setSuccess(null)
     setResult(null)
     setIsEditing(false)
@@ -186,6 +190,70 @@ function ReceiptUpload() {
 
     setFile(selected)
     setError(null)
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0]
+    e.target.value = ''
+    if (!selected) {
+      return
+    }
+    await processFile(selected)
+  }
+
+  const handleRemoveFile = () => {
+    setFile(null)
+    setError(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = ''
+    }
+  }
+
+  const openFilePicker = () => {
+    if (!(isUploading || isExtracting)) {
+      fileInputRef.current?.click()
+    }
+  }
+
+  const handleZoneKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      openFilePicker()
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragOver(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+
+    const droppedFiles = e.dataTransfer.files
+    if (droppedFiles.length > 1) {
+      setSuccess(null)
+      setResult(null)
+      setIsEditing(false)
+      setExtractionError(null)
+      setReceiptId(null)
+      setFile(null)
+      setError('Please drop one receipt at a time.')
+      return
+    }
+
+    const dropped = droppedFiles[0]
+    if (dropped) {
+      await processFile(dropped)
+    }
   }
 
   const handleSubmit = async () => {
@@ -399,67 +467,135 @@ function ReceiptUpload() {
   const isBusy = isUploading || isExtracting
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-gray-300 p-6">
-      <label htmlFor="receipt-file" className="text-sm font-medium text-gray-700">
-        Upload receipt (JPG, PNG, or PDF)
-      </label>
-      <input
-        id="receipt-file"
-        type="file"
-        accept=".jpg,.jpeg,.png,.pdf"
-        onChange={handleFileChange}
-        disabled={isBusy}
-        className="block w-full text-sm text-gray-700 file:mr-4 file:rounded file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
-      />
+    <div className="mx-auto flex max-w-md flex-col gap-4">
+      <Card className="flex flex-col gap-4">
+        <label htmlFor="receipt-file" className="sr-only">
+          Upload receipt (JPG, PNG, or PDF)
+        </label>
+        <input
+          ref={fileInputRef}
+          id="receipt-file"
+          type="file"
+          accept=".jpg,.jpeg,.png,.pdf"
+          onChange={handleFileChange}
+          disabled={isBusy}
+          className="sr-only"
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileChange}
+          disabled={isBusy}
+          aria-hidden="true"
+          tabIndex={-1}
+          className="sr-only"
+        />
 
-      {file && <p className="text-sm text-gray-600">Selected file: {file.name}</p>}
+        <div
+          role="button"
+          tabIndex={isBusy ? -1 : 0}
+          aria-disabled={isBusy}
+          onClick={openFilePicker}
+          onKeyDown={handleZoneKeyDown}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+            isBusy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+          } ${isDragOver ? 'border-brand bg-brand-soft' : 'border-border'}`}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-brand" fill="none">
+            <path
+              d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <p className="text-sm font-medium text-ink">Drag a receipt here, or choose a file</p>
+          <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB</p>
+        </div>
 
-      {error && (
-        <p role="alert" className="text-sm text-red-600">
-          {error}
-        </p>
-      )}
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isBusy}
+          onClick={() => cameraInputRef.current?.click()}
+          className="w-full sm:hidden"
+        >
+          Take photo
+        </Button>
 
-      {success && (
-        <p className="text-sm text-green-600">
-          Upload successful. Receipt ID: {success.receiptId} ({success.filename})
-        </p>
-      )}
-
-      {isExtracting && <p className="text-sm text-gray-600">Extracting receipt data...</p>}
-
-      {extractionError && (
-        <>
-          <p role="alert" className="text-sm text-red-600">
-            {extractionError}
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleRetryExtraction}
-              className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+        {file && (
+          <div className="flex items-center gap-3 rounded-md border border-border bg-surface-page px-3 py-2">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-5 w-5 flex-shrink-0 text-ink-muted"
+              fill="none"
             >
-              Retry
-            </button>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="rounded bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-800"
-            >
-              Upload another receipt
-            </button>
+              <path
+                d="M6 2h8l4 4v16H6z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={file.name}>
+              <span>Selected file: {file.name}</span>{' '}
+              <span className="text-ink-muted">({formatFileSize(file.size)})</span>
+            </p>
+            <Button variant="ghost" size="sm" onClick={handleRemoveFile} disabled={isBusy}>
+              Remove
+            </Button>
           </div>
-        </>
-      )}
+        )}
 
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={!file || isBusy}
-        className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-      >
-        {isUploading ? 'Uploading...' : isExtracting ? 'Extracting...' : 'Submit'}
-      </button>
+        {error && <Alert variant="error">{error}</Alert>}
+
+        {success && (
+          <Alert variant="success">
+            Upload successful. Receipt ID: {success.receiptId} ({success.filename})
+          </Alert>
+        )}
+
+        {isBusy && (
+          <div className="flex items-center gap-2 text-sm text-ink-muted">
+            <Spinner size="sm" label={isUploading ? 'Uploading' : 'Reading receipt'} />
+            <span>{isUploading ? 'Uploading...' : 'Extracting receipt data...'}</span>
+          </div>
+        )}
+
+        {extractionError && (
+          <>
+            <Alert variant="error">{extractionError}</Alert>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleRetryExtraction}>
+                Retry
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleReset}>
+                Upload another receipt
+              </Button>
+            </div>
+          </>
+        )}
+
+        <Button
+          onClick={handleSubmit}
+          disabled={!file || isBusy}
+          loading={isBusy}
+          loadingText={isUploading ? 'Uploading...' : 'Extracting...'}
+        >
+          Read receipt
+        </Button>
+      </Card>
+
+      <p className="text-sm text-ink-muted">
+        The file is sent to OpenAI to read it. The extracted data is saved in this app.
+      </p>
     </div>
   )
 }

@@ -18,7 +18,7 @@ function getFileInput() {
 }
 
 function getSubmitButton() {
-  return screen.getByRole('button', { name: /submit|uploading|extracting/i })
+  return screen.getByRole('button', { name: /read receipt|uploading|extracting/i })
 }
 
 function jsonResponse(status: number, body: unknown) {

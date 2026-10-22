@@ -206,7 +206,7 @@ describe('reopening a saved receipt from its link', () => {
     await user.upload(screen.getByLabelText(/upload receipt/i), validFile)
 
     // When the user clicks Submit
-    await user.click(screen.getByRole('button', { name: /submit|uploading|extracting/i }))
+    await user.click(screen.getByRole('button', { name: /read receipt|uploading|extracting/i }))
 
     // Then the result view is shown and the address bar contains the receipt id
     await waitFor(() => {
