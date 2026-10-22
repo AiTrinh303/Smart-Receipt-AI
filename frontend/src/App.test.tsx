@@ -15,6 +15,52 @@ test('renders the Smart Receipt AI heading', () => {
   expect(screen.getByRole('heading', { name: 'Smart Receipt AI' })).toBeInTheDocument()
 })
 
+test('both nav items are present, with aria-current="page" on the active one', () => {
+  render(<App />)
+
+  const uploadLink = screen.getByRole('link', { name: /^upload$/i })
+  const historyLink = screen.getByRole('link', { name: /history/i })
+
+  expect(uploadLink).toBeInTheDocument()
+  expect(historyLink).toBeInTheDocument()
+  expect(uploadLink).toHaveAttribute('aria-current', 'page')
+  expect(historyLink).not.toHaveAttribute('aria-current')
+})
+
+test('document.title reflects the current view', async () => {
+  // Given the upload view
+  render(<App />)
+  expect(document.title).toBe('Upload · Smart Receipt AI')
+
+  // When the user navigates to history
+  const user = userEvent.setup()
+  const fetchSpy = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve({ items: [], count: 0 }),
+  })
+  global.fetch = fetchSpy as unknown as typeof fetch
+  await user.click(screen.getByRole('link', { name: /history/i }))
+
+  // Then the title updates
+  expect(document.title).toBe('History · Smart Receipt AI')
+
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
+})
+
+test('the skip-to-content link is the first focusable element', () => {
+  render(<App />)
+  const skipLink = screen.getByRole('link', { name: /skip to content/i })
+  expect(document.body.contains(skipLink)).toBe(true)
+
+  document.body.focus()
+  const firstFocusable = document.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled])',
+  )[0]
+  expect(firstFocusable).toBe(skipLink)
+})
+
 function jsonResponse(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
