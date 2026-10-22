@@ -82,6 +82,24 @@ the purchase info, and the result is displayed for review.
   valid ISO date renders as a plain text input (not `<input type="date">`,
   which would just show blank) with an "Original: ..." hint below it.
   Never calls the extract endpoint.
+  **Original file viewer (`ReceiptFileViewer.tsx`, `src/api/receiptFileUrl.ts`,
+  `ReceiptDetailLayout.tsx`):** `receiptFileUrl(id)` builds the
+  `GET /receipts/{id}/file` URL (no `fetch` — an `<img src>`/`<iframe src>`
+  loads it directly, so no CORS is needed). `ReceiptFileViewer` decides
+  image vs. PDF from `contentType` first, then the filename extension,
+  else defaults to image; images get a 50%–300% zoom/fit toolbar, PDFs an
+  iframe, and either an "Open original" link; a failed image load shows
+  "The original file is not available." instead of a broken image.
+  `ReceiptDetailLayout` wraps the saved-receipt view (`ReceiptResult`) and
+  the edit view (`ReceiptEditForm`) in a shared two-column layout (file
+  left, data right) from the `lg` breakpoint up; below that it renders
+  "Receipt data"/"Original" tabs (`role="tablist"`/`role="tab"`,
+  `aria-selected`) that toggle visibility with CSS only — both panels stay
+  mounted, so typed edit-form input survives switching tabs. The extract
+  response has no `original_filename`/`content_type` (only
+  `GET /receipts/{id}` does), so right after extraction the viewer's
+  filename falls back to the just-uploaded `File`/upload response and its
+  content type is treated as unknown (extension-based detection).
   **Deleting (`src/api/deleteReceipt.ts`):** a "Delete" button next to
   "Edit" (hidden while the edit form is open) opens an in-page
   confirmation (not `window.confirm`) — no request until "Yes, delete".

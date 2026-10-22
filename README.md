@@ -65,6 +65,16 @@ rejects. If the stored date isn't a valid ISO date, the field shows an
 "Original: ..." hint so it can be corrected. Editing and saving never call
 the extract endpoint — no AI call, no cost.
 
+Next to the extracted data (both right after extraction and when reopening
+a saved receipt), the original uploaded file is shown via
+`GET /receipts/{id}/file` — a zoomable image viewer (50%–300%, with a
+"Fit" button) or, for a PDF, an embedded viewer — plus an "Open original"
+link. From the `lg` breakpoint up this is a two-column layout (file on the
+left, data on the right); below that, "Receipt data" and "Original" tabs
+switch between them without losing anything typed into the edit form,
+since both stay mounted. The edit form shows the same layout, so the
+original can be checked while correcting a value.
+
 A "Delete" button sits next to "Edit" on any saved-receipt view (hidden
 while the edit form is open) and requires confirmation via an in-page
 prompt — not `window.confirm` — before sending anything. On success, it

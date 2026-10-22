@@ -6,6 +6,7 @@ import { getReceipt } from './api/getReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
 import type { ReceiptExtraction } from './api/types'
 import { navigateTo } from './navigation'
+import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
 import Alert from './components/ui/Alert'
@@ -94,6 +95,15 @@ const EXTRACTION_NOT_CONFIGURED_MESSAGE =
   'The AI service is not available (not configured or out of credit). Please check the server settings.'
 const LOAD_RECEIPT_FAILED_MESSAGE = 'Could not load this receipt. Please try again.'
 
+// The extract endpoint's response (ReceiptExtraction) never includes the
+// original filename/content type -- only GET /receipts/{id} does. These
+// stay optional so `result` can hold either response shape without
+// widening the backend contract.
+type ReceiptResultData = ReceiptExtraction & {
+  original_filename?: string | null
+  content_type?: string | null
+}
+
 function ReceiptUpload() {
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -103,7 +113,7 @@ function ReceiptUpload() {
   const [receiptId, setReceiptId] = useState<string | null>(null)
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionError, setExtractionError] = useState<string | null>(null)
-  const [result, setResult] = useState<ReceiptExtraction | null>(null)
+  const [result, setResult] = useState<ReceiptResultData | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -340,22 +350,28 @@ function ReceiptUpload() {
     removeReceiptIdFromUrl()
   }
 
+  const resultFileName = result?.original_filename ?? file?.name ?? success?.filename ?? null
+  const resultContentType = result?.content_type ?? null
+
   if (result && isEditing) {
     return (
-      <ReceiptEditForm
-        receiptId={result.receipt_id}
-        data={result}
-        onSave={(updated) => {
-          setResult(updated)
-          setIsEditing(false)
-        }}
-        onCancel={() => setIsEditing(false)}
-      />
+      <ReceiptDetailLayout receiptId={result.receipt_id} fileName={resultFileName} contentType={resultContentType}>
+        <ReceiptEditForm
+          receiptId={result.receipt_id}
+          data={result}
+          onSave={(updated) => {
+            setResult(updated)
+            setIsEditing(false)
+          }}
+          onCancel={() => setIsEditing(false)}
+        />
+      </ReceiptDetailLayout>
     )
   }
 
   if (result) {
     return (
+      <ReceiptDetailLayout receiptId={result.receipt_id} fileName={resultFileName} contentType={resultContentType}>
       <div className="flex flex-col items-center gap-3">
         <ReceiptResult data={result} onReset={handleReset} />
 
@@ -421,6 +437,7 @@ function ReceiptUpload() {
           </div>
         )}
       </div>
+      </ReceiptDetailLayout>
     )
   }
 
