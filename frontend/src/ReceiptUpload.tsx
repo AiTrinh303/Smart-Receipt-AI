@@ -104,6 +104,20 @@ type ReceiptResultData = ReceiptExtraction & {
   content_type?: string | null
 }
 
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+      <path
+        d="M4 6h12M8 6V4.5A1.5 1.5 0 019.5 3h1A1.5 1.5 0 0112 4.5V6m-6.5 0l.6 9.4a1.5 1.5 0 001.5 1.6h3.8a1.5 1.5 0 001.5-1.6l.6-9.4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 function ReceiptUpload() {
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -371,73 +385,74 @@ function ReceiptUpload() {
 
   if (result) {
     return (
-      <ReceiptDetailLayout receiptId={result.receipt_id} fileName={resultFileName} contentType={resultContentType}>
-      <div className="flex flex-col items-center gap-3">
-        <ReceiptResult data={result} onReset={handleReset} />
-
-        {isConfirmingDelete ? (
-          <div className="mx-auto flex max-w-md flex-col gap-3 rounded-lg border border-gray-300 p-4">
-            <p className="text-sm text-gray-700">
-              Delete this receipt? This removes the saved data and the uploaded file from this
-              app. This cannot be undone.
-            </p>
-            {deleteError && (
-              <p role="alert" className="text-sm text-red-600">
-                {deleteError}
-              </p>
-            )}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                disabled={isDeleting}
-                className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-              >
-                {isDeleting ? 'Deleting...' : 'Yes, delete'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsConfirmingDelete(false)}
-                disabled={isDeleting}
-                className="rounded bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-800"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex gap-4">
-            <button
-              type="button"
-              onClick={() => setIsEditing(true)}
-              className="text-sm font-medium text-blue-600 underline"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDeleteError(null)
-                setIsConfirmingDelete(true)
-              }}
-              className="text-sm font-medium text-red-600 underline"
-            >
-              Delete
-            </button>
-            <a
-              href="/?view=history"
-              onClick={(e) => {
-                e.preventDefault()
-                navigateTo('?view=history')
-              }}
-              className="text-sm font-medium text-blue-600 underline"
-            >
-              Back to history
-            </a>
-          </div>
+      <div className="flex flex-col gap-4">
+        {!isConfirmingDelete && (
+          <a
+            href="/?view=history"
+            onClick={(e) => {
+              e.preventDefault()
+              navigateTo('?view=history')
+            }}
+            className="inline-flex w-fit items-center gap-1.5 rounded-md px-1 py-2 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          >
+            <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+              <path
+                d="M12 15l-5-5 5-5M7.5 10H17"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Back to history
+          </a>
         )}
+
+        <ReceiptDetailLayout receiptId={result.receipt_id} fileName={resultFileName} contentType={resultContentType}>
+          <div className="flex flex-col gap-4">
+            <ReceiptResult data={result} onReset={handleReset} onEdit={() => setIsEditing(true)} />
+
+            {isConfirmingDelete ? (
+              <Alert variant="error">
+                <div className="flex flex-col gap-3">
+                  <p>
+                    Delete this receipt? This removes the saved data and the uploaded file from
+                    this app. This cannot be undone.
+                  </p>
+                  {deleteError && <p className="font-semibold">{deleteError}</p>}
+                  <div className="flex gap-2">
+                    <Button variant="danger" size="sm" onClick={handleConfirmDelete} loading={isDeleting} loadingText="Deleting...">
+                      Yes, delete
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setIsConfirmingDelete(false)}
+                      disabled={isDeleting}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </Alert>
+            ) : (
+              <div className="flex justify-end border-t border-border pt-3">
+                <Button
+                  variant="danger-ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDeleteError(null)
+                    setIsConfirmingDelete(true)
+                  }}
+                >
+                  <TrashIcon />
+                  Delete
+                </Button>
+              </div>
+            )}
+          </div>
+        </ReceiptDetailLayout>
       </div>
-      </ReceiptDetailLayout>
     )
   }
 

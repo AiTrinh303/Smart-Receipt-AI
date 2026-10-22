@@ -4,7 +4,7 @@ import Button from './Button'
 
 test('renders each variant with its label', () => {
   // Given each supported variant
-  const variants = ['primary', 'secondary', 'danger', 'ghost'] as const
+  const variants = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 
   // When rendered
   render(

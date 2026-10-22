@@ -30,26 +30,34 @@ const EMPTY_DATA: ReceiptExtraction = {
 test('full data: store, date, every item row, discounts, taxes and total are shown', () => {
   // Given a full receipt extraction result
   // When the result is rendered
-  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} />)
+  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
 
   // Then the store, date, currency, every item row, discounts, taxes and total are shown
-  expect(screen.getByText('Corner Store')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { level: 1, name: 'Corner Store' })).toBeInTheDocument()
   expect(screen.getByText('2026-01-15 · USD')).toBeInTheDocument()
   expect(screen.getByText('Milk')).toBeInTheDocument()
   expect(screen.getByText('Bread')).toBeInTheDocument()
   expect(screen.getByText('2')).toBeInTheDocument()
-  expect(screen.getByText('USD 2.50')).toBeInTheDocument()
-  expect(screen.getByText('USD 5.00')).toBeInTheDocument()
-  expect(screen.getAllByText('USD 3.00')).toHaveLength(2)
-  expect(screen.getByText(/Loyalty discount/)).toBeInTheDocument()
-  expect(screen.getByText(/Sales tax/)).toBeInTheDocument()
+
+  // Amount cells show plain numbers (no per-cell "USD" prefix); the currency
+  // code appears once, in the column headers, instead
+  expect(screen.getByText('Unit price (USD)')).toBeInTheDocument()
+  expect(screen.getByText('Line total (USD)')).toBeInTheDocument()
+  expect(screen.getByText('2.50')).toBeInTheDocument()
+  expect(screen.getByText('5.00')).toBeInTheDocument()
+  expect(screen.getAllByText('3.00')).toHaveLength(2)
+
+  expect(screen.getByText('Loyalty discount')).toBeInTheDocument()
+  expect(screen.getByText('USD 0.50')).toBeInTheDocument()
+  expect(screen.getByText('Sales tax')).toBeInTheDocument()
+  expect(screen.getByText('USD 0.64')).toBeInTheDocument()
   expect(screen.getByText('Total: USD 8.14')).toBeInTheDocument()
 })
 
 test('nulls and empty lists: "Not detected" shown, no crash, no null/undefined/NaN text', () => {
   // Given a receipt extraction result where every field is null or empty
   // When the result is rendered
-  render(<ReceiptResult data={EMPTY_DATA} onReset={() => {}} />)
+  render(<ReceiptResult data={EMPTY_DATA} onReset={() => {}} onEdit={() => {}} />)
 
   // Then "Not detected" / "None detected" are shown instead of blank or raw values
   expect(screen.getAllByText('Not detected').length).toBeGreaterThan(0)
@@ -60,4 +68,17 @@ test('nulls and empty lists: "Not detected" shown, no crash, no null/undefined/N
   expect(document.body.textContent).not.toMatch(/\bnull\b/i)
   expect(document.body.textContent).not.toMatch(/\bundefined\b/i)
   expect(document.body.textContent).not.toMatch(/\bNaN\b/i)
+})
+
+test('Edit is reachable by role and name, and calls onEdit', () => {
+  const onEdit = jest.fn()
+  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={onEdit} />)
+
+  screen.getByRole('button', { name: /^edit$/i }).click()
+  expect(onEdit).toHaveBeenCalledTimes(1)
+})
+
+test('a malformed currency code renders without throwing', () => {
+  const data = { ...FULL_DATA, currency: 'US$' }
+  expect(() => render(<ReceiptResult data={data} onReset={() => {}} onEdit={() => {}} />)).not.toThrow()
 })
