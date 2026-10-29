@@ -6,6 +6,8 @@ from decimal import Decimal
 from pathlib import Path
 
 from domain.models import (
+    Apartment,
+    DEFAULT_APARTMENTS,
     Discount,
     LineItem,
     ReceiptData,
@@ -77,14 +79,40 @@ class SqliteReceiptRepository:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS apartments (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    sort_order INTEGER NOT NULL,
+                    active INTEGER NOT NULL DEFAULT 1
+                )
+                """
+            )
 
-            # Safe, additive migration for databases created before edited_at
-            # existed: never drops or recreates the table, so existing rows
-            # are always kept. No migration framework -- just a column-exists
-            # check before ALTER TABLE, run once per repository construction.
-            columns = {row[1] for row in conn.execute("PRAGMA table_info(receipts)")}
-            if "edited_at" not in columns:
+            # Safe, additive migration for databases created before these
+            # columns existed: never drops or recreates a table, so existing
+            # rows are always kept. No migration framework -- just a
+            # column-exists check before ALTER TABLE, run once per
+            # repository construction.
+            receipts_columns = {row[1] for row in conn.execute("PRAGMA table_info(receipts)")}
+            if "edited_at" not in receipts_columns:
                 conn.execute("ALTER TABLE receipts ADD COLUMN edited_at TEXT NULL")
+            if "apartment_id" not in receipts_columns:
+                conn.execute("ALTER TABLE receipts ADD COLUMN apartment_id TEXT NULL")
+
+            uploads_columns = {row[1] for row in conn.execute("PRAGMA table_info(uploads)")}
+            if "apartment_id" not in uploads_columns:
+                conn.execute("ALTER TABLE uploads ADD COLUMN apartment_id TEXT NULL")
+
+            # Idempotent: INSERT OR IGNORE never touches a row that already
+            # exists (e.g. one a user later deactivated), so this is safe to
+            # run on every construction, not just the first.
+            for apartment in DEFAULT_APARTMENTS:
+                conn.execute(
+                    "INSERT OR IGNORE INTO apartments (id, name, sort_order, active) VALUES (?, ?, ?, ?)",
+                    (apartment.id, apartment.name, apartment.sort_order, int(apartment.active)),
+                )
 
     def save_upload(
         self,
@@ -92,27 +120,31 @@ class SqliteReceiptRepository:
         original_filename: str | None,
         stored_filename: str,
         content_type: str | None,
+        apartment_id: str | None = None,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO uploads (
-                    receipt_id, original_filename, stored_filename, content_type, created_at
+                    receipt_id, original_filename, stored_filename, content_type, created_at,
+                    apartment_id
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(receipt_id) DO UPDATE SET
                     original_filename = excluded.original_filename,
                     stored_filename = excluded.stored_filename,
-                    content_type = excluded.content_type
+                    content_type = excluded.content_type,
+                    apartment_id = excluded.apartment_id
                 """,
-                (receipt_id, original_filename, stored_filename, content_type, _utc_now_iso()),
+                (receipt_id, original_filename, stored_filename, content_type, _utc_now_iso(), apartment_id),
             )
 
     def get_upload(self, receipt_id: str) -> SavedUpload | None:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT receipt_id, original_filename, stored_filename, content_type, created_at
+                SELECT receipt_id, original_filename, stored_filename, content_type, created_at,
+                       apartment_id
                 FROM uploads
                 WHERE receipt_id = ?
                 """,
@@ -128,9 +160,12 @@ class SqliteReceiptRepository:
             stored_filename=row[2],
             content_type=row[3],
             created_at=row[4],
+            apartment_id=row[5],
         )
 
-    def save_receipt(self, receipt_id: str, data: ReceiptData) -> None:
+    def save_receipt(
+        self, receipt_id: str, data: ReceiptData, apartment_id: str | None = None
+    ) -> None:
         # ai_result_json is captured from the data exactly as the AI returned
         # it -- including a raw, unparseable date -- before any normalization,
         # so it stays byte-for-byte the original AI output and a later "reset
@@ -158,13 +193,18 @@ class SqliteReceiptRepository:
             ).fetchone()
             created_at = existing[0] if existing is not None else now
 
+            # apartment_id is deliberately absent from the ON CONFLICT SET
+            # clause: a first save (INSERT) stores the upload's apartment,
+            # but a re-extract (the ON CONFLICT branch) leaves whatever is
+            # already there untouched -- never overwritten, never nulled.
             conn.execute(
                 """
                 INSERT INTO receipts (
                     receipt_id, store_name, purchase_date, currency, total,
-                    extracted_json, ai_result_json, created_at, updated_at, edited_at
+                    extracted_json, ai_result_json, created_at, updated_at, edited_at,
+                    apartment_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
                 ON CONFLICT(receipt_id) DO UPDATE SET
                     store_name = excluded.store_name,
                     purchase_date = excluded.purchase_date,
@@ -185,6 +225,7 @@ class SqliteReceiptRepository:
                     ai_result_json,
                     created_at,
                     now,
+                    apartment_id,
                 ),
             )
 
@@ -193,9 +234,11 @@ class SqliteReceiptRepository:
             row = conn.execute(
                 """
                 SELECT r.receipt_id, r.extracted_json, r.created_at, r.updated_at,
-                       u.original_filename, u.content_type, r.edited_at
+                       u.original_filename, u.content_type, r.edited_at,
+                       r.apartment_id, ap.name
                 FROM receipts r
                 LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
+                LEFT JOIN apartments ap ON ap.id = r.apartment_id
                 WHERE r.receipt_id = ?
                 """,
                 (receipt_id,),
@@ -235,15 +278,19 @@ class SqliteReceiptRepository:
             total=extracted.total,
             edited=edited_at is not None,
             edited_at=edited_at,
+            apartment_id=row[7],
+            apartment_name=row[8],
         )
 
     def list_receipts(self, limit: int) -> list[ReceiptSummary]:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT r.receipt_id, r.extracted_json, r.created_at, u.original_filename
+                SELECT r.receipt_id, r.extracted_json, r.created_at, u.original_filename,
+                       r.apartment_id, ap.name
                 FROM receipts r
                 LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
+                LEFT JOIN apartments ap ON ap.id = r.apartment_id
                 ORDER BY r.created_at DESC, r.receipt_id ASC
                 LIMIT ?
                 """,
@@ -251,7 +298,7 @@ class SqliteReceiptRepository:
             ).fetchall()
 
         summaries: list[ReceiptSummary] = []
-        for receipt_id, extracted_json, created_at, original_filename in rows:
+        for receipt_id, extracted_json, created_at, original_filename, apartment_id, apartment_name in rows:
             try:
                 # Same source (extracted_json) as get_receipt(), so `total`
                 # carries the same JSON type here as in the extract/GET
@@ -273,6 +320,8 @@ class SqliteReceiptRepository:
                     currency=extracted.currency,
                     total=extracted.total,
                     created_at=created_at,
+                    apartment_id=apartment_id,
+                    apartment_name=apartment_name,
                 )
             )
 
@@ -367,6 +416,25 @@ class SqliteReceiptRepository:
             )
 
         return self.get_receipt(receipt_id)
+
+    def list_apartments(self) -> list[Apartment]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, name, sort_order, active FROM apartments WHERE active = 1 ORDER BY sort_order"
+            ).fetchall()
+        return [Apartment(id=row[0], name=row[1], sort_order=row[2], active=bool(row[3])) for row in rows]
+
+    def get_apartment(self, apartment_id: str) -> Apartment | None:
+        # Regardless of active -- the route distinguishes "unknown" from
+        # "inactive" itself, and a receipt's own apartment_name must still
+        # resolve even if that apartment is deactivated later.
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, name, sort_order, active FROM apartments WHERE id = ?", (apartment_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return Apartment(id=row[0], name=row[1], sort_order=row[2], active=bool(row[3]))
 
     def delete_receipt(self, receipt_id: str) -> bool:
         with self._connect() as conn:

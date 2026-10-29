@@ -20,6 +20,32 @@ class Tax(BaseModel):
     amount: float | None
 
 
+class Apartment(BaseModel):
+    id: str
+    name: str
+    sort_order: int
+    active: bool
+
+
+# Seeded at startup via INSERT OR IGNORE (adapters/sqlite_repository.py), so
+# adding or renaming an entry here takes effect on existing databases too
+# without a destructive migration -- only a new id is ever inserted.
+DEFAULT_APARTMENTS: list[Apartment] = [
+    Apartment(
+        id="oberaudorf-bergblick",
+        name="Fewo JoJo - Oberaudorf - Bergblick",
+        sort_order=1,
+        active=True,
+    ),
+    Apartment(
+        id="sankt-englmar-waldglueck",
+        name="Fewo JoJo - Sankt Englmar - Waldglück",
+        sort_order=2,
+        active=True,
+    ),
+]
+
+
 class ReceiptData(BaseModel):
     store_name: str | None
     purchase_date: str | None
@@ -36,6 +62,7 @@ class SavedUpload(BaseModel):
     stored_filename: str
     content_type: str | None
     created_at: str
+    apartment_id: str | None
 
 
 class SavedReceipt(ReceiptData):
@@ -46,6 +73,8 @@ class SavedReceipt(ReceiptData):
     updated_at: str
     edited: bool
     edited_at: str | None
+    apartment_id: str | None
+    apartment_name: str | None
 
 
 class ReceiptWarning(BaseModel):
@@ -66,6 +95,8 @@ class ReceiptSummary(BaseModel):
     currency: str | None
     total: float | None
     created_at: str
+    apartment_id: str | None
+    apartment_name: str | None
 
 
 # --- Editable-field models (user corrections), deliberately separate from

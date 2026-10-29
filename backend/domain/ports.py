@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Protocol
 
-from domain.models import ReceiptData, ReceiptSummary, ReceiptUpdate, SavedReceipt, SavedUpload
+from domain.models import Apartment, ReceiptData, ReceiptSummary, ReceiptUpdate, SavedReceipt, SavedUpload
 
 
 class ExtractionError(Exception):
@@ -27,11 +27,14 @@ class ReceiptRepository(Protocol):
         original_filename: str | None,
         stored_filename: str,
         content_type: str | None,
+        apartment_id: str | None = None,
     ) -> None: ...
 
     def get_upload(self, receipt_id: str) -> SavedUpload | None: ...
 
-    def save_receipt(self, receipt_id: str, data: ReceiptData) -> None: ...
+    def save_receipt(
+        self, receipt_id: str, data: ReceiptData, apartment_id: str | None = None
+    ) -> None: ...
 
     def get_receipt(self, receipt_id: str) -> SavedReceipt | None: ...
 
@@ -42,3 +45,7 @@ class ReceiptRepository(Protocol):
     def reset_receipt(self, receipt_id: str) -> SavedReceipt | None: ...
 
     def delete_receipt(self, receipt_id: str) -> bool: ...
+
+    def list_apartments(self) -> list[Apartment]: ...
+
+    def get_apartment(self, apartment_id: str) -> Apartment | None: ...

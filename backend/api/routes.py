@@ -4,7 +4,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
 import config
@@ -54,8 +54,18 @@ def health():
 @router.post("/receipts/upload", status_code=201)
 async def upload_receipt(
     file: UploadFile = File(...),
+    apartment_id: str = Form(...),
     repository: ReceiptRepository = Depends(get_repository),
 ):
+    # Apartment choice is validated before anything touches disk or the
+    # database: an unknown or inactive id must leave no file and no uploads
+    # row behind, same as the existing file-validation failures below.
+    apartment = repository.get_apartment(apartment_id)
+    if apartment is None:
+        raise HTTPException(status_code=422, detail="Unknown apartment.")
+    if not apartment.active:
+        raise HTTPException(status_code=422, detail="This apartment is no longer active.")
+
     extension = Path(file.filename or "").suffix.lower()
     contents = await file.read()
 
@@ -77,6 +87,7 @@ async def upload_receipt(
         original_filename=file.filename,
         stored_filename=f"{receipt_id}{extension}",
         content_type=file.content_type,
+        apartment_id=apartment_id,
     )
 
     return {
@@ -84,7 +95,15 @@ async def upload_receipt(
         "filename": file.filename,
         "content_type": file.content_type,
         "size_bytes": len(contents),
+        "apartment_id": apartment.id,
+        "apartment_name": apartment.name,
     }
+
+
+@router.get("/apartments")
+def list_apartments(repository: ReceiptRepository = Depends(get_repository)):
+    items = repository.list_apartments()
+    return {"items": [{"id": a.id, "name": a.name} for a in items], "count": len(items)}
 
 
 @router.get("/receipts")
@@ -151,8 +170,14 @@ def extract_receipt(
             )
         raise HTTPException(status_code=502, detail="Receipt extraction failed. Please try again.")
 
+    # The first save copies the upload's chosen apartment onto the receipt;
+    # a re-extract (the repository's ON CONFLICT branch) leaves whatever is
+    # already stored there untouched. No uploads row at all -> None.
+    upload = repository.get_upload(receipt_id)
+    apartment_id_for_save = upload.apartment_id if upload is not None else None
+
     try:
-        repository.save_receipt(receipt_id, data)
+        repository.save_receipt(receipt_id, data, apartment_id=apartment_id_for_save)
     except Exception:
         # Never tell the client the receipt was saved when it was not; the
         # real cause (never the API key or file contents) is logged for
@@ -163,15 +188,23 @@ def extract_receipt(
             detail="Could not save the extracted receipt. Please try again.",
         )
 
+    # Re-fetch rather than re-deriving: the receipt's true stored
+    # apartment_id (kept as-is on a re-extract) and its name both come from
+    # the same join get_receipt() already does, so there's one source of
+    # truth instead of duplicating that lookup here.
+    saved = repository.get_receipt(receipt_id)
+
     # A fresh extraction always clears any prior edit (save_receipt sets
-    # edited_at to NULL), so these are deterministic here without a second
-    # repository round trip.
+    # edited_at to NULL), so these are deterministic here without relying
+    # on `saved` for them.
     return {
         "receipt_id": receipt_id,
         **data.model_dump(),
         "warnings": _warnings_payload(data),
         "edited": False,
         "edited_at": None,
+        "apartment_id": saved.apartment_id if saved else None,
+        "apartment_name": saved.apartment_name if saved else None,
     }
 
 

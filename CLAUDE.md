@@ -200,7 +200,16 @@ the purchase info, and the result is displayed for review.
     `edited`/`warnings` here; the list endpoint is intentionally unchanged);
     `ReceiptWarning` — code/field/
     message/`details` (decimal strings, never floats), computed fresh on
-    every response and never stored), `rules.py` (allowed file
+    every response and never stored); `Apartment` (id/name/sort_order/
+    active) and `DEFAULT_APARTMENTS` — the two seeded holiday apartments
+    (exact ids `oberaudorf-bergblick`/`sankt-englmar-waldglueck`, exact
+    names including "Waldglück"), seeded via `INSERT OR IGNORE` on every
+    repository construction so it's idempotent and safe to re-run.
+    `SavedUpload`, `SavedReceipt` and `ReceiptSummary` all carry flat
+    `apartment_id`/`apartment_name` (`str | None`) — same key set and JSON
+    types across upload/extract/GET/PUT/reset/list-item, see
+    [docs/adr/0002-apartments-and-expense-ledger.md](docs/adr/0002-apartments-and-expense-ledger.md).
+    `rules.py` (allowed file
     types, size limit, `media_type_for_extension()` — a pure
     extension -> fixed media type map used by the file-serving endpoint, so
     `Content-Type` is never taken from client input — plus two more pure
@@ -218,7 +227,8 @@ the purchase info, and the result is displayed for review.
     `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError` /
     `ExtractionUnavailableError`, `ReceiptRepository` Protocol —
     `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
-    `list_receipts`/`update_receipt`, plus the strict, separate
+    `list_receipts`/`update_receipt`/`reset_receipt`/`delete_receipt`/
+    `list_apartments`/`get_apartment`, plus the strict, separate
     `ReceiptUpdate`/`LineItemUpdate`/`DiscountUpdate`/`TaxUpdate` models in
     `models.py` for user-submitted corrections — deliberately distinct from
     the lenient `ReceiptData` family used to parse AI output, which must
@@ -239,12 +249,21 @@ the purchase info, and the result is displayed for review.
     `UPLOAD_DIR` only, never a client-supplied path — and treats an
     already-missing file as a no-op, not an error, so a retry is safe),
     `sqlite_repository.py`
-    (`SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads` and
-    `receipts` tables; schema created via `CREATE TABLE IF NOT EXISTS`, plus
-    a small additive migration on construction — `PRAGMA table_info` then
+    (`SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads`,
+    `receipts` and `apartments` tables; schema created via
+    `CREATE TABLE IF NOT EXISTS`, plus a small additive migration on
+    construction — `PRAGMA table_info` then
     `ALTER TABLE ... ADD COLUMN` only for a column that's missing, never
     dropping/recreating a table, so existing rows always survive an
-    upgrade; this is how `edited_at` was added).
+    upgrade; this is how `edited_at` and the nullable `apartment_id`
+    columns on `uploads`/`receipts` were added. `apartments` itself is a
+    new table (no migration needed there) seeded with `DEFAULT_APARTMENTS`
+    via `INSERT OR IGNORE` every time, so it's idempotent).
+    `list_apartments` returns only `active = 1` rows ordered by
+    `sort_order`; `get_apartment` returns a row regardless of `active`
+    (the route distinguishes "unknown" from "inactive" itself, and a
+    receipt's `apartment_name` must still resolve even if deactivated
+    later).
     `list_receipts` orders by `created_at DESC, receipt_id ASC` (stable
     tie-break) and builds each row from `extracted_json` (same source as
     `get_receipt`, so `total`'s JSON type matches); a row with unparseable
@@ -292,7 +311,15 @@ the purchase info, and the result is displayed for review.
     real CORS enforcement and so never caught it) — and a `lifespan`
     handler that creates the repository — and therefore the SQLite schema
     — at startup, not the deprecated `on_event`),
-    `routes.py` (`/health`, `POST /receipts/upload`,
+    `routes.py` (`/health`, `GET /apartments` — active apartments only,
+    `sort_order`, `{"id", "name"}` per item, `POST /receipts/upload` —
+    `apartment_id` is a **required** form field, validated via
+    `repository.get_apartment()` *before* the existing file-type/size
+    validation and before anything is written (missing -> FastAPI's own
+    `422`; unknown -> `422` "Unknown apartment."; inactive -> `422` "This
+    apartment is no longer active." — none of these touch disk or create
+    an uploads row), stored on the uploads row, echoed in the response as
+    `apartment_id`/`apartment_name`,
     `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`,
     `GET /receipts?limit=N` — list, newest first, `limit` default 50
     (1–200, else `422`), `{"items": [...], "count": N}`, empty DB ->
@@ -340,6 +367,16 @@ the purchase info, and the result is displayed for review.
     `OPENAI_API_KEY` is not configured, 500 generic on a repository
     save/update/delete or file-removal failure — raw error text is never
     returned to the client).
+    **Apartment on extract:** before saving, `extract_receipt` reads
+    `repository.get_upload(receipt_id).apartment_id` (`None` if no uploads
+    row) and passes it to `save_receipt(...)` — that call's own `INSERT`
+    sets it on a first save, while its `ON CONFLICT` branch *omits*
+    `apartment_id` from the `SET` clause entirely, so a re-extract leaves
+    whatever is already stored untouched rather than overwriting it with
+    `None`. The response's `apartment_id`/`apartment_name` come from a
+    `get_receipt()` re-fetch right after saving (reusing its join, rather
+    than duplicating the lookup) so they always reflect the receipt's true
+    stored apartment, not just the upload's.
     A custom `RequestValidationError` handler in `app.py` stringifies any
     non-finite float (`NaN`/`Infinity`) echoed back in a `422` error's
     `"input"` field — otherwise Starlette's own JSON encoder crashes

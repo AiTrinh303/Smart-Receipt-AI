@@ -10,6 +10,7 @@ from adapters.sqlite_repository import SqliteReceiptRepository
 from api.routes import get_extractor, get_repository
 from domain.models import ReceiptData
 from domain.ports import ExtractionError
+from _upload_helper import VALID_APARTMENT_ID, upload_with_apartment
 
 client = TestClient(main.app)
 
@@ -64,7 +65,7 @@ def upload_file(
 ) -> str:
     """Goes through the real upload endpoint so an uploads row is recorded."""
     files = {"file": (original_filename, io.BytesIO(b"fake-bytes"), content_type)}
-    response = client.post("/receipts/upload", files=files)
+    response = upload_with_apartment(client, files)
     assert response.status_code == 201
     return response.json()["receipt_id"]
 
@@ -200,7 +201,7 @@ def test_repository_save_failure_returns_500_with_generic_message(temp_upload_di
         def get_upload(self, receipt_id):
             return None
 
-        def save_receipt(self, receipt_id, data):
+        def save_receipt(self, receipt_id, data, apartment_id=None):
             raise RuntimeError("disk full: /some/internal/path leaked here")
 
         def get_receipt(self, receipt_id):

@@ -10,6 +10,7 @@ import main
 from adapters.sqlite_repository import SqliteReceiptRepository
 from api.routes import get_extractor, get_repository
 from domain.models import ReceiptData
+from _upload_helper import upload_with_apartment
 
 client = TestClient(main.app)
 
@@ -66,7 +67,7 @@ def upload_and_extract(
     """Goes through the real upload + extract endpoints so both an uploads
     row and a receipts row exist, and a real file sits in the uploads dir."""
     files = {"file": (filename, io.BytesIO(b"fake-bytes"), content_type)}
-    upload_response = client.post("/receipts/upload", files=files)
+    upload_response = upload_with_apartment(client, files)
     assert upload_response.status_code == 201
     receipt_id = upload_response.json()["receipt_id"]
 
@@ -164,7 +165,7 @@ def test_non_uuid_id_is_rejected_and_sentinel_file_outside_uploads_is_untouched(
 def test_uploaded_but_never_extracted_returns_404_and_its_file_is_untouched(temp_upload_dir, temp_repository):
     # Given a receipt that was uploaded but never extracted
     files = {"file": ("receipt.jpg", io.BytesIO(b"fake-bytes"), "image/jpeg")}
-    upload_response = client.post("/receipts/upload", files=files)
+    upload_response = upload_with_apartment(client, files)
     receipt_id = upload_response.json()["receipt_id"]
 
     # When it is deleted
@@ -241,8 +242,8 @@ def test_database_removal_failure_returns_500_retry_then_succeeds(temp_upload_di
         def get_upload(self, receipt_id):
             return self._real.get_upload(receipt_id)
 
-        def save_receipt(self, receipt_id, data):
-            return self._real.save_receipt(receipt_id, data)
+        def save_receipt(self, receipt_id, data, apartment_id=None):
+            return self._real.save_receipt(receipt_id, data, apartment_id=apartment_id)
 
         def get_receipt(self, receipt_id):
             return self._real.get_receipt(receipt_id)

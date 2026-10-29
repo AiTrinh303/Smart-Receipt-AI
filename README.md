@@ -134,8 +134,18 @@ dropping or recreating a table — so upgrading never loses existing rows.
 ### Endpoints
 
 - `GET /health` — liveness check.
-- `POST /receipts/upload` — accepts one JPG/PNG/PDF receipt file, stores it,
-  records it in the database, and returns a `receipt_id`.
+- `GET /apartments` — the two seeded holiday apartments, as
+  `{"items": [{"id", "name"}], "count": n}`, only the active ones, in
+  `sort_order`.
+- `POST /receipts/upload` — accepts one JPG/PNG/PDF receipt file plus a
+  **required** `apartment_id` form field, stores the file,
+  records it in the database, and returns a `receipt_id` along with
+  `apartment_id`/`apartment_name`. The apartment is validated *before*
+  anything is written to disk or the database: a missing `apartment_id`
+  is `422` (FastAPI's own required-field validation); an unknown or
+  inactive one is `422` with a clear message, and leaves no file and no
+  database row behind. Existing file-validation errors (unsupported
+  type, empty file, oversized file) keep their order and status codes.
 - `POST /receipts/{receipt_id}/extract` — sends the stored receipt to the
   OpenAI API, returns structured purchase data (store, date, items,
   discounts, taxes, total), and saves the result (re-extracting the same
@@ -163,6 +173,9 @@ dropping or recreating a table — so upgrading never loses existing rows.
   response or the log; nothing is saved to the database on either failure.
   The response also carries a **`warnings`** array (see below), and
   `GET`/`PUT` share the same fields and types with this response.
+  **Apartment:** the first save copies the apartment chosen at upload onto
+  the receipt; re-extracting (Retry) keeps whatever apartment is already
+  stored, never overwriting it with `null`.
 - `GET /receipts/{receipt_id}` — returns the saved receipt (same fields as
   the extract response, plus `original_filename`, `content_type`,
   `created_at`, `updated_at`). Unknown or not-yet-extracted receipts
@@ -170,6 +183,17 @@ dropping or recreating a table — so upgrading never loses existing rows.
   `purchase_date` isn't a plain ISO date but starts with one, is normalized
   for display here (the stored row itself is never rewritten — no
   migration of existing data).
+
+#### Apartments
+
+Every receipt-shaped response — `upload`, `extract`, `GET` one, `PUT`,
+`POST .../reset`, and each item of the `GET /receipts` list — carries flat
+**`apartment_id`** and **`apartment_name`** fields (both `string` or
+`null`), with the same key set and JSON types everywhere. A receipt
+belongs to at most one apartment, chosen at upload (required, see above).
+Changing it is a classification change, not a data edit: it never sets
+`edited_at` and never touches `extracted_json`, `ai_result_json`, or
+`created_at`. `PUT` and the reset endpoint never change it.
 
 #### Data-quality warnings
 
@@ -215,7 +239,8 @@ All amount math uses `Decimal(str(value))`, never raw floats.
   original file.
 - `GET /receipts?limit=N` — lists saved receipts newest first, as
   `{"items": [{receipt_id, original_filename, store_name, purchase_date,
-  currency, total, created_at}, ...], "count": <number>}` (no items,
+  currency, total, created_at, apartment_id, apartment_name}, ...],
+  "count": <number>}` (no items,
   discounts or taxes — use `GET /receipts/{id}` for the full detail).
   `limit` defaults to 50 (1–200); an out-of-range or non-integer value
   returns `422`. An empty database returns `{"items": [], "count": 0}`,

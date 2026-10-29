@@ -8,6 +8,7 @@ import adapters.file_storage as file_storage
 import main
 from adapters.sqlite_repository import SqliteReceiptRepository
 from api.routes import get_repository
+from _upload_helper import VALID_APARTMENT_ID, upload_with_apartment
 
 client = TestClient(main.app)
 
@@ -35,11 +36,11 @@ def make_files(content: bytes, content_type: str, filename: str):
 
 
 def test_valid_jpg_upload(temp_upload_dir):
-    # Given a valid JPG file
+    # Given a valid JPG file and a valid apartment
     files = make_files(b"jpg-bytes", "image/jpeg", "receipt.jpg")
 
     # When the file is uploaded
-    response = client.post("/receipts/upload", files=files)
+    response = upload_with_apartment(client, files)
 
     # Then the response is 201, returns a receipt_id, and the file exists in the temp dir
     assert response.status_code == 201
@@ -57,7 +58,7 @@ def test_valid_png_upload(temp_upload_dir):
     files = make_files(b"png-bytes", "image/png", "receipt.png")
 
     # When the file is uploaded
-    response = client.post("/receipts/upload", files=files)
+    response = upload_with_apartment(client, files)
 
     # Then the response is 201
     assert response.status_code == 201
@@ -70,7 +71,7 @@ def test_valid_pdf_upload(temp_upload_dir):
     files = make_files(b"%PDF-1.4 fake pdf contents", "application/pdf", "receipt.pdf")
 
     # When the file is uploaded
-    response = client.post("/receipts/upload", files=files)
+    response = upload_with_apartment(client, files)
 
     # Then the response is 201
     assert response.status_code == 201
@@ -83,7 +84,7 @@ def test_unsupported_file_type_rejected(temp_upload_dir):
     files = make_files(b"hello world", "text/plain", "notes.txt")
 
     # When the file is uploaded
-    response = client.post("/receipts/upload", files=files)
+    response = upload_with_apartment(client, files)
 
     # Then the response is 400 and nothing is stored
     assert response.status_code == 400
@@ -96,7 +97,7 @@ def test_file_over_max_size_rejected(temp_upload_dir):
     files = make_files(big_content, "image/jpeg", "big.jpg")
 
     # When the file is uploaded
-    response = client.post("/receipts/upload", files=files)
+    response = upload_with_apartment(client, files)
 
     # Then the response is 413 and nothing is stored
     assert response.status_code == 413
@@ -108,7 +109,7 @@ def test_empty_file_rejected(temp_upload_dir):
     files = make_files(b"", "image/jpeg", "empty.jpg")
 
     # When the file is uploaded
-    response = client.post("/receipts/upload", files=files)
+    response = upload_with_apartment(client, files)
 
     # Then the response is 400 and nothing is stored
     assert response.status_code == 400
@@ -116,10 +117,10 @@ def test_empty_file_rejected(temp_upload_dir):
 
 
 def test_missing_file_returns_422(temp_upload_dir):
-    # Given a request with no file field
+    # Given a request with no file field (but a valid apartment_id)
 
     # When the request is sent without "file"
-    response = client.post("/receipts/upload")
+    response = client.post("/receipts/upload", data={"apartment_id": VALID_APARTMENT_ID})
 
     # Then the response is 422
     assert response.status_code == 422
@@ -130,7 +131,7 @@ def test_malicious_filename_is_stored_under_uuid(temp_upload_dir):
     files = make_files(b"jpg-bytes", "image/jpeg", "../../evil.jpg")
 
     # When the file is uploaded
-    response = client.post("/receipts/upload", files=files)
+    response = upload_with_apartment(client, files)
 
     # Then the response is 201 and the file is stored under a UUID name inside the temp dir only
     assert response.status_code == 201
@@ -138,3 +139,64 @@ def test_malicious_filename_is_stored_under_uuid(temp_upload_dir):
     stored = list(temp_upload_dir.iterdir())
     assert stored == [temp_upload_dir / f"{body['receipt_id']}.jpg"]
     assert ".." not in stored[0].name
+
+
+# --- Apartment is required and validated before anything is written -------
+
+
+def test_missing_apartment_id_returns_422_and_nothing_is_stored(temp_upload_dir, temp_repository):
+    # Given a valid file but no apartment_id field at all
+    files = make_files(b"jpg-bytes", "image/jpeg", "receipt.jpg")
+
+    # When the file is uploaded without apartment_id
+    response = client.post("/receipts/upload", files=files)
+
+    # Then the response is 422 and nothing was written to disk or the database
+    assert response.status_code == 422
+    assert list(temp_upload_dir.iterdir()) == []
+
+
+def test_unknown_apartment_id_returns_422_and_nothing_is_stored(temp_upload_dir, temp_repository):
+    # Given a valid file but an apartment_id that doesn't exist
+    files = make_files(b"jpg-bytes", "image/jpeg", "receipt.jpg")
+
+    # When the file is uploaded
+    response = upload_with_apartment(client, files, apartment_id="does-not-exist")
+
+    # Then the response is 422 with a clear message, and nothing was written
+    assert response.status_code == 422
+    assert "apartment" in response.json()["detail"].lower()
+    assert list(temp_upload_dir.iterdir()) == []
+    with temp_repository._connect() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM uploads").fetchone()[0]
+    assert count == 0
+
+
+def test_inactive_apartment_id_returns_422_and_nothing_is_stored(temp_upload_dir, temp_repository):
+    # Given a valid file and an apartment that exists but has been deactivated
+    with temp_repository._connect() as conn:
+        conn.execute("UPDATE apartments SET active = 0 WHERE id = ?", (VALID_APARTMENT_ID,))
+        conn.commit()
+    files = make_files(b"jpg-bytes", "image/jpeg", "receipt.jpg")
+
+    # When the file is uploaded with that now-inactive apartment
+    response = upload_with_apartment(client, files, apartment_id=VALID_APARTMENT_ID)
+
+    # Then the response is 422 with a clear message, and nothing was written
+    assert response.status_code == 422
+    assert "apartment" in response.json()["detail"].lower()
+    assert list(temp_upload_dir.iterdir()) == []
+
+
+def test_successful_upload_response_includes_apartment_fields(temp_upload_dir):
+    # Given a valid file uploaded for a specific apartment
+    files = make_files(b"jpg-bytes", "image/jpeg", "receipt.jpg")
+
+    # When uploaded
+    response = upload_with_apartment(client, files)
+
+    # Then the response carries the apartment id and its name
+    assert response.status_code == 201
+    body = response.json()
+    assert body["apartment_id"] == VALID_APARTMENT_ID
+    assert body["apartment_name"] == "Fewo JoJo - Oberaudorf - Bergblick"
