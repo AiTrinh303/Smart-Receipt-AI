@@ -171,10 +171,22 @@ the purchase info, and the result is displayed for review.
   - `domain/` — `models.py` (`ReceiptData` and friends, plus `SavedUpload`,
     `SavedReceipt` and `ReceiptSummary` — the last a small list-row model:
     receipt_id, original_filename, store_name, purchase_date, currency,
-    total, created_at — for persisted data), `rules.py` (allowed file
-    types, size limit, and `media_type_for_extension()` — a pure
+    total, created_at — for persisted data; `ReceiptWarning` — code/field/
+    message/`details` (decimal strings, never floats), computed fresh on
+    every response and never stored), `rules.py` (allowed file
+    types, size limit, `media_type_for_extension()` — a pure
     extension -> fixed media type map used by the file-serving endpoint, so
-    `Content-Type` is never taken from client input; raises domain
+    `Content-Type` is never taken from client input — plus two more pure
+    functions: `normalize_purchase_date(raw)` extracts a leading ISO date
+    (`"2025-06-26 11"`/`"2025-06-26T11:04:00"` -> `"2025-06-26"`) and
+    returns `None` for anything else (never guesses day/month order for
+    `"26/06/2025"`, never raises); `check_receipt(data, today)` — `today`
+    is an injected parameter so callers/tests are deterministic — returns
+    `MISSING_STORE`/`MISSING_DATE`/`DATE_NOT_STANDARD`/`FUTURE_DATE`
+    (1-day grace)/`MISSING_TOTAL`/`TOTAL_MISMATCH` (skipped unless every
+    item has a usable amount; tolerant of either tax-added-on-top or
+    tax-already-included, tolerance `0.05`)/`LINE_MISMATCH` (per
+    `Decimal(str(value))` math, never raw floats); raises domain
     exceptions, no HTTP/FastAPI/file I/O),
     `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError` /
     `ExtractionUnavailableError`, `ReceiptRepository` Protocol —
@@ -214,6 +226,18 @@ the purchase info, and the result is displayed for review.
     receipt doesn't exist. `delete_receipt` removes the row from both
     `receipts` and `uploads` in one transaction, returning whether a
     `receipts` row existed. Must never import `api`.
+    **Date normalization:** `save_receipt` captures `ai_result_json` from
+    the data exactly as the AI returned it *before* normalizing — so a raw,
+    unparseable date is preserved there forever — then normalizes
+    `purchase_date` in place (via `domain.rules.normalize_purchase_date`)
+    for both the caller's `data` object and `extracted_json`/the
+    `purchase_date` column; an unparseable date is kept as-is (not
+    discarded) so the user can see and correct it. `get_receipt`
+    additionally normalizes `purchase_date` for display only (never
+    rewriting the stored row) so a pre-normalization row shows the clean
+    date too, without a migration. `update_receipt` needs no normalization
+    on write, since `ReceiptUpdate.purchase_date`'s own validator already
+    requires `null` or a valid ISO date.
     **Money rule:** `total` is never stored as a float — the adapter
     converts with `Decimal(str(value))` to an exact decimal string (e.g.
     `19.99`, not a binary-float expansion) in a dedicated column kept for
@@ -242,7 +266,14 @@ the purchase info, and the result is displayed for review.
     uploaded-but-never-extracted — nothing touched on disk or in the DB);
     order of operations is confirm-exists -> remove file -> remove DB
     rows, so a failure partway through always leaves a state a retry can
-    finish (an already-gone file is a no-op, not an error),
+    finish (an already-gone file is a no-op, not an error).
+    **`warnings`:** extract, GET and PUT (and the reset endpoint, below)
+    all merge `"warnings": [w.model_dump() for w in check_receipt(data,
+    date.today())]` into their response dict via the shared
+    `_warnings_payload()` helper — computed fresh on every request, never
+    stored, never blocking any action. The extract/GET/PUT contract test
+    (`tests/test_get_receipt.py`'s `EXTRACTED_FIELD_NAMES`) includes
+    `"warnings"`.
     `GET /receipts/{receipt_id}/file` — serves the original upload via
     `FileResponse` for a saved receipt (same existence check as GET); 400
     for a non-UUID id, 404 if no saved receipt exists or the file is

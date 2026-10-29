@@ -88,6 +88,7 @@ EXTRACTED_FIELD_NAMES = [
     "discounts",
     "taxes",
     "total",
+    "warnings",
 ]
 
 

@@ -15,6 +15,7 @@ from domain.models import (
     SavedUpload,
     Tax,
 )
+from domain.rules import normalize_purchase_date
 
 logger = logging.getLogger(__name__)
 
@@ -122,13 +123,24 @@ class SqliteReceiptRepository:
         )
 
     def save_receipt(self, receipt_id: str, data: ReceiptData) -> None:
+        # ai_result_json is captured from the data exactly as the AI returned
+        # it -- including a raw, unparseable date -- before any normalization,
+        # so it stays byte-for-byte the original AI output and a later "reset
+        # to AI result" stays possible.
+        ai_result_json = data.model_dump_json()
+
+        # Then normalize in place: a stray time suffix like "2025-06-26 11"
+        # becomes "2025-06-26" in both the stored row and the caller's `data`
+        # (so a route building its response from the same `data` object after
+        # this call sees the normalized value too). If it can't be parsed,
+        # the raw text is kept as-is so the user can see and correct it --
+        # check_receipt's DATE_NOT_STANDARD warning flags it either way.
+        normalized_date = normalize_purchase_date(data.purchase_date)
+        if normalized_date is not None:
+            data.purchase_date = normalized_date
+
         now = _utc_now_iso()
         extracted_json = data.model_dump_json()
-        # No edit feature exists yet, so the "AI result" and the displayed
-        # data are identical today; ai_result_json is kept as a separate,
-        # never-mutated copy so a later edit feature can offer "reset to AI
-        # result" without needing a schema change.
-        ai_result_json = extracted_json
         total_str = _to_decimal_string(data.total)
 
         with self._connect() as conn:
@@ -190,6 +202,13 @@ class SqliteReceiptRepository:
         # summary tickets, and is never surfaced through this API.
         extracted = ReceiptData.model_validate_json(row[1])
 
+        # A row saved before date normalization existed may still have a raw
+        # value like "2025-06-26 11"; normalize it for display here (never
+        # written back -- no migration of the stored data) so older receipts
+        # show the clean date too.
+        normalized_date = normalize_purchase_date(extracted.purchase_date)
+        display_date = normalized_date if normalized_date is not None else extracted.purchase_date
+
         return SavedReceipt(
             receipt_id=row[0],
             original_filename=row[4],
@@ -197,7 +216,7 @@ class SqliteReceiptRepository:
             created_at=row[2],
             updated_at=row[3],
             store_name=extracted.store_name,
-            purchase_date=extracted.purchase_date,
+            purchase_date=display_date,
             currency=extracted.currency,
             items=extracted.items,
             discounts=extracted.discounts,

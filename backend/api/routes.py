@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+from datetime import date
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -21,6 +22,7 @@ from domain.rules import (
     EmptyFileError,
     FileTooLargeError,
     UnsupportedFileTypeError,
+    check_receipt,
     media_type_for_extension,
     validate_upload,
 )
@@ -37,6 +39,11 @@ def get_repository() -> ReceiptRepository:
     if _repository is None:
         _repository = SqliteReceiptRepository(config.DATABASE_PATH)
     return _repository
+
+
+def _warnings_payload(data) -> list[dict]:
+    """Computed fresh on every call, never stored."""
+    return [warning.model_dump() for warning in check_receipt(data, date.today())]
 
 
 @router.get("/health")
@@ -156,7 +163,7 @@ def extract_receipt(
             detail="Could not save the extracted receipt. Please try again.",
         )
 
-    return {"receipt_id": receipt_id, **data.model_dump()}
+    return {"receipt_id": receipt_id, **data.model_dump(), "warnings": _warnings_payload(data)}
 
 
 @router.get("/receipts/{receipt_id}")
@@ -170,7 +177,7 @@ def get_receipt(receipt_id: str, repository: ReceiptRepository = Depends(get_rep
     if saved is None:
         raise HTTPException(status_code=404, detail="Receipt not found.")
 
-    return saved.model_dump()
+    return {**saved.model_dump(), "warnings": _warnings_payload(saved)}
 
 
 @router.get("/receipts/{receipt_id}/file")
@@ -238,7 +245,7 @@ def update_receipt(
     if saved is None:
         raise HTTPException(status_code=404, detail="Receipt not found.")
 
-    return saved.model_dump()
+    return {**saved.model_dump(), "warnings": _warnings_payload(saved)}
 
 
 @router.delete("/receipts/{receipt_id}", status_code=204)

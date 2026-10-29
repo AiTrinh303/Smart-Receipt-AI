@@ -91,7 +91,7 @@ extraction, and this app has no way to delete that copy.
 ```bash
 cd backend
 python3 -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 cp -n .env.example .env   # add your OPENAI_API_KEY (-n: never overwrite an existing .env)
 uvicorn main:app --reload --port 8001
@@ -123,7 +123,15 @@ is still sent to OpenAI for extraction.
   OpenAI API, returns structured purchase data (store, date, items,
   discounts, taxes, total), and saves the result (re-extracting the same
   receipt overwrites the saved result). **Note:** uploaded receipts are sent
-  to OpenAI for processing when this endpoint is called. Error responses:
+  to OpenAI for processing when this endpoint is called. **Date
+  normalization:** a `purchase_date` the AI prints with a stray time suffix
+  (e.g. `"2025-06-26 11"` or `"2025-06-26T11:04:00"`) is normalized to the
+  plain ISO date (`"2025-06-26"`) before saving; a date that doesn't start
+  with a valid ISO date (e.g. `"26/06/2025"`, free text — day/month order is
+  never guessed) is kept exactly as the AI returned it, so it can be seen
+  and corrected, and is flagged by a `DATE_NOT_STANDARD` warning (below).
+  The original AI output in `ai_result_json` always keeps the raw,
+  unnormalized value. Error responses:
   - `503` — the AI *service* isn't usable right now: `OPENAI_API_KEY` is
     missing, empty, or still the `.env.example` placeholder
     (`your-key-here`) — none of these ever reach the provider — or the
@@ -136,10 +144,43 @@ is still sent to OpenAI for extraction.
   (exception type, message, receipt_id, file info, elapsed time) while
   never including provider error text, the key, or file contents in the
   response or the log; nothing is saved to the database on either failure.
+  The response also carries a **`warnings`** array (see below), and
+  `GET`/`PUT` share the same fields and types with this response.
 - `GET /receipts/{receipt_id}` — returns the saved receipt (same fields as
   the extract response, plus `original_filename`, `content_type`,
   `created_at`, `updated_at`). Unknown or not-yet-extracted receipts
-  return `404`.
+  return `404`. A row saved before date normalization existed, whose
+  `purchase_date` isn't a plain ISO date but starts with one, is normalized
+  for display here (the stored row itself is never rewritten — no
+  migration of existing data).
+
+#### Data-quality warnings
+
+Every response that carries receipt data (`extract`, `GET`, `PUT`, and
+`POST .../reset`) includes a **`warnings`** array, computed fresh on every
+request — never stored, and never blocking any action. Each entry is
+`{code, field, message, details}`, where `details` holds decimal amount
+strings (never floats). Codes:
+
+- `MISSING_STORE` — the store name is null or blank.
+- `MISSING_DATE` — the purchase date is null.
+- `DATE_NOT_STANDARD` — the purchase date isn't a valid ISO date (and
+  doesn't start with one either, so it couldn't be normalized).
+- `FUTURE_DATE` — a valid date more than one day in the future (the extra
+  day allows for time zone differences).
+- `MISSING_TOTAL` — the total is null.
+- `TOTAL_MISMATCH` — only checked when every item has a usable amount
+  (its own `line_total`, or `quantity × unit_price` as a fallback) and the
+  total isn't null. The receipt is considered consistent if the total
+  matches *either* `(items − |discounts|) + taxes` (tax added on top) *or*
+  `items − |discounts|` (prices already include tax), each within `0.05`;
+  a warning is raised only when neither matches. If any item has no usable
+  amount at all, this check is skipped entirely (nothing to compare).
+- `LINE_MISMATCH` — an item where `quantity`, `unit_price` and
+  `line_total` are all present but `quantity × unit_price` differs from
+  `line_total` by more than `0.05`; `details.index` names the item.
+
+All amount math uses `Decimal(str(value))`, never raw floats.
 - `GET /receipts/{receipt_id}/file` — serves the original uploaded file
   (image or PDF) for a saved receipt, so it can be shown next to the
   extracted data. `400` for a non-UUID id; `404` if no saved receipt exists

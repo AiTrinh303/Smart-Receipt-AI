@@ -46,6 +46,16 @@ class SavedReceipt(ReceiptData):
     updated_at: str
 
 
+class ReceiptWarning(BaseModel):
+    """A data-quality warning, computed fresh on every response -- never
+    stored. `details` holds decimal strings (e.g. amounts), never floats."""
+
+    code: str
+    field: str
+    message: str
+    details: dict[str, str]
+
+
 class ReceiptSummary(BaseModel):
     receipt_id: str
     original_filename: str | None
