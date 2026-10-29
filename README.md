@@ -114,6 +114,11 @@ database instead of silently creating a second, empty one. An absolute
 **Note:** receipt data itself is stored locally, but the receipt image/PDF
 is still sent to OpenAI for extraction.
 
+Schema changes use a small, additive migration (no migration framework): on
+construction, the repository checks `PRAGMA table_info(receipts)` and runs
+`ALTER TABLE ... ADD COLUMN` only for a column that's missing, never
+dropping or recreating a table — so upgrading never loses existing rows.
+
 ### Endpoints
 
 - `GET /health` — liveness check.
@@ -216,7 +221,19 @@ All amount math uses `Decimal(str(value))`, never raw floats.
   must be greater than `0`; item names and discount/tax descriptions must
   be non-empty; at most 200 items, 50 discounts, 50 taxes. **The original
   AI output (`ai_result_json`) is never modified by an edit** — only the
-  displayed data changes — so a future "reset to AI result" stays possible.
+  displayed data changes. A successful PUT sets **`edited`** to `true` and
+  **`edited_at`** to the current UTC time (re-extracting the same receipt,
+  or resetting it, clears both back to `false`/`null`).
+- `POST /receipts/{receipt_id}/reset` — discards any edits and restores the
+  receipt from `ai_result_json` (re-applying the same date normalization
+  extraction does), in one transaction; `edited`/`edited_at` are cleared,
+  `updated_at` refreshes, `created_at` is kept, and `ai_result_json` itself
+  is never touched — so resetting twice, or resetting a receipt that was
+  never edited, is perfectly safe. `400` for a non-UUID id; `404` for an
+  unknown id or one that was uploaded but never extracted; `500` (generic)
+  on a database failure. Returns `200` with the same shape as `GET`
+  (including `warnings`). **Never calls the AI and never touches the
+  stored file.**
 - `DELETE /receipts/{receipt_id}` — removes the saved receipt's database
   record and its stored file. `204` (empty body) on success; `400` for a
   non-UUID id; `404` for an unknown id or one that was uploaded but never

@@ -163,7 +163,16 @@ def extract_receipt(
             detail="Could not save the extracted receipt. Please try again.",
         )
 
-    return {"receipt_id": receipt_id, **data.model_dump(), "warnings": _warnings_payload(data)}
+    # A fresh extraction always clears any prior edit (save_receipt sets
+    # edited_at to NULL), so these are deterministic here without a second
+    # repository round trip.
+    return {
+        "receipt_id": receipt_id,
+        **data.model_dump(),
+        "warnings": _warnings_payload(data),
+        "edited": False,
+        "edited_at": None,
+    }
 
 
 @router.get("/receipts/{receipt_id}")
@@ -240,6 +249,31 @@ def update_receipt(
         raise HTTPException(
             status_code=500,
             detail="Could not save the updated receipt. Please try again.",
+        )
+
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    return {**saved.model_dump(), "warnings": _warnings_payload(saved)}
+
+
+@router.post("/receipts/{receipt_id}/reset")
+def reset_receipt(receipt_id: str, repository: ReceiptRepository = Depends(get_repository)):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    try:
+        saved = repository.reset_receipt(str(validated_id))
+    except Exception:
+        # Never tell the client the reset happened when it did not; the
+        # real cause (never the API key or file contents) is logged for
+        # developers only.
+        logger.exception("Failed to reset receipt: receipt_id=%s", receipt_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not reset the receipt. Please try again.",
         )
 
     if saved is None:

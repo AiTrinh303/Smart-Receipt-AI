@@ -78,6 +78,14 @@ class SqliteReceiptRepository:
                 """
             )
 
+            # Safe, additive migration for databases created before edited_at
+            # existed: never drops or recreates the table, so existing rows
+            # are always kept. No migration framework -- just a column-exists
+            # check before ALTER TABLE, run once per repository construction.
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(receipts)")}
+            if "edited_at" not in columns:
+                conn.execute("ALTER TABLE receipts ADD COLUMN edited_at TEXT NULL")
+
     def save_upload(
         self,
         receipt_id: str,
@@ -154,9 +162,9 @@ class SqliteReceiptRepository:
                 """
                 INSERT INTO receipts (
                     receipt_id, store_name, purchase_date, currency, total,
-                    extracted_json, ai_result_json, created_at, updated_at
+                    extracted_json, ai_result_json, created_at, updated_at, edited_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
                 ON CONFLICT(receipt_id) DO UPDATE SET
                     store_name = excluded.store_name,
                     purchase_date = excluded.purchase_date,
@@ -164,7 +172,8 @@ class SqliteReceiptRepository:
                     total = excluded.total,
                     extracted_json = excluded.extracted_json,
                     ai_result_json = excluded.ai_result_json,
-                    updated_at = excluded.updated_at
+                    updated_at = excluded.updated_at,
+                    edited_at = NULL
                 """,
                 (
                     receipt_id,
@@ -184,7 +193,7 @@ class SqliteReceiptRepository:
             row = conn.execute(
                 """
                 SELECT r.receipt_id, r.extracted_json, r.created_at, r.updated_at,
-                       u.original_filename, u.content_type
+                       u.original_filename, u.content_type, r.edited_at
                 FROM receipts r
                 LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
                 WHERE r.receipt_id = ?
@@ -209,6 +218,8 @@ class SqliteReceiptRepository:
         normalized_date = normalize_purchase_date(extracted.purchase_date)
         display_date = normalized_date if normalized_date is not None else extracted.purchase_date
 
+        edited_at = row[6]
+
         return SavedReceipt(
             receipt_id=row[0],
             original_filename=row[4],
@@ -222,6 +233,8 @@ class SqliteReceiptRepository:
             discounts=extracted.discounts,
             taxes=extracted.taxes,
             total=extracted.total,
+            edited=edited_at is not None,
+            edited_at=edited_at,
         )
 
     def list_receipts(self, limit: int) -> list[ReceiptSummary]:
@@ -289,17 +302,63 @@ class SqliteReceiptRepository:
             # A single UPDATE in this one transaction: created_at and
             # ai_result_json (the original, byte-for-byte AI output) are
             # never touched, so a later "reset to AI result" stays possible.
+            # edited_at is set to now -- the user's edits replace the AI
+            # output until a re-extract or reset clears it again.
             conn.execute(
                 """
                 UPDATE receipts
                 SET store_name = ?, purchase_date = ?, currency = ?, total = ?,
-                    extracted_json = ?, updated_at = ?
+                    extracted_json = ?, updated_at = ?, edited_at = ?
                 WHERE receipt_id = ?
                 """,
                 (
                     update.store_name,
                     update.purchase_date,
                     update.currency,
+                    total_str,
+                    extracted_json,
+                    now,
+                    now,
+                    receipt_id,
+                ),
+            )
+
+        return self.get_receipt(receipt_id)
+
+    def reset_receipt(self, receipt_id: str) -> SavedReceipt | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT ai_result_json FROM receipts WHERE receipt_id = ?", (receipt_id,)
+            ).fetchone()
+            if row is None:
+                return None
+
+            # Parse with the same lenient model used for AI output, then
+            # apply the same date normalization extraction does -- a reset
+            # receipt should look exactly like a freshly extracted one.
+            ai_result = ReceiptData.model_validate_json(row[0])
+            normalized_date = normalize_purchase_date(ai_result.purchase_date)
+            if normalized_date is not None:
+                ai_result.purchase_date = normalized_date
+
+            extracted_json = ai_result.model_dump_json()
+            total_str = _to_decimal_string(ai_result.total)
+            now = _utc_now_iso()
+
+            # One transaction: extracted_json and the four denormalized
+            # columns are refreshed from ai_result_json (itself untouched),
+            # edited_at is cleared, updated_at refreshed, created_at kept.
+            conn.execute(
+                """
+                UPDATE receipts
+                SET store_name = ?, purchase_date = ?, currency = ?, total = ?,
+                    extracted_json = ?, updated_at = ?, edited_at = NULL
+                WHERE receipt_id = ?
+                """,
+                (
+                    ai_result.store_name,
+                    ai_result.purchase_date,
+                    ai_result.currency,
                     total_str,
                     extracted_json,
                     now,

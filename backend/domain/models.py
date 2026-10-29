@@ -44,6 +44,8 @@ class SavedReceipt(ReceiptData):
     content_type: str | None
     created_at: str
     updated_at: str
+    edited: bool
+    edited_at: str | None
 
 
 class ReceiptWarning(BaseModel):

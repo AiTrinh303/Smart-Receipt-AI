@@ -169,9 +169,13 @@ the purchase info, and the result is displayed for review.
   `requirements.txt`/`requirements-dev.txt`, layered per
   [docs/adr/0001-layered-backend.md](docs/adr/0001-layered-backend.md):
   - `domain/` — `models.py` (`ReceiptData` and friends, plus `SavedUpload`,
-    `SavedReceipt` and `ReceiptSummary` — the last a small list-row model:
-    receipt_id, original_filename, store_name, purchase_date, currency,
-    total, created_at — for persisted data; `ReceiptWarning` — code/field/
+    `SavedReceipt` — adds `edited: bool` / `edited_at: str | None` to
+    `ReceiptData` (`edited` is just `edited_at is not None`, computed in the
+    repository, not stored as its own column) — and `ReceiptSummary` — the
+    last a small list-row model: receipt_id, original_filename, store_name,
+    purchase_date, currency, total, created_at — for persisted data (no
+    `edited`/`warnings` here; the list endpoint is intentionally unchanged);
+    `ReceiptWarning` — code/field/
     message/`details` (decimal strings, never floats), computed fresh on
     every response and never stored), `rules.py` (allowed file
     types, size limit, `media_type_for_extension()` — a pure
@@ -213,17 +217,29 @@ the purchase info, and the result is displayed for review.
     already-missing file as a no-op, not an error, so a retry is safe),
     `sqlite_repository.py`
     (`SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads` and
-    `receipts` tables; schema created via `CREATE TABLE IF NOT EXISTS`).
+    `receipts` tables; schema created via `CREATE TABLE IF NOT EXISTS`, plus
+    a small additive migration on construction — `PRAGMA table_info` then
+    `ALTER TABLE ... ADD COLUMN` only for a column that's missing, never
+    dropping/recreating a table, so existing rows always survive an
+    upgrade; this is how `edited_at` was added).
     `list_receipts` orders by `created_at DESC, receipt_id ASC` (stable
     tie-break) and builds each row from `extracted_json` (same source as
     `get_receipt`, so `total`'s JSON type matches); a row with unparseable
     `extracted_json` is logged (receipt_id only) and skipped rather than
     failing the whole list. `update_receipt` replaces `extracted_json` and
-    the four denormalized columns in one transaction, refreshes
-    `updated_at`, and **never touches `ai_result_json` or `created_at`** —
-    the original AI output stays byte-for-byte intact so a future "reset to
-    AI result" stays possible; returns `None` (never creates a row) if the
-    receipt doesn't exist. `delete_receipt` removes the row from both
+    the four denormalized columns, sets `edited_at` to now, in one
+    transaction, refreshes `updated_at`, and **never touches
+    `ai_result_json` or `created_at`** — the original AI output stays
+    byte-for-byte intact; returns `None` (never creates a row) if the
+    receipt doesn't exist. `reset_receipt` is the reverse: parses
+    `ai_result_json` with the same lenient `ReceiptData` model used for AI
+    output, re-applies the same date normalization extraction does, writes
+    that into `extracted_json` and the four denormalized columns, clears
+    `edited_at` to `NULL`, refreshes `updated_at`, keeps `created_at` — one
+    transaction, `ai_result_json` itself never touched; returns `None` if
+    the receipt doesn't exist (so the route 404s), and is safe to call
+    repeatedly (idempotent) or on a receipt that was never edited.
+    `delete_receipt` removes the row from both
     `receipts` and `uploads` in one transaction, returning whether a
     `receipts` row existed. Must never import `api`.
     **Date normalization:** `save_receipt` captures `ai_result_json` from
@@ -261,6 +277,14 @@ the purchase info, and the result is displayed for review.
     — corrects the editable fields, `FastAPI`-validates the body against
     `ReceiptUpdate` (auto-`422`), 404 if the receipt doesn't exist (PUT
     never creates one), 200 with the same shape/types as GET,
+    `POST /receipts/{receipt_id}/reset` — discards edits, restores
+    `ai_result_json` into the displayed data (never touching
+    `ai_result_json` itself), clears `edited`/`edited_at`; 400/404 the same
+    way as the other id-taking routes, 500 generic on a repository failure,
+    200 with the same shape as GET; idempotent (safe to call repeatedly or
+    on a never-edited receipt); never calls `get_extractor` or touches the
+    stored file. Already allowed by the existing CORS `allow_methods` list
+    (`tests/test_reset_and_edited.py` has a preflight test for it anyway).
     `DELETE /receipts/{receipt_id}` — 204 (empty body) on success, 400 for
     a non-UUID id, 404 if no `receipts` row exists (unknown id, or
     uploaded-but-never-extracted — nothing touched on disk or in the DB);
