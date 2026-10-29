@@ -103,7 +103,7 @@ extraction, and this app has no way to delete that copy.
 ```bash
 cd backend
 python3 -m venv venv
-   # Windows: venv\Scripts\activate
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 cp -n .env.example .env   # add your OPENAI_API_KEY (-n: never overwrite an existing .env)
 uvicorn main:app --reload --port 8001
