@@ -9,9 +9,10 @@ these tokens, never hardcoded hex colors.
 Open `?view=styleguide` in a local `npm run dev` session (e.g.
 `http://localhost:5173/?view=styleguide`) to see every `Button` variant
 (enabled, disabled, loading), every `Alert` variant, the nav tab's active and
-inactive states, the logo mark, the dropzone's idle/drag-over/file-selected
-states, and a `Card`, all at once, with static sample data and no network
-calls. It's dev-only (gated on `import.meta.env.DEV`, via the mockable
+inactive states, the logo mark, the `RadioCardGroup` apartment choice (none
+chosen / chosen / loading / failure), the dropzone's
+idle/drag-over/file-selected states, and a `Card`, all at once, with static
+sample data and no network calls. It's dev-only (gated on `import.meta.env.DEV`, via the mockable
 `src/env.ts`), not linked from the header, and excluded from production
 builds (`npm run build` and grep `dist/assets/*.js` for "StyleGuide" to
 confirm after changing anything about how it's wired in). After any visual
@@ -137,6 +138,32 @@ the full trail of evidence.
   `purchase_date` — and shows no "Original: ..." hint. Only a date with no
   extractable leading ISO date at all keeps the plain text input plus the
   hint.
+
+## Apartment choice on the upload form
+
+- **`RadioCardGroup` above the dropzone, nothing preselected.** `useApartments`
+  (`src/hooks/useApartments.ts`) fetches `GET /apartments` once per session —
+  a *successful* result is cached at module scope (so "Upload another
+  receipt" never re-fetches it), but a failure is never cached, so `retry`
+  (or a later mount) tries again. It's only fetched at all while the plain
+  upload form is what's about to render (never while reopening, showing, or
+  failing to load a saved receipt by id).
+- **Three states above the dropzone**: loading ("Loading apartments..." in a
+  `role="status" aria-busy="true"` region with two `Skeleton` blocks sized
+  to the card shape), failure (`Alert variant="error"` + a "Retry" button,
+  "Read receipt" impossible either way since there's nothing to choose), or
+  the loaded `RadioCardGroup` itself.
+- **Submit needs a file *and* a choice.** "Read receipt" stays disabled
+  until both are present; with a valid file but no apartment chosen yet, a
+  muted "Choose an apartment to continue." hint appears, tied to the
+  `fieldset` via `aria-describedby`.
+- **The choice is session-scoped component state, not persisted** — it
+  survives Remove, picking a new file, and "Upload another receipt" within
+  the same visit (most receipts uploaded in one sitting are for the same
+  apartment), but resets on a real page reload like every other upload-form
+  field.
+- **`uploadReceipt(file, apartmentId)`** sends `apartment_id` as a second
+  `FormData` field alongside `file`.
 
 ## Changelog
 
@@ -269,6 +296,17 @@ the full trail of evidence.
   `role="status"` (polite). Never relies on color alone — pair with text.
 - **`Spinner`** — an inline SVG spinner with an `aria-label` for in-flight
   states.
+- **`RadioCardGroup`** — a `fieldset`/`legend` (with `role="radiogroup"` and
+  an `aria-label` matching the legend, so it's findable by name even though
+  `role="radiogroup"` overrides the fieldset's implicit legend-naming) of
+  real `<input type="radio">` options styled as selectable cards. The radio
+  itself is `sr-only` (visually hidden, not `display:none`, so it stays
+  focusable and keeps native same-`name`-group arrow-key behavior); the
+  wrapping `<label>` carries the card styling and a `focus-within` ring
+  (the hidden input's own ring would be clipped). The selected card is never
+  marked by color alone: a check icon and `font-semibold` go with the
+  stronger `border-brand`. Stacked below `sm`, side by side from it. Used by
+  the upload form's apartment choice (see "Apartment choice" below).
 - **`formatFileSize`** — formats a byte count as `B`/`KB`/`MB`/`GB` for
   display next to a selected file.
 

@@ -33,6 +33,17 @@ npm run dev
 Runs at http://localhost:5173. The frontend reads the backend's URL from
 `VITE_API_URL` (see `.env.example`); `.env` is gitignored and not committed.
 
+Above the dropzone, the upload screen asks "Which apartment is this receipt
+for?" as a set of selectable cards (nothing preselected) fetched from
+`GET /apartments`; while that loads it shows "Loading apartments...", and if
+it fails, an error with a "Retry" button (uploading is impossible either way
+until an apartment can be chosen). "Read receipt" stays disabled until both
+a valid file **and** an apartment are chosen — with only a file selected, a
+muted "Choose an apartment to continue." hint appears. The choice is kept in
+memory for the session: it survives "Remove", picking a different file, and
+"Upload another receipt", so uploading several receipts for the same
+apartment in one sitting only requires choosing it once.
+
 The upload screen is a dropzone: click it, press Enter/Space, or drag a
 receipt onto it to choose a file; dropping more than one file at once shows
 an error asking for one receipt at a time. On small screens, a "Take photo"

@@ -7,12 +7,14 @@ import { resetReceipt } from './api/resetReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
 import type { ReceiptExtraction } from './api/types'
 import { navigateTo } from './navigation'
+import { useApartments } from './hooks/useApartments'
 import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
+import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import Spinner from './components/ui/Spinner'
 import { formatFileSize } from './components/ui/formatFileSize'
@@ -22,6 +24,7 @@ const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png']
 const PDF_SIGNATURE = '%PDF-'
 const RECEIPT_QUERY_PARAM = 'receipt'
+const APARTMENT_HELPER_ID = 'apartment-helper'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function getExtension(filename: string) {
@@ -126,6 +129,7 @@ function ReceiptUpload() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<UploadSuccess | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [apartmentId, setApartmentId] = useState<string | null>(null)
 
   const [receiptId, setReceiptId] = useState<string | null>(null)
   const [isExtracting, setIsExtracting] = useState(false)
@@ -143,6 +147,16 @@ function ReceiptUpload() {
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(initialReceipt.id !== null)
   const [notFound, setNotFound] = useState(initialReceipt.invalid)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  // The apartment list is only needed for the plain upload form -- never
+  // while reopening, showing, or failing to load a saved receipt by id.
+  const showingUploadForm = !result && !isLoadingReceipt && !notFound && !loadError
+  const {
+    apartments,
+    isLoading: isLoadingApartments,
+    error: apartmentsError,
+    retry: retryApartments,
+  } = useApartments(showingUploadForm)
 
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -322,6 +336,9 @@ function ReceiptUpload() {
       setError('Please select a file before submitting.')
       return
     }
+    if (!apartmentId) {
+      return
+    }
 
     setIsUploading(true)
     setError(null)
@@ -331,7 +348,7 @@ function ReceiptUpload() {
     setExtractionError(null)
 
     try {
-      const uploadResult = await uploadReceipt(file)
+      const uploadResult = await uploadReceipt(file, apartmentId)
       setSuccess({ receiptId: uploadResult.receipt_id, filename: uploadResult.filename })
       setReceiptId(uploadResult.receipt_id)
       setIsUploading(false)
@@ -615,6 +632,41 @@ function ReceiptUpload() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <Card className="flex flex-col gap-4">
+        {apartmentsError ? (
+          <div className="flex flex-col gap-2">
+            <Alert variant="error">{apartmentsError}</Alert>
+            <Button variant="secondary" size="sm" className="self-start" onClick={retryApartments}>
+              Retry
+            </Button>
+          </div>
+        ) : isLoadingApartments ? (
+          <div role="status" aria-busy="true" className="flex flex-col gap-2">
+            <span className="text-sm text-ink-muted">Loading apartments...</span>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Skeleton className="h-11 flex-1" />
+              <Skeleton className="h-11 flex-1" />
+            </div>
+          </div>
+        ) : (
+          apartments && (
+            <RadioCardGroup
+              legend="Which apartment is this receipt for?"
+              name="apartment"
+              options={apartments.map((apartment) => ({ value: apartment.id, label: apartment.name }))}
+              value={apartmentId}
+              onChange={setApartmentId}
+              disabled={isBusy}
+              describedBy={file && !apartmentId ? APARTMENT_HELPER_ID : undefined}
+            />
+          )
+        )}
+
+        {apartments && file && !apartmentId && (
+          <p id={APARTMENT_HELPER_ID} className="text-sm text-ink-muted">
+            Choose an apartment to continue.
+          </p>
+        )}
+
         <label htmlFor="receipt-file" className="sr-only">
           Upload receipt (JPG, PNG, or PDF)
         </label>
@@ -743,7 +795,7 @@ function ReceiptUpload() {
 
         <Button
           onClick={handleSubmit}
-          disabled={!file || isBusy}
+          disabled={!file || !apartmentId || isBusy}
           loading={isBusy}
           loadingText={isUploading ? 'Uploading...' : 'Extracting...'}
         >

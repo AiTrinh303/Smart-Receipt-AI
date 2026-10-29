@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
 import { mockObjectUrl } from './test/objectUrl'
+import { SAMPLE_APARTMENTS, jsonResponse, withApartments } from './test/apartmentsFetch'
 
 // A successful extraction now updates the address bar with ?receipt=<id>
 // (history.replaceState), and jsdom's window.location persists across tests
@@ -24,6 +25,22 @@ afterEach(() => {
   objectUrl.restore()
 })
 
+// Every mount of the plain upload form now fires a GET /apartments (via
+// useApartments), so every test in this file needs *some* fetch mock, even
+// the ones that only exercise client-side file validation. `withApartments`
+// answers that one URL with a default two-item success response; tests that
+// also submit the form layer their own upload/extract routing on top via
+// `routeFetch` below.
+let fetchSpy: jest.Mock
+beforeEach(() => {
+  fetchSpy = jest.fn().mockImplementation(withApartments(() => Promise.reject(new Error('Unexpected fetch call'))))
+  global.fetch = fetchSpy as unknown as typeof fetch
+})
+afterEach(() => {
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
+})
+
 function getFileInput() {
   return screen.getByLabelText(/upload receipt/i)
 }
@@ -32,12 +49,9 @@ function getSubmitButton() {
   return screen.getByRole('button', { name: /read receipt|uploading|extracting/i })
 }
 
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: () => Promise.resolve(body),
-  }
+/** Selects the first mocked apartment, enabling Submit once a file is also present. */
+async function chooseApartment(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name }))
 }
 
 async function selectValidFile() {
@@ -45,6 +59,7 @@ async function selectValidFile() {
   render(<ReceiptUpload />)
   const validFile = new File(['dummy'], 'receipt.jpg', { type: 'image/jpeg' })
   await user.upload(getFileInput(), validFile)
+  await chooseApartment(user)
   return { user, validFile }
 }
 
@@ -57,25 +72,27 @@ function createDeferred<T>() {
 }
 
 /** Routes the mocked global.fetch by URL, so upload and extract calls can be
- * answered independently within a single test. */
+ * answered independently within a single test (apartments is handled by
+ * `withApartments` automatically). */
 function routeFetch(
-  fetchSpy: jest.Mock,
+  fetchSpyToRoute: jest.Mock,
   routes: { upload?: () => Promise<unknown>; extract?: () => Promise<unknown> },
 ) {
-  fetchSpy.mockImplementation((url: unknown) => {
-    const urlString = String(url)
-    if (urlString.endsWith('/receipts/upload')) {
-      return routes.upload
-        ? routes.upload()
-        : Promise.reject(new Error(`Unexpected upload call to ${urlString}`))
-    }
-    if (urlString.includes('/extract')) {
-      return routes.extract
-        ? routes.extract()
-        : Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
-    }
-    return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
-  })
+  fetchSpyToRoute.mockImplementation(
+    withApartments((urlString) => {
+      if (urlString.endsWith('/receipts/upload')) {
+        return routes.upload
+          ? routes.upload()
+          : Promise.reject(new Error(`Unexpected upload call to ${urlString}`))
+      }
+      if (urlString.includes('/extract')) {
+        return routes.extract
+          ? routes.extract()
+          : Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
+      }
+      return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
+    }),
+  )
 }
 
 test('initial state: Submit is disabled when no file is selected', () => {
@@ -89,7 +106,7 @@ test('initial state: Submit is disabled when no file is selected', () => {
   expect(getSubmitButton()).toBeDisabled()
 })
 
-test('valid JPG: filename displayed, Submit enabled, no error shown', async () => {
+test('valid JPG: filename displayed, Submit stays disabled until an apartment is also chosen, then enabled', async () => {
   // Given the upload form is rendered
   const user = userEvent.setup()
   render(<ReceiptUpload />)
@@ -98,20 +115,30 @@ test('valid JPG: filename displayed, Submit enabled, no error shown', async () =
   const validFile = new File(['dummy'], 'receipt.jpg', { type: 'image/jpeg' })
   await user.upload(getFileInput(), validFile)
 
-  // Then the filename is displayed, Submit is enabled, and no error is shown
+  // Then the filename is displayed, no error is shown, but Submit is still
+  // disabled and the muted helper is shown, since no apartment is chosen yet
   expect(screen.getByText('Selected file: receipt.jpg')).toBeInTheDocument()
-  expect(getSubmitButton()).toBeEnabled()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(getSubmitButton()).toBeDisabled()
+  expect(screen.getByText('Choose an apartment to continue.')).toBeInTheDocument()
+
+  // When the user also chooses an apartment
+  await chooseApartment(user)
+
+  // Then Submit becomes enabled and the helper disappears
+  expect(getSubmitButton()).toBeEnabled()
+  expect(screen.queryByText('Choose an apartment to continue.')).not.toBeInTheDocument()
 })
 
-test('valid PNG: filename displayed, Submit enabled', async () => {
+test('valid PNG: filename displayed, Submit enabled once an apartment is chosen too', async () => {
   // Given the upload form is rendered
   const user = userEvent.setup()
   render(<ReceiptUpload />)
 
-  // When the user selects a valid PNG file
+  // When the user selects a valid PNG file and chooses an apartment
   const validFile = new File(['dummy'], 'receipt.png', { type: 'image/png' })
   await user.upload(getFileInput(), validFile)
+  await chooseApartment(user)
 
   // Then the filename is displayed and Submit is enabled
   expect(screen.getByText('Selected file: receipt.png')).toBeInTheDocument()
@@ -137,7 +164,7 @@ test('invalid type: inline error shown, Submit stays disabled, filename not disp
   expect(screen.queryByText('Selected file: notes.txt')).not.toBeInTheDocument()
 })
 
-test('valid PDF: filename displayed, Submit enabled, no error shown', async () => {
+test('valid PDF: filename displayed, Submit enabled once an apartment is chosen too', async () => {
   // Given the upload form is rendered
   const user = userEvent.setup()
   render(<ReceiptUpload />)
@@ -148,12 +175,17 @@ test('valid PDF: filename displayed, Submit enabled, no error shown', async () =
   })
   await user.upload(getFileInput(), validFile)
 
-  // Then the filename is displayed, Submit is enabled, and no error is shown
+  // Then the filename is displayed and no error is shown
   await waitFor(() => {
     expect(screen.getByText('Selected file: receipt.pdf')).toBeInTheDocument()
   })
-  expect(getSubmitButton()).toBeEnabled()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+  // When the user also chooses an apartment
+  await chooseApartment(user)
+
+  // Then Submit is enabled
+  expect(getSubmitButton()).toBeEnabled()
 })
 
 test('invalid PDF: name ends in .pdf but content is not "%PDF-" -> inline error shown, Submit disabled, filename not displayed', async () => {
@@ -176,21 +208,9 @@ test('invalid PDF: name ends in .pdf but content is not "%PDF-" -> inline error 
 })
 
 describe('submitting to the backend', () => {
-  let fetchSpy: jest.Mock
-
-  beforeEach(() => {
-    fetchSpy = jest.fn()
-    global.fetch = fetchSpy as unknown as typeof fetch
-  })
-
-  afterEach(() => {
-    // @ts-expect-error cleaning up the test-only global fetch stub
-    delete global.fetch
-  })
-
   test('valid file + server returns 400 with detail -> server error message shown', async () => {
     // Given a valid file is selected and the server rejects the upload with a 400 and a detail message
-    fetchSpy.mockResolvedValue(jsonResponse(400, { detail: 'Unsupported file type.' }))
+    routeFetch(fetchSpy, { upload: () => Promise.resolve(jsonResponse(400, { detail: 'Unsupported file type.' })) })
     const { user } = await selectValidFile()
 
     // When the user clicks Submit
@@ -200,14 +220,14 @@ describe('submitting to the backend', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Unsupported file type.')
     })
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy.mock.calls.filter(([url]) => String(url).endsWith('/receipts/upload'))).toHaveLength(1)
   })
 
   test('valid file + server returns 413 -> error shown', async () => {
     // Given a valid file is selected and the server rejects the upload with a 413 and a detail message
-    fetchSpy.mockResolvedValue(
-      jsonResponse(413, { detail: 'File exceeds the maximum size of 10 MB.' }),
-    )
+    routeFetch(fetchSpy, {
+      upload: () => Promise.resolve(jsonResponse(413, { detail: 'File exceeds the maximum size of 10 MB.' })),
+    })
     const { user } = await selectValidFile()
 
     // When the user clicks Submit
@@ -223,7 +243,7 @@ describe('submitting to the backend', () => {
 
   test('valid file + upload fetch rejects (network error) -> "Could not reach the server" message shown, Submit enabled again', async () => {
     // Given a valid file is selected and the upload request will fail outright
-    fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'))
+    routeFetch(fetchSpy, { upload: () => Promise.reject(new TypeError('Failed to fetch')) })
     const { user } = await selectValidFile()
 
     // When the user clicks Submit
@@ -258,7 +278,9 @@ describe('submitting to the backend', () => {
 
     // Cleanup: let the upload (and the extraction it triggers) settle before the test ends
     uploadDeferred.resolve(jsonResponse(201, { receipt_id: 'id', filename: 'receipt.jpg' }))
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(fetchSpy.mock.calls.filter(([url]) => !String(url).endsWith('/apartments'))).toHaveLength(2),
+    )
   })
 
   test('upload succeeds then extraction succeeds -> result view shown', async () => {
@@ -554,17 +576,20 @@ describe('submitting to the backend', () => {
     })
     await user.upload(getFileInput(), validPdf)
     await waitFor(() => expect(screen.getByText('Selected file: receipt.pdf')).toBeInTheDocument())
+    await chooseApartment(user)
 
     // When the user clicks Submit
     await user.click(getSubmitButton())
 
     // Then the upload request body contains the PDF file
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled())
-    const [, options] = fetchSpy.mock.calls[0]
+    await waitFor(() =>
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).endsWith('/receipts/upload'))).toBe(true),
+    )
+    const [, options] = fetchSpy.mock.calls.find(([url]) => String(url).endsWith('/receipts/upload'))!
     expect((options.body as FormData).get('file')).toBe(validPdf)
   })
 
-  test('request is sent to ${VITE_API_URL}/receipts/upload with a FormData body containing the file', async () => {
+  test('request is sent to ${VITE_API_URL}/receipts/upload with a FormData body containing the file and the chosen apartment_id', async () => {
     // Given a valid file is selected and both the upload and the extraction it triggers will succeed
     routeFetch(fetchSpy, {
       upload: () => Promise.resolve(jsonResponse(201, { receipt_id: 'abc-123', filename: 'receipt.jpg' })),
@@ -576,13 +601,18 @@ describe('submitting to the backend', () => {
     // When the user clicks Submit
     await user.click(getSubmitButton())
 
-    // Then the request is sent to the configured API URL with a FormData body containing the file
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled())
-    const [url, options] = fetchSpy.mock.calls[0]
+    // Then the request is sent to the configured API URL with a FormData body containing the file and apartment_id
+    await waitFor(() =>
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).endsWith('/receipts/upload'))).toBe(true),
+    )
+    const [url, options] = fetchSpy.mock.calls.find(([callUrl]) =>
+      String(callUrl).endsWith('/receipts/upload'),
+    )!
     expect(url).toBe('http://localhost:8001/receipts/upload')
     expect(options.method).toBe('POST')
     expect(options.body).toBeInstanceOf(FormData)
     expect((options.body as FormData).get('file')).toBe(validFile)
+    expect((options.body as FormData).get('apartment_id')).toBe(SAMPLE_APARTMENTS[0].id)
   })
 
   test('after extraction, clicking "Edit" shows a form prefilled with the current values', async () => {

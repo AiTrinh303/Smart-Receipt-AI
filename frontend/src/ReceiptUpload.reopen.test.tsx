@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
 import { mockObjectUrl } from './test/objectUrl'
+import { SAMPLE_APARTMENTS, withApartments } from './test/apartmentsFetch'
 
 const VALID_UUID = '11111111-1111-1111-1111-111111111111'
 
@@ -43,27 +44,28 @@ function routeFetch(
     extract?: () => Promise<unknown>
   },
 ) {
-  fetchSpy.mockImplementation((url: unknown, options?: RequestInit) => {
-    const urlString = String(url)
-    const method = options?.method ?? 'GET'
+  fetchSpy.mockImplementation(
+    withApartments((urlString, options) => {
+      const method = options?.method ?? 'GET'
 
-    if (urlString.endsWith('/receipts/upload')) {
-      return routes.upload
-        ? routes.upload()
-        : Promise.reject(new Error(`Unexpected upload call to ${urlString}`))
-    }
-    if (urlString.includes('/extract')) {
-      return routes.extract
-        ? routes.extract()
-        : Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
-    }
-    if (method === 'GET' && urlString.includes('/receipts/')) {
-      return routes.get
-        ? routes.get()
-        : Promise.reject(new Error(`Unexpected GET call to ${urlString}`))
-    }
-    return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
-  })
+      if (urlString.endsWith('/receipts/upload')) {
+        return routes.upload
+          ? routes.upload()
+          : Promise.reject(new Error(`Unexpected upload call to ${urlString}`))
+      }
+      if (urlString.includes('/extract')) {
+        return routes.extract
+          ? routes.extract()
+          : Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
+      }
+      if (method === 'GET' && urlString.includes('/receipts/')) {
+        return routes.get
+          ? routes.get()
+          : Promise.reject(new Error(`Unexpected GET call to ${urlString}`))
+      }
+      return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
+    }),
+  )
 }
 
 function createDeferred<T>() {
@@ -226,6 +228,7 @@ describe('reopening a saved receipt from its link', () => {
     render(<ReceiptUpload />)
     const validFile = new File(['dummy'], 'receipt.jpg', { type: 'image/jpeg' })
     await user.upload(screen.getByLabelText(/upload receipt/i), validFile)
+    await user.click(await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name }))
 
     // When the user clicks Submit
     await user.click(screen.getByRole('button', { name: /read receipt|uploading|extracting/i }))

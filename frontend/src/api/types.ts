@@ -36,6 +36,11 @@ export interface ReceiptExtraction {
   edited_at: string | null
 }
 
+export interface Apartment {
+  id: string
+  name: string
+}
+
 export interface ReceiptSummary {
   receipt_id: string
   original_filename: string | null

@@ -11,9 +11,10 @@ export interface UploadReceiptResponse {
 
 const API_URL = import.meta.env.VITE_API_URL
 
-export async function uploadReceipt(file: File): Promise<UploadReceiptResponse> {
+export async function uploadReceipt(file: File, apartmentId: string): Promise<UploadReceiptResponse> {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('apartment_id', apartmentId)
 
   const response = await fetch(`${API_URL}/receipts/upload`, {
     method: 'POST',

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
 import { mockObjectUrl } from './test/objectUrl'
+import { SAMPLE_APARTMENTS, jsonResponse, withApartments } from './test/apartmentsFetch'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -21,6 +22,19 @@ beforeEach(() => {
 })
 afterEach(() => {
   objectUrl.restore()
+})
+
+// Every mount fires a GET /apartments (via useApartments); answer it with
+// the default two-item success response so these preview-only tests (which
+// never submit the form) don't need to describe that route by hand.
+beforeEach(() => {
+  global.fetch = jest
+    .fn()
+    .mockImplementation(withApartments(() => Promise.reject(new Error('Unexpected fetch call')))) as unknown as typeof fetch
+})
+afterEach(() => {
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
 })
 
 test('a valid PNG shows an <img> preview with the expected alt text and the mocked URL', async () => {
@@ -106,21 +120,14 @@ test('"Upload another receipt" after a reset revokes the preview object URL', as
   const user = userEvent.setup()
   const fetchSpy = jest.fn()
   global.fetch = fetchSpy as unknown as typeof fetch
-  fetchSpy.mockImplementation((url: unknown) => {
-    const urlString = String(url)
-    if (urlString.endsWith('/receipts/upload')) {
-      return Promise.resolve({
-        ok: true,
-        status: 201,
-        json: () => Promise.resolve({ receipt_id: 'abc-123', filename: 'receipt.png' }),
-      })
-    }
-    if (urlString.includes('/extract')) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
+  fetchSpy.mockImplementation(
+    withApartments((urlString) => {
+      if (urlString.endsWith('/receipts/upload')) {
+        return Promise.resolve(jsonResponse(201, { receipt_id: 'abc-123', filename: 'receipt.png' }))
+      }
+      if (urlString.includes('/extract')) {
+        return Promise.resolve(
+          jsonResponse(200, {
             receipt_id: 'abc-123',
             store_name: 'Corner Store',
             items: [],
@@ -130,14 +137,16 @@ test('"Upload another receipt" after a reset revokes the preview object URL', as
             edited: false,
             edited_at: null,
           }),
-      })
-    }
-    return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
-  })
+        )
+      }
+      return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
+    }),
+  )
 
   render(<ReceiptUpload />)
   const validPng = new File(['dummy'], 'receipt.png', { type: 'image/png' })
   await user.upload(getFileInput(), validPng)
+  await user.click(await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name }))
   await user.click(screen.getByRole('button', { name: /read receipt/i }))
 
   await screen.findByText('Corner Store')
@@ -147,9 +156,6 @@ test('"Upload another receipt" after a reset revokes the preview object URL', as
 
   // Then the preview object URL created for the submitted file was revoked
   expect(objectUrl.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url-0')
-
-  // @ts-expect-error cleaning up the test-only global fetch stub
-  delete global.fetch
 })
 
 test('unmounting revokes any live preview object URL', async () => {

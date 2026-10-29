@@ -27,7 +27,8 @@ the purchase info, and the result is displayed for review.
   colors; see [docs/design.md](docs/design.md) for the palette, contrast
   ratios, and when to use each shared component. Shared UI components live
   in `src/components/ui/` (`Button`, `Card`, `Alert`, `Spinner`, `Container`,
-  `formatFileSize`) — reach for these instead of ad hoc markup. All
+  `RadioCardGroup`, `formatFileSize`) — reach for these instead of ad hoc
+  markup. All
   interactive elements need a visible `focus-visible` ring and a minimum
   44px touch target on small screens; never convey state with color alone.
   User-visible strings and roles that existing tests assert on (e.g.
@@ -35,11 +36,31 @@ the purchase info, and the result is displayed for review.
   "Upload another receipt", the 502/503 messages) must stay exactly as they
   are unless a task explicitly asks to change them.
   `src/api/` holds API call modules (`uploadReceipt.ts`, `extractReceipt.ts`,
-  `getReceipt.ts`, `listReceipts.ts`, shared `ApiError`, shared response
-  types in `types.ts` — including `ReceiptSummary`, the list-row shape); the
-  backend URL is read from `VITE_API_URL` (`.env.example` / `.env`, the
-  latter gitignored). `ReceiptUpload.tsx` uploads a file then automatically
-  calls extract and renders `ReceiptResult.tsx` with the structured result.
+  `getReceipt.ts`, `listReceipts.ts`, `getApartments.ts`, shared `ApiError`,
+  shared response types in `types.ts` — including `ReceiptSummary`, the
+  list-row shape, and `Apartment` (`id`/`name`)); the backend URL is read
+  from `VITE_API_URL` (`.env.example` / `.env`, the latter gitignored).
+  `ReceiptUpload.tsx` uploads a file then automatically calls extract and
+  renders `ReceiptResult.tsx` with the structured result.
+  **Apartment choice (`hooks/useApartments.ts`, `ui/RadioCardGroup.tsx`):**
+  the upload form shows a `RadioCardGroup` above the dropzone, legend "Which
+  apartment is this receipt for?", nothing preselected. `useApartments`
+  fetches `GET /apartments` only while the plain upload form is about to
+  render (never while reopening/showing/failing to load a saved receipt by
+  id); a *successful* result is cached at module scope (so "Upload another
+  receipt" never re-fetches it) but a failure is never cached, so its
+  `retry()` tries again. States above the dropzone: loading ("Loading
+  apartments..." in a `role="status" aria-busy="true"` region with two
+  `Skeleton` blocks), failure (`Alert variant="error"` + "Retry", upload
+  impossible either way), or the loaded group. "Read receipt" stays disabled
+  until a valid file **and** a chosen apartment are both present; with only
+  a file, a muted "Choose an apartment to continue." hint is shown, tied to
+  the group via `aria-describedby`. The chosen `apartmentId` is plain
+  component state, untouched by `handleRemoveFile`/`processFile`/
+  `handleReset`, so it survives Remove, a new file, and "Upload another
+  receipt" within the session (never persisted across a real reload).
+  `uploadReceipt(file, apartmentId)` sends `apartment_id` as a second
+  `FormData` field.
   Dependency direction: UI components (`App.tsx`, `ReceiptUpload.tsx`,
   `ReceiptResult.tsx`, `ReceiptHistory.tsx`) -> `src/api/` ->
   `src/api/types.ts`. `src/api/` must never import a UI component —

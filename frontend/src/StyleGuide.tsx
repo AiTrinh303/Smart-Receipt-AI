@@ -3,10 +3,16 @@ import type { ReactNode } from 'react'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
+import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 const ALERT_VARIANTS = ['info', 'success', 'warning', 'error'] as const
+
+const SAMPLE_APARTMENT_OPTIONS = [
+  { value: 'oberaudorf-bergblick', label: 'Oberaudorf Bergblick' },
+  { value: 'sankt-englmar-waldglueck', label: 'Sankt Englmar Waldglück' },
+]
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -28,6 +34,7 @@ function LogoMark() {
 
 function StyleGuide() {
   const [dropzoneState, setDropzoneState] = useState<'idle' | 'drag-over' | 'file-selected'>('idle')
+  const [apartmentChoice, setApartmentChoice] = useState<string | null>(null)
 
   return (
     <div className="flex flex-col gap-10 pb-16">
@@ -180,6 +187,36 @@ function StyleGuide() {
             </div>
           </div>
         </Alert>
+      </Section>
+
+      <Section title="Apartment choice (RadioCardGroup -- none chosen / chosen / loading / failure)">
+        <Card className="flex flex-col gap-4">
+          <RadioCardGroup
+            legend="Which apartment is this receipt for?"
+            name="styleguide-apartment"
+            options={SAMPLE_APARTMENT_OPTIONS}
+            value={apartmentChoice}
+            onChange={setApartmentChoice}
+          />
+          <p className="text-sm text-ink-muted">
+            {apartmentChoice ? `Chosen: ${apartmentChoice}` : 'Choose an apartment to continue.'}
+          </p>
+        </Card>
+
+        <div role="status" aria-busy="true" className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+          <span className="text-sm text-ink-muted">Loading apartments...</span>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Skeleton className="h-11 flex-1" />
+            <Skeleton className="h-11 flex-1" />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+          <Alert variant="error">Could not load apartments. Please try again.</Alert>
+          <Button variant="secondary" size="sm" className="self-start">
+            Retry
+          </Button>
+        </div>
       </Section>
 
       <Section title="Dropzone (idle / drag-over / file-selected)">

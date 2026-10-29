@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import ReceiptUpload from './ReceiptUpload'
 import { mockObjectUrl } from './test/objectUrl'
+import { SAMPLE_APARTMENTS, withApartments } from './test/apartmentsFetch'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -20,6 +21,19 @@ afterEach(() => {
   objectUrl.restore()
 })
 
+// Every mount fires a GET /apartments (via useApartments); answer it with
+// the default two-item success response so the dropzone itself can still be
+// exercised without each test describing that route by hand.
+beforeEach(() => {
+  global.fetch = jest
+    .fn()
+    .mockImplementation(withApartments(() => Promise.reject(new Error('Unexpected fetch call')))) as unknown as typeof fetch
+})
+afterEach(() => {
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
+})
+
 function getDropzone() {
   return screen.getByRole('button', { name: /drag a receipt here/i })
 }
@@ -28,11 +42,16 @@ function getSubmitButton() {
   return screen.getByRole('button', { name: /read receipt|uploading|extracting/i })
 }
 
+/** Selects the first mocked apartment, needed alongside a file for Submit to enable. */
+async function chooseApartment() {
+  fireEvent.click(await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name }))
+}
+
 function makeDataTransfer(files: File[]) {
   return { dataTransfer: { files } }
 }
 
-test('dropping a valid file shows its name and enables the submit button', async () => {
+test('dropping a valid file shows its name and enables the submit button once an apartment is also chosen', async () => {
   // Given the upload form is rendered
   render(<ReceiptUpload />)
   const validFile = new File(['dummy'], 'receipt.jpg', { type: 'image/jpeg' })
@@ -40,10 +59,16 @@ test('dropping a valid file shows its name and enables the submit button', async
   // When a valid file is dropped on the zone
   fireEvent.drop(getDropzone(), makeDataTransfer([validFile]))
 
-  // Then the filename is shown and the submit button is enabled
+  // Then the filename is shown, but the submit button stays disabled until an apartment is chosen too
   await waitFor(() => {
     expect(screen.getByText('Selected file: receipt.jpg')).toBeInTheDocument()
   })
+  expect(getSubmitButton()).toBeDisabled()
+
+  // When the user also chooses an apartment
+  await chooseApartment()
+
+  // Then the submit button is enabled
   expect(getSubmitButton()).toBeEnabled()
 })
 
