@@ -37,4 +37,11 @@ test('the style guide page renders every Button variant, Alert variant, the logo
   expect(screen.getByRole('heading', { name: /items as cards/i })).toBeInTheDocument()
   expect(screen.getAllByText('Unit price (USD)').length).toBeGreaterThan(0)
   expect(screen.getAllByText('Line total (USD)').length).toBeGreaterThan(0)
+
+  // And the warnings panel, Edited badge and reset confirmation render
+  expect(screen.getByText('Check these values')).toBeInTheDocument()
+  expect(screen.getByText('Edited')).toBeInTheDocument()
+  expect(
+    screen.getByText('Replace your edits with the original AI result? This cannot be undone.'),
+  ).toBeInTheDocument()
 })

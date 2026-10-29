@@ -133,6 +133,55 @@ function StyleGuide() {
         </ul>
       </Section>
 
+      <Section title="Data-quality warnings, Edited badge and reset confirmation">
+        <Alert variant="warning">
+          <div className="flex gap-2">
+            <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 flex-shrink-0" fill="none">
+              <path
+                d="M10 3.5l8 13.5H2l8-13.5z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <path d="M10 8.5v3.5M10 14.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <div>
+              <p className="font-semibold">Check these values</p>
+              <ul className="mt-1 list-disc pl-4">
+                <li>The total (79.40) does not match the items, discounts and tax (69.40 + 0.00).</li>
+                <li>The purchase date is missing.</li>
+              </ul>
+            </div>
+          </div>
+        </Alert>
+
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-surface p-4">
+          <h3 className="text-lg font-bold text-ink">
+            Corner Store
+            <span
+              className="ml-2 inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 align-middle text-xs font-medium text-warning"
+              title="Edited 2026-01-16T09:00:00+00:00"
+            >
+              Edited
+            </span>
+          </h3>
+        </div>
+
+        <Alert variant="warning">
+          <div className="flex flex-col gap-3">
+            <p>Replace your edits with the original AI result? This cannot be undone.</p>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm">
+                Yes, reset
+              </Button>
+              <Button variant="secondary" size="sm">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Alert>
+      </Section>
+
       <Section title="Dropzone (idle / drag-over / file-selected)">
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => setDropzoneState('idle')}>

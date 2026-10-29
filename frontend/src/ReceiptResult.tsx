@@ -1,4 +1,5 @@
 import type { LineItem, ReceiptExtraction } from './api/types'
+import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import { formatMoney } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -11,6 +12,20 @@ function displayText(value: string | null | undefined): string {
 
 function displayQuantity(value: number | null | undefined): string {
   return value === null || value === undefined || Number.isNaN(value) ? NOT_DETECTED : String(value)
+}
+
+function WarningIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 flex-shrink-0" fill="none">
+      <path
+        d="M10 3.5l8 13.5H2l8-13.5z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path d="M10 8.5v3.5M10 14.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
 }
 
 function PencilIcon() {
@@ -79,10 +94,37 @@ function ReceiptResult({ data, onReset, onEdit }: ReceiptResultProps) {
   const isSmallScreen = useMediaQuery('(max-width: 639px)')
 
   return (
-    <div className="flex flex-col gap-5 rounded-lg border border-border bg-surface p-6 shadow-md">
+    <div className="flex flex-col gap-4">
+      {data.warnings.length > 0 && (
+        <Alert variant="warning">
+          <div className="flex gap-2">
+            <WarningIcon />
+            <div>
+              <p className="font-semibold">Check these values</p>
+              <ul className="mt-1 list-disc pl-4">
+                {data.warnings.map((warning, index) => (
+                  <li key={index}>{warning.message}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </Alert>
+      )}
+
+      <div className="flex flex-col gap-5 rounded-lg border border-border bg-surface p-6 shadow-md">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-ink">{displayText(data.store_name)}</h1>
+          <h1 className="text-xl font-bold text-ink">
+            {displayText(data.store_name)}
+            {data.edited && (
+              <span
+                className="ml-2 inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 align-middle text-xs font-medium text-warning"
+                title={data.edited_at ? `Edited ${data.edited_at}` : 'Edited'}
+              >
+                Edited
+              </span>
+            )}
+          </h1>
           <p
             className="mt-1 text-sm text-ink-muted"
             aria-label={`Date: ${displayText(data.purchase_date)}, Currency: ${displayText(data.currency)}`}
@@ -199,6 +241,7 @@ function ReceiptResult({ data, onReset, onEdit }: ReceiptResultProps) {
       <Button variant="secondary" onClick={onReset} className="w-full sm:w-auto sm:self-start">
         Upload another receipt
       </Button>
+      </div>
     </div>
   )
 }

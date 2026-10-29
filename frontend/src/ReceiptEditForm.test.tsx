@@ -272,15 +272,30 @@ describe('ReceiptEditForm', () => {
     expect(screen.getByLabelText('Item 1 name')).toBeInTheDocument()
   })
 
-  test('non-ISO stored date shows the "Original: ..." hint', () => {
-    // Given the stored purchase_date is not a valid ISO date
-    const data: ReceiptExtraction = { ...SAMPLE_DATA, purchase_date: '2025-06-26 11' }
+  test('a date with no leading ISO date at all shows the "Original: ..." hint', () => {
+    // Given the stored purchase_date cannot be parsed into a leading ISO date
+    const data: ReceiptExtraction = { ...SAMPLE_DATA, purchase_date: '26/06/2025' }
 
     // When the edit form is rendered
     render(<ReceiptEditForm receiptId={RECEIPT_ID} data={data} onSave={jest.fn()} onCancel={jest.fn()} />)
 
     // Then the "Original: ..." hint is shown
-    expect(screen.getByText('Original: 2025-06-26 11')).toBeInTheDocument()
+    expect(screen.getByText('Original: 26/06/2025')).toBeInTheDocument()
+  })
+
+  test('a date with a leading ISO date prefills the date field with it, not the raw text', () => {
+    // Given the stored purchase_date starts with a valid ISO date but has a
+    // stray time suffix (e.g. "2025-06-26 11") -- never the raw text, which
+    // the server would reject as purchase_date
+    const data: ReceiptExtraction = { ...SAMPLE_DATA, purchase_date: '2025-06-26 11' }
+
+    // When the edit form is rendered
+    render(<ReceiptEditForm receiptId={RECEIPT_ID} data={data} onSave={jest.fn()} onCancel={jest.fn()} />)
+
+    // Then the date field is prefilled with just the leading ISO date, and
+    // there is no "Original: ..." hint
+    expect(screen.getByDisplayValue('2025-06-26')).toBeInTheDocument()
+    expect(screen.queryByText(/Original:/)).not.toBeInTheDocument()
   })
 
   test('the extract endpoint is never called during edit or save', async () => {

@@ -105,6 +105,39 @@ the full trail of evidence.
   text-based tests and screen readers both keep working; the whole region
   unmounts (and `aria-busy` disappears with it) once loading ends.
 
+## Data quality: warnings, the Edited badge and reset
+
+- **Warnings panel.** When a receipt's `warnings` array is non-empty,
+  `ReceiptResult` renders an `Alert variant="warning"` (so `role="status"`)
+  above the data card, titled "Check these values", with a warning icon
+  plus a bulleted list of each `message` — never color alone. Empty
+  `warnings` renders nothing. Warnings never block Edit, Delete, Reset, or
+  anything else.
+- **Edited badge.** A small `warning`-toned pill reading "Edited" sits next
+  to the store name whenever `edited` is `true`, with `edited_at` in its
+  `title` attribute. It disappears the moment a response comes back with
+  `edited: false` (a re-extract, or a successful reset).
+- **Reset to AI result.** In the surrounding container (not inside
+  `ReceiptResult`), a secondary "Reset to AI result" button appears only
+  when `edited` is `true`, separated from the danger-ghost Delete button
+  (opposite ends of the same row) since the two don't belong together.
+  Clicking it shows an in-page confirmation (an `Alert variant="warning"`,
+  the same pattern as the delete confirmation but non-destructive in tone)
+  — nothing is sent until "Yes, reset"; a pending request shows
+  "Resetting..." with every button in that panel disabled; success swaps
+  in the response data directly (no extra `GET`); failure keeps the
+  current (edited) data on screen with the error shown, so the user can
+  retry. Hidden while the edit form is open. Never calls extract or PUT.
+- **Edit form date prefill.** `ReceiptEditForm` has its own
+  `extractLeadingIsoDate()`, mirroring the backend's
+  `normalize_purchase_date` (same leading-ISO-date-plus-one-separator
+  rule). A stored date that isn't itself ISO but starts with one (e.g.
+  `"2025-06-26 11"`) prefills the `<input type="date">` with just the
+  leading date — never the raw text, which the server would reject as
+  `purchase_date` — and shows no "Original: ..." hint. Only a date with no
+  extractable leading ISO date at all keeps the plain text input plus the
+  hint.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

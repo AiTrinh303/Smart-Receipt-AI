@@ -80,8 +80,30 @@ the purchase info, and the result is displayed for review.
   readable per-field messages via `updateReceipt.ts`. **Cancel** discards
   all changes and sends no request. A stored `purchase_date` that isn't a
   valid ISO date renders as a plain text input (not `<input type="date">`,
-  which would just show blank) with an "Original: ..." hint below it.
+  which would just show blank) with an "Original: ..." hint below it —
+  *unless* `extractLeadingIsoDate()` (mirroring the backend's
+  `normalize_purchase_date`) finds a leading ISO date in it (e.g.
+  `"2025-06-26 11"`), in which case the `<input type="date">` is prefilled
+  with just that leading date instead (never the raw text, which the
+  server would reject) and no hint is shown.
   Never calls the extract endpoint.
+  **Data-quality warnings, Edited badge, reset
+  (`ReceiptResult.tsx`, `src/api/resetReceipt.ts`):** when `data.warnings`
+  is non-empty, `ReceiptResult` renders an `Alert variant="warning"`
+  ("Check these values", icon + bulleted messages) above the data card;
+  empty `warnings` renders nothing, and warnings never block any action.
+  An "Edited" badge (warning-toned, `edited_at` in its `title`) sits next
+  to the store name when `data.edited` is `true`. In the surrounding
+  container, a secondary "Reset to AI result" button appears only when
+  `edited` is `true`, at the opposite end of the footer row from the
+  danger-ghost Delete button; clicking it shows an in-page confirmation
+  (`Alert variant="warning"`, same pattern as the delete confirmation) —
+  nothing sent until "Yes, reset"; pending shows "Resetting..." with every
+  button in that panel disabled; success swaps in the response data
+  directly (no extra `GET`); failure keeps the current data with the error
+  shown, so the user can retry. Hidden while the edit form is open; never
+  calls extract or PUT. `resetReceipt()` POSTs to
+  `/receipts/{id}/reset`, same `ApiError` pattern as `deleteReceipt.ts`.
   **Original file viewer (`ReceiptFileViewer.tsx`, `src/api/receiptFileUrl.ts`,
   `ReceiptDetailLayout.tsx`):** `receiptFileUrl(id)` builds the
   `GET /receipts/{id}/file` URL (no `fetch` — an `<img src>`/`<iframe src>`
@@ -153,8 +175,9 @@ the purchase info, and the result is displayed for review.
   **Style guide (`StyleGuide.tsx`, `env.ts`, `?view=styleguide`):**
   dev-only page showing every `Button`/`Alert` variant, the nav tab's
   active/inactive states, the logo mark, the dropzone's
-  idle/drag-over/file-selected states, a `Skeleton` sample, and the
-  card-variant items list, with static sample data (no network
+  idle/drag-over/file-selected states, a `Skeleton` sample, the
+  card-variant items list, and the warnings panel/Edited badge/reset
+  confirmation, with static sample data (no network
   calls) — open it after any visual change, since jsdom cannot see
   colors or layout. Gated on `env.ts`'s `isDev` (`import.meta.env.DEV`,
   isolated into its own module specifically so tests can

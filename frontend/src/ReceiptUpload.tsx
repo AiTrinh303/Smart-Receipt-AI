@@ -3,6 +3,7 @@ import { ApiError } from './api/ApiError'
 import { deleteReceipt } from './api/deleteReceipt'
 import { extractReceipt } from './api/extractReceipt'
 import { getReceipt } from './api/getReceipt'
+import { resetReceipt } from './api/resetReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
 import type { ReceiptExtraction } from './api/types'
 import { navigateTo } from './navigation'
@@ -134,6 +135,9 @@ function ReceiptUpload() {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isConfirmingReset, setIsConfirmingReset] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
 
   const initialReceipt = getReceiptIdFromUrl()
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(initialReceipt.id !== null)
@@ -378,6 +382,29 @@ function ReceiptUpload() {
     }
   }
 
+  const handleConfirmReset = async () => {
+    if (!result) {
+      return
+    }
+
+    setIsResetting(true)
+    setResetError(null)
+
+    try {
+      const updated = await resetReceipt(result.receipt_id)
+      setResult(updated)
+      setIsConfirmingReset(false)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setResetError(err.message)
+      } else {
+        setResetError(NETWORK_ERROR_MESSAGE)
+      }
+    } finally {
+      setIsResetting(false)
+    }
+  }
+
   const handleReset = () => {
     setFile(null)
     setPreviewUrl(null)
@@ -392,6 +419,9 @@ function ReceiptUpload() {
     setIsConfirmingDelete(false)
     setIsDeleting(false)
     setDeleteError(null)
+    setIsConfirmingReset(false)
+    setIsResetting(false)
+    setResetError(null)
     setIsLoadingReceipt(false)
     setNotFound(false)
     setLoadError(null)
@@ -469,8 +499,48 @@ function ReceiptUpload() {
                   </div>
                 </div>
               </Alert>
+            ) : isConfirmingReset ? (
+              <Alert variant="warning">
+                <div className="flex flex-col gap-3">
+                  <p>Replace your edits with the original AI result? This cannot be undone.</p>
+                  {resetError && <p className="font-semibold">{resetError}</p>}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleConfirmReset}
+                      loading={isResetting}
+                      loadingText="Resetting..."
+                    >
+                      Yes, reset
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setIsConfirmingReset(false)}
+                      disabled={isResetting}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </Alert>
             ) : (
-              <div className="flex justify-end border-t border-border pt-3">
+              <div className="flex items-center justify-between border-t border-border pt-3">
+                {result.edited ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setResetError(null)
+                      setIsConfirmingReset(true)
+                    }}
+                  >
+                    Reset to AI result
+                  </Button>
+                ) : (
+                  <span />
+                )}
                 <Button
                   variant="danger-ghost"
                   size="sm"

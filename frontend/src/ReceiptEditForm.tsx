@@ -7,6 +7,30 @@ import type { ReceiptExtraction } from './api/types'
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
 
+// Mirrors the backend's domain.rules.normalize_purchase_date: an ISO date
+// optionally followed by exactly one non-digit separator (space, "T",
+// comma) and a single trailing token with no further whitespace -- e.g.
+// "2025-06-26 11" or "2025-06-26T11:04:00". Used only to decide what to
+// prefill the date field with; the server is always the source of truth
+// for whether a date is valid.
+const LEADING_ISO_DATE_PATTERN = /^(\d{4}-\d{2}-\d{2})([ T,][^\s]*)?$/
+
+function extractLeadingIsoDate(raw: string): string | null {
+  const match = LEADING_ISO_DATE_PATTERN.exec(raw)
+  if (!match) {
+    return null
+  }
+
+  const candidate = match[1]
+  const [year, month, day] = candidate.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  // Date auto-rolls over an invalid day/month (e.g. 2025-13-45) instead of
+  // failing, so confirm the round-trip matches before trusting it.
+  const isValidCalendarDate =
+    parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
+  return isValidCalendarDate ? candidate : null
+}
+
 interface ItemRow {
   name: string
   quantity: string
@@ -59,8 +83,20 @@ interface ReceiptEditFormProps {
 }
 
 function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormProps) {
+  const originalDate = data.purchase_date
+  const isOriginalDateIso = originalDate === null || ISO_DATE_PATTERN.test(originalDate)
+  // A stored value like "2025-06-26 11" isn't itself a valid ISO date, but
+  // starts with one -- prefill the date field with that leading date (never
+  // with text the server would reject) instead of falling back to the plain
+  // text input. Only a date with no extractable leading ISO date at all
+  // keeps the text input + "Original: ..." hint.
+  const leadingIsoDate =
+    !isOriginalDateIso && originalDate !== null ? extractLeadingIsoDate(originalDate) : null
+  const canUseDateInput = isOriginalDateIso || leadingIsoDate !== null
+  const initialDateValue = isOriginalDateIso ? (originalDate ?? '') : (leadingIsoDate ?? originalDate ?? '')
+
   const [storeName, setStoreName] = useState(data.store_name ?? '')
-  const [purchaseDate, setPurchaseDate] = useState(data.purchase_date ?? '')
+  const [purchaseDate, setPurchaseDate] = useState(initialDateValue)
   const [currency, setCurrency] = useState(data.currency ?? '')
   const [items, setItems] = useState<ItemRow[]>(data.items.map(itemToRow))
   const [discounts, setDiscounts] = useState<AmountRow[]>(data.discounts.map(amountToRow))
@@ -70,9 +106,6 @@ function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormP
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-
-  const originalDate = data.purchase_date
-  const isOriginalDateIso = originalDate === null || ISO_DATE_PATTERN.test(originalDate)
 
   const updateItem = (index: number, field: keyof ItemRow, value: string) => {
     setItems((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
@@ -182,7 +215,7 @@ function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormP
 
       <label className="flex flex-col gap-1 text-sm text-gray-700">
         Purchase date
-        {isOriginalDateIso ? (
+        {canUseDateInput ? (
           <input
             type="date"
             value={purchaseDate}

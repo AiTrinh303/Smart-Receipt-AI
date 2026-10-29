@@ -61,9 +61,21 @@ updated data directly from the response (no extra `GET`); **Cancel**
 discards the changes and sends no request. Empty fields are saved as
 `null`; non-numeric amounts are caught client-side before any request is
 sent, and the server's validation messages are shown for anything it
-rejects. If the stored date isn't a valid ISO date, the field shows an
-"Original: ..." hint so it can be corrected. Editing and saving never call
+rejects. If the stored date isn't a valid ISO date but starts with one
+(e.g. `"2025-06-26 11"`), the date field is prefilled with just that
+leading date instead — never the raw text, which the server would reject;
+only a date with no leading ISO date at all keeps the plain text field and
+an "Original: ..." hint. Editing and saving never call
 the extract endpoint — no AI call, no cost.
+
+If a receipt has data-quality warnings (see the API section below), a
+panel titled "Check these values" lists them above the data, and a small
+"Edited" badge appears next to the store name whenever the receipt has
+unsaved-to-AI edits (its timestamp is in the badge's `title`). A secondary
+"Reset to AI result" button then appears next to Delete; it shows an
+in-page confirmation ("Replace your edits with the original AI result?
+This cannot be undone.") before sending anything, and the restored data
+replaces the view directly from the response.
 
 Next to the extracted data (both right after extraction and when reopening
 a saved receipt), the original uploaded file is shown via

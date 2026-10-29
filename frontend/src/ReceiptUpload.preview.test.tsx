@@ -126,6 +126,9 @@ test('"Upload another receipt" after a reset revokes the preview object URL', as
             items: [],
             discounts: [],
             taxes: [],
+            warnings: [],
+            edited: false,
+            edited_at: null,
           }),
       })
     }

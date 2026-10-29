@@ -15,6 +15,13 @@ export interface Tax {
   amount: number | null
 }
 
+export interface ReceiptWarning {
+  code: string
+  field: string
+  message: string
+  details: Record<string, string>
+}
+
 export interface ReceiptExtraction {
   receipt_id: string
   store_name: string | null
@@ -24,6 +31,9 @@ export interface ReceiptExtraction {
   discounts: Discount[]
   taxes: Tax[]
   total: number | null
+  warnings: ReceiptWarning[]
+  edited: boolean
+  edited_at: string | null
 }
 
 export interface ReceiptSummary {

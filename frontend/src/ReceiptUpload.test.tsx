@@ -244,7 +244,7 @@ describe('submitting to the backend', () => {
     routeFetch(fetchSpy, {
       upload: () => uploadDeferred.promise,
       extract: () =>
-        Promise.resolve(jsonResponse(200, { receipt_id: 'id', items: [], discounts: [], taxes: [] })),
+        Promise.resolve(jsonResponse(200, { receipt_id: 'id', items: [], discounts: [], taxes: [], warnings: [], edited: false, edited_at: null })),
     })
     const { user } = await selectValidFile()
 
@@ -295,6 +295,9 @@ describe('submitting to the backend', () => {
         items: [{ name: 'Milk', quantity: 1, unit_price: 2.5, line_total: 2.5 }],
         discounts: [],
         taxes: [],
+        warnings: [],
+        edited: false,
+        edited_at: null,
         total: 2.5,
       }),
     )
@@ -332,7 +335,7 @@ describe('submitting to the backend', () => {
 
     // Cleanup: resolve so the test doesn't leave a dangling promise
     extractDeferred.resolve(
-      jsonResponse(200, { receipt_id: 'abc-123', items: [], discounts: [], taxes: [] }),
+      jsonResponse(200, { receipt_id: 'abc-123', items: [], discounts: [], taxes: [], warnings: [], edited: false, edited_at: null }),
     )
     await waitFor(() =>
       expect(screen.queryByText('Extracting receipt data...')).not.toBeInTheDocument(),
@@ -358,6 +361,9 @@ describe('submitting to the backend', () => {
             items: [],
             discounts: [],
             taxes: [],
+            warnings: [],
+            edited: false,
+            edited_at: null,
           }),
         )
       },
@@ -455,7 +461,7 @@ describe('submitting to the backend', () => {
           )
         }
         return Promise.resolve(
-          jsonResponse(200, { receipt_id: 'abc-123', store_name: 'Corner Store', items: [], discounts: [], taxes: [] }),
+          jsonResponse(200, { receipt_id: 'abc-123', store_name: 'Corner Store', items: [], discounts: [], taxes: [], warnings: [], edited: false, edited_at: null }),
         )
       },
     })
@@ -513,6 +519,9 @@ describe('submitting to the backend', () => {
             items: [],
             discounts: [],
             taxes: [],
+            warnings: [],
+            edited: false,
+            edited_at: null,
           }),
         ),
     })
@@ -536,7 +545,7 @@ describe('submitting to the backend', () => {
     routeFetch(fetchSpy, {
       upload: () => Promise.resolve(jsonResponse(201, { receipt_id: 'pdf-456', filename: 'receipt.pdf' })),
       extract: () =>
-        Promise.resolve(jsonResponse(200, { receipt_id: 'pdf-456', items: [], discounts: [], taxes: [] })),
+        Promise.resolve(jsonResponse(200, { receipt_id: 'pdf-456', items: [], discounts: [], taxes: [], warnings: [], edited: false, edited_at: null })),
     })
     const user = userEvent.setup()
     render(<ReceiptUpload />)
@@ -560,7 +569,7 @@ describe('submitting to the backend', () => {
     routeFetch(fetchSpy, {
       upload: () => Promise.resolve(jsonResponse(201, { receipt_id: 'abc-123', filename: 'receipt.jpg' })),
       extract: () =>
-        Promise.resolve(jsonResponse(200, { receipt_id: 'abc-123', items: [], discounts: [], taxes: [] })),
+        Promise.resolve(jsonResponse(200, { receipt_id: 'abc-123', items: [], discounts: [], taxes: [], warnings: [], edited: false, edited_at: null })),
     })
     const { user, validFile } = await selectValidFile()
 
@@ -590,6 +599,9 @@ describe('submitting to the backend', () => {
             items: [],
             discounts: [],
             taxes: [],
+            warnings: [],
+            edited: false,
+            edited_at: null,
             total: 9.99,
           }),
         ),

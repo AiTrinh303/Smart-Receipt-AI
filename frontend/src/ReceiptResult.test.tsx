@@ -14,6 +14,9 @@ const FULL_DATA: ReceiptExtraction = {
   discounts: [{ description: 'Loyalty discount', amount: 0.5 }],
   taxes: [{ description: 'Sales tax', amount: 0.64 }],
   total: 8.14,
+  warnings: [],
+  edited: false,
+  edited_at: null,
 }
 
 const EMPTY_DATA: ReceiptExtraction = {
@@ -25,6 +28,9 @@ const EMPTY_DATA: ReceiptExtraction = {
   discounts: [],
   taxes: [],
   total: null,
+  warnings: [],
+  edited: false,
+  edited_at: null,
 }
 
 test('full data: store, date, every item row, discounts, taxes and total are shown', () => {
@@ -81,6 +87,48 @@ test('Edit is reachable by role and name, and calls onEdit', () => {
 test('a malformed currency code renders without throwing', () => {
   const data = { ...FULL_DATA, currency: 'US$' }
   expect(() => render(<ReceiptResult data={data} onReset={() => {}} onEdit={() => {}} />)).not.toThrow()
+})
+
+test('warnings are shown with their messages, titled "Check these values"', () => {
+  // Given a receipt with data-quality warnings
+  const data = {
+    ...FULL_DATA,
+    warnings: [
+      { code: 'TOTAL_MISMATCH', field: 'total', message: 'The total does not match the items.', details: {} },
+      { code: 'MISSING_DATE', field: 'purchase_date', message: 'The purchase date is missing.', details: {} },
+    ],
+  }
+
+  // When rendered
+  render(<ReceiptResult data={data} onReset={() => {}} onEdit={() => {}} />)
+
+  // Then a warning panel lists every message
+  expect(screen.getByText('Check these values')).toBeInTheDocument()
+  expect(screen.getByText('The total does not match the items.')).toBeInTheDocument()
+  expect(screen.getByText('The purchase date is missing.')).toBeInTheDocument()
+})
+
+test('no warnings panel when warnings is empty', () => {
+  // Given a receipt with no warnings (FULL_DATA)
+  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
+
+  // Then no warning panel is shown
+  expect(screen.queryByText('Check these values')).not.toBeInTheDocument()
+})
+
+test('the Edited badge shows only when edited is true, with edited_at in its title', () => {
+  // Given an edited receipt
+  const edited = { ...FULL_DATA, edited: true, edited_at: '2026-01-20T10:00:00+00:00' }
+  render(<ReceiptResult data={edited} onReset={() => {}} onEdit={() => {}} />)
+
+  // Then the "Edited" badge is shown with the timestamp in its title
+  const badge = screen.getByText('Edited')
+  expect(badge).toHaveAttribute('title', expect.stringContaining('2026-01-20T10:00:00+00:00'))
+})
+
+test('no Edited badge when edited is false', () => {
+  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
+  expect(screen.queryByText('Edited')).not.toBeInTheDocument()
 })
 
 function mockMatchMedia(matches: boolean) {
