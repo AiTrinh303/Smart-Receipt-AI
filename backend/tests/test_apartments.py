@@ -360,3 +360,236 @@ def test_apartment_fields_have_the_same_key_set_and_types_everywhere(temp_upload
         assert isinstance(body["apartment_name"], str), name
         assert body["apartment_id"] == VALID_APARTMENT_ID
         assert body["apartment_name"] == OBERAUDORF_NAME
+
+
+# --- PUT /receipts/{id}/apartment -------------------------------------------
+
+
+def test_moving_a_receipt_between_apartments_updates_get_and_list(temp_upload_dir):
+    # Given an extracted receipt in one apartment
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+
+    # When it is moved to the other apartment
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment", json={"apartment_id": OTHER_APARTMENT_ID}
+    )
+
+    # Then the response, a subsequent GET, and the list all show the new apartment
+    assert response.status_code == 200
+    body = response.json()
+    assert body["apartment_id"] == OTHER_APARTMENT_ID
+    assert body["apartment_name"] == WALDGLUECK_NAME
+
+    get_body = client.get(f"/receipts/{receipt_id}").json()
+    assert get_body["apartment_id"] == OTHER_APARTMENT_ID
+    assert get_body["apartment_name"] == WALDGLUECK_NAME
+
+    list_item = next(
+        i for i in client.get("/receipts").json()["items"] if i["receipt_id"] == receipt_id
+    )
+    assert list_item["apartment_id"] == OTHER_APARTMENT_ID
+    assert list_item["apartment_name"] == WALDGLUECK_NAME
+
+
+def test_changing_the_apartment_leaves_extracted_and_ai_result_json_byte_identical(
+    temp_upload_dir, temp_repository
+):
+    # Given an extracted receipt
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+    with temp_repository._connect() as conn:
+        before = conn.execute(
+            "SELECT extracted_json, ai_result_json FROM receipts WHERE receipt_id = ?",
+            (receipt_id,),
+        ).fetchone()
+
+    # When its apartment is changed
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment", json={"apartment_id": OTHER_APARTMENT_ID}
+    )
+    assert response.status_code == 200
+
+    # Then extracted_json and ai_result_json are untouched, byte for byte
+    with temp_repository._connect() as conn:
+        after = conn.execute(
+            "SELECT extracted_json, ai_result_json FROM receipts WHERE receipt_id = ?",
+            (receipt_id,),
+        ).fetchone()
+    assert after == before
+
+
+def test_changing_the_apartment_does_not_set_edited_at(temp_upload_dir):
+    # Given an extracted receipt, never edited
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+
+    # When its apartment is changed
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment", json={"apartment_id": OTHER_APARTMENT_ID}
+    )
+
+    # Then it is still not considered edited
+    body = response.json()
+    assert body["edited"] is False
+    assert body["edited_at"] is None
+
+
+def test_changing_the_apartment_of_an_already_edited_receipt_keeps_edited_at(temp_upload_dir):
+    # Given an extracted, then edited, receipt
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+    put_response = client.put(
+        f"/receipts/{receipt_id}",
+        json={
+            "store_name": "Edited Store", "purchase_date": "2026-01-15", "currency": "USD",
+            "items": [], "discounts": [], "taxes": [], "total": 10.0,
+        },
+    )
+    edited_at = put_response.json()["edited_at"]
+    assert edited_at is not None
+
+    # When its apartment is changed
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment", json={"apartment_id": OTHER_APARTMENT_ID}
+    )
+
+    # Then edited_at is left exactly as it was -- unrelated to classification
+    body = response.json()
+    assert body["edited"] is True
+    assert body["edited_at"] == edited_at
+
+
+def test_apartment_update_updates_the_uploads_row_too(temp_upload_dir, temp_repository):
+    # Given an extracted receipt
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+
+    # When its apartment is changed
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment", json={"apartment_id": OTHER_APARTMENT_ID}
+    )
+    assert response.status_code == 200
+
+    # Then the uploads row reflects the new apartment too
+    upload = temp_repository.get_upload(receipt_id)
+    assert upload.apartment_id == OTHER_APARTMENT_ID
+
+
+def test_apartment_update_non_uuid_id_returns_400():
+    response = client.put(
+        "/receipts/not-a-uuid/apartment", json={"apartment_id": VALID_APARTMENT_ID}
+    )
+    assert response.status_code == 400
+
+
+def test_apartment_update_unknown_receipt_returns_404():
+    unknown_id = str(uuid.uuid4())
+    response = client.put(
+        f"/receipts/{unknown_id}/apartment", json={"apartment_id": VALID_APARTMENT_ID}
+    )
+    assert response.status_code == 404
+
+
+def test_apartment_update_uploaded_but_never_extracted_returns_404(temp_upload_dir):
+    # Given a receipt that was uploaded but never extracted
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+
+    # When its apartment is changed
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment", json={"apartment_id": OTHER_APARTMENT_ID}
+    )
+
+    # Then it is 404, not 200 -- update_receipt never creates a receipts row
+    assert response.status_code == 404
+
+
+def test_apartment_update_unknown_apartment_returns_422(temp_upload_dir):
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment", json={"apartment_id": "does-not-exist"}
+    )
+    assert response.status_code == 422
+
+
+def test_apartment_update_inactive_apartment_returns_422(temp_upload_dir, temp_repository):
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+    with temp_repository._connect() as conn:
+        conn.execute("UPDATE apartments SET active = 0 WHERE id = ?", (OTHER_APARTMENT_ID,))
+        conn.commit()
+
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment", json={"apartment_id": OTHER_APARTMENT_ID}
+    )
+    assert response.status_code == 422
+
+
+def test_apartment_update_null_apartment_returns_422(temp_upload_dir):
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+
+    response = client.put(f"/receipts/{receipt_id}/apartment", json={"apartment_id": None})
+    assert response.status_code == 422
+
+
+def test_apartment_update_missing_apartment_id_returns_422(temp_upload_dir):
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+
+    response = client.put(f"/receipts/{receipt_id}/apartment", json={})
+    assert response.status_code == 422
+
+
+def test_apartment_update_rejects_unknown_fields(temp_upload_dir):
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment",
+        json={"apartment_id": OTHER_APARTMENT_ID, "store_name": "Sneaky"},
+    )
+    assert response.status_code == 422
+
+
+def test_apartment_update_repository_failure_returns_500(temp_upload_dir, temp_repository):
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+
+    class FlakyRepository:
+        def __init__(self, real):
+            self._real = real
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+        def set_receipt_apartment(self, receipt_id, apartment_id):
+            raise RuntimeError("disk full: /some/internal/path leaked here")
+
+    main.app.dependency_overrides[get_repository] = lambda: FlakyRepository(temp_repository)
+
+    response = client.put(
+        f"/receipts/{receipt_id}/apartment", json={"apartment_id": OTHER_APARTMENT_ID}
+    )
+
+    assert response.status_code == 500
+    assert "disk full" not in response.text
+    assert "/some/internal/path" not in response.text
+
+
+def test_re_extract_after_apartment_change_keeps_the_new_apartment(temp_upload_dir):
+    # Given a receipt moved to a different apartment after its first extraction
+    receipt_id = upload_file(apartment_id=VALID_APARTMENT_ID)
+    extract(receipt_id)
+    client.put(f"/receipts/{receipt_id}/apartment", json={"apartment_id": OTHER_APARTMENT_ID})
+
+    # When it is extracted again (e.g. Retry)
+    response = extract(receipt_id)
+
+    # Then the apartment set via PUT is kept, not reverted to the upload's
+    # original apartment_id
+    body = response.json()
+    assert body["apartment_id"] == OTHER_APARTMENT_ID
+    assert body["apartment_name"] == WALDGLUECK_NAME

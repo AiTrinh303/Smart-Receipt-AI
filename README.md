@@ -193,7 +193,8 @@ Every receipt-shaped response — `upload`, `extract`, `GET` one, `PUT`,
 belongs to at most one apartment, chosen at upload (required, see above).
 Changing it is a classification change, not a data edit: it never sets
 `edited_at` and never touches `extracted_json`, `ai_result_json`, or
-`created_at`. `PUT` and the reset endpoint never change it.
+`created_at`. `PUT /receipts/{id}` and the reset endpoint never change it;
+it is changed only via `PUT /receipts/{receipt_id}/apartment` — see below.
 
 #### Data-quality warnings
 
@@ -261,6 +262,18 @@ All amount math uses `Decimal(str(value))`, never raw floats.
   displayed data changes. A successful PUT sets **`edited`** to `true` and
   **`edited_at`** to the current UTC time (re-extracting the same receipt,
   or resetting it, clears both back to `false`/`null`).
+- `PUT /receipts/{receipt_id}/apartment` — moves a saved receipt to a
+  different apartment: body `{"apartment_id": "<id>"}` (unknown extra
+  fields rejected; a missing or `null` `apartment_id` is `422`). `400` for
+  a non-UUID id; `404` for an unknown id or one that was uploaded but
+  never extracted; `422` for an unknown or inactive apartment; `500`
+  (generic) on a database failure. Returns `200` with the same shape as
+  `GET` (including `warnings`). Updates `apartment_id`/`updated_at` on the
+  receipt (and the matching `uploads` row, when one exists) in one
+  transaction — this is a classification change, not an edit, so
+  `edited_at`, `extracted_json`, `ai_result_json` and `created_at` are
+  never touched. A later re-extract keeps this apartment, not the one the
+  file was originally uploaded with.
 - `POST /receipts/{receipt_id}/reset` — discards any edits and restores the
   receipt from `ai_result_json` (re-applying the same date normalization
   extraction does), in one transaction; `edited`/`edited_at` are cleared,

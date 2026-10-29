@@ -61,6 +61,24 @@ def test_preflight_for_delete_on_a_receipt_succeeds_with_delete_allowed():
     assert "DELETE" in response.headers.get("access-control-allow-methods", "")
 
 
+def test_preflight_for_put_on_a_receipt_apartment_succeeds_with_put_allowed():
+    # Given a browser about to send a PUT request to move a receipt's apartment
+    # When it sends the CORS preflight OPTIONS request first
+    response = client.options(
+        "/receipts/11111111-1111-1111-1111-111111111111/apartment",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    # Then the preflight succeeds, echoes the allowed origin, and allows PUT
+    assert response.status_code in (200, 204)
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert "PUT" in response.headers.get("access-control-allow-methods", "")
+
+
 def test_preflight_from_unlisted_origin_does_not_get_cors_header():
     # Given a preflight request from an origin that is not in CORS_ORIGINS
     # When it requests permission to send a PUT

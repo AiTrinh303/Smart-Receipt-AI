@@ -436,6 +436,30 @@ class SqliteReceiptRepository:
             return None
         return Apartment(id=row[0], name=row[1], sort_order=row[2], active=bool(row[3]))
 
+    def set_receipt_apartment(self, receipt_id: str, apartment_id: str) -> SavedReceipt | None:
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM receipts WHERE receipt_id = ?", (receipt_id,)
+            ).fetchone()
+            if existing is None:
+                return None
+
+            # One transaction: only apartment_id and updated_at change here --
+            # this is a classification change, never an edit, so edited_at,
+            # extracted_json, ai_result_json and created_at are all left
+            # untouched. The uploads row (when one exists) is kept in sync too.
+            conn.execute(
+                "UPDATE receipts SET apartment_id = ?, updated_at = ? WHERE receipt_id = ?",
+                (apartment_id, now, receipt_id),
+            )
+            conn.execute(
+                "UPDATE uploads SET apartment_id = ? WHERE receipt_id = ?",
+                (apartment_id, receipt_id),
+            )
+
+        return self.get_receipt(receipt_id)
+
     def delete_receipt(self, receipt_id: str) -> bool:
         with self._connect() as conn:
             existing = conn.execute(

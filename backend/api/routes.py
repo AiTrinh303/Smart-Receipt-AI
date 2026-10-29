@@ -11,7 +11,7 @@ import config
 from adapters.file_storage import delete_file, find_file, save_file
 from adapters.openai_extractor import OpenAIReceiptExtractor
 from adapters.sqlite_repository import SqliteReceiptRepository
-from domain.models import ReceiptUpdate
+from domain.models import ApartmentAssignment, ReceiptUpdate
 from domain.ports import (
     ExtractionError,
     ExtractionUnavailableError,
@@ -307,6 +307,44 @@ def reset_receipt(receipt_id: str, repository: ReceiptRepository = Depends(get_r
         raise HTTPException(
             status_code=500,
             detail="Could not reset the receipt. Please try again.",
+        )
+
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    return {**saved.model_dump(), "warnings": _warnings_payload(saved)}
+
+
+@router.put("/receipts/{receipt_id}/apartment")
+def update_receipt_apartment(
+    receipt_id: str,
+    assignment: ApartmentAssignment,
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    existing = repository.get_receipt(str(validated_id))
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    apartment = repository.get_apartment(assignment.apartment_id)
+    if apartment is None:
+        raise HTTPException(status_code=422, detail="Unknown apartment.")
+    if not apartment.active:
+        raise HTTPException(status_code=422, detail="This apartment is no longer active.")
+
+    try:
+        saved = repository.set_receipt_apartment(str(validated_id), assignment.apartment_id)
+    except Exception:
+        # Never tell the client the apartment changed when it did not; the
+        # real cause is logged for developers only.
+        logger.exception("Failed to update receipt apartment: receipt_id=%s", receipt_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not update the apartment. Please try again.",
         )
 
     if saved is None:

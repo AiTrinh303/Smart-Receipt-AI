@@ -1,7 +1,14 @@
 from pathlib import Path
 from typing import Protocol
 
-from domain.models import Apartment, ReceiptData, ReceiptSummary, ReceiptUpdate, SavedReceipt, SavedUpload
+from domain.models import (
+    Apartment,
+    ReceiptData,
+    ReceiptSummary,
+    ReceiptUpdate,
+    SavedReceipt,
+    SavedUpload,
+)
 
 
 class ExtractionError(Exception):
@@ -49,3 +56,5 @@ class ReceiptRepository(Protocol):
     def list_apartments(self) -> list[Apartment]: ...
 
     def get_apartment(self, apartment_id: str) -> Apartment | None: ...
+
+    def set_receipt_apartment(self, receipt_id: str, apartment_id: str) -> SavedReceipt | None: ...

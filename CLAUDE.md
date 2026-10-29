@@ -228,11 +228,15 @@ the purchase info, and the result is displayed for review.
     `ExtractionUnavailableError`, `ReceiptRepository` Protocol —
     `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
     `list_receipts`/`update_receipt`/`reset_receipt`/`delete_receipt`/
-    `list_apartments`/`get_apartment`, plus the strict, separate
-    `ReceiptUpdate`/`LineItemUpdate`/`DiscountUpdate`/`TaxUpdate` models in
-    `models.py` for user-submitted corrections — deliberately distinct from
-    the lenient `ReceiptData` family used to parse AI output, which must
-    stay lenient). `ExtractionError` means the receipt itself couldn't
+    `list_apartments`/`get_apartment`/`set_receipt_apartment`, plus the
+    strict, separate `ReceiptUpdate`/`LineItemUpdate`/`DiscountUpdate`/
+    `TaxUpdate` models in `models.py` for user-submitted corrections, and
+    `ApartmentAssignment` (`apartment_id: str`, `extra="forbid"`) for
+    `PUT /receipts/{id}/apartment`'s body — its own model, deliberately
+    separate from `ReceiptUpdate`, so a classification change can never be
+    confused with (or smuggled into) a data correction — deliberately
+    distinct from the lenient `ReceiptData` family used to parse AI output,
+    which must stay lenient). `ExtractionError` means the receipt itself couldn't
     be read (unparseable output, timeout, bad request);
     `ExtractionUnavailableError` means the AI *service* isn't usable (bad
     key, no credit, unknown model, rate limit) — they map to `502` and
@@ -281,6 +285,12 @@ the purchase info, and the result is displayed for review.
     transaction, `ai_result_json` itself never touched; returns `None` if
     the receipt doesn't exist (so the route 404s), and is safe to call
     repeatedly (idempotent) or on a receipt that was never edited.
+    `set_receipt_apartment` updates only `apartment_id` and `updated_at` on
+    the `receipts` row (plus `apartment_id` on the matching `uploads` row,
+    when one exists) in one transaction — never `edited_at`,
+    `extracted_json`, `ai_result_json` or `created_at`, since this is a
+    classification change, not an edit; returns `None` if the receipt
+    doesn't exist (so the route 404s), else re-fetches via `get_receipt`.
     `delete_receipt` removes the row from both
     `receipts` and `uploads` in one transaction, returning whether a
     `receipts` row existed. Must never import `api`.
@@ -335,6 +345,19 @@ the purchase info, and the result is displayed for review.
     on a never-edited receipt); never calls `get_extractor` or touches the
     stored file. Already allowed by the existing CORS `allow_methods` list
     (`tests/test_reset_and_edited.py` has a preflight test for it anyway).
+    `PUT /receipts/{receipt_id}/apartment` — moves a receipt to a different
+    apartment: body validated against `ApartmentAssignment` (missing/null
+    `apartment_id`, or any extra field -> FastAPI's own `422`); 400 for a
+    non-UUID id; 404 if no `receipts` row exists (checked via `get_receipt`
+    before the apartment is validated, same as the other id-taking routes);
+    422 via `repository.get_apartment()` for an unknown or inactive
+    apartment (same messages as upload's check); 500 generic on a
+    repository failure; 200 with the same shape as GET (including
+    `warnings`). Calls `repository.set_receipt_apartment(...)`, never
+    `update_receipt`/`reset_receipt` — so `edited_at`, `extracted_json`,
+    `ai_result_json` and `created_at` are always left untouched. A later
+    re-extract keeps this apartment, since `extract_receipt`'s own
+    `ON CONFLICT` branch never overwrites `apartment_id`.
     `DELETE /receipts/{receipt_id}` — 204 (empty body) on success, 400 for
     a non-UUID id, 404 if no `receipts` row exists (unknown id, or
     uploaded-but-never-extracted — nothing touched on disk or in the DB);

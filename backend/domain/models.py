@@ -127,6 +127,17 @@ class TaxUpdate(BaseModel):
     amount: float | None = Field(strict=True, allow_inf_nan=False)
 
 
+class ApartmentAssignment(BaseModel):
+    """Body of PUT /receipts/{id}/apartment -- a classification change,
+    deliberately its own strict model so changing the apartment can never
+    be confused with (or smuggled into) ReceiptUpdate's data-correction
+    fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    apartment_id: str = Field(min_length=1)
+
+
 class ReceiptUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
