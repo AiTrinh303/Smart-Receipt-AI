@@ -36,10 +36,13 @@ the purchase info, and the result is displayed for review.
   "Upload another receipt", the 502/503 messages) must stay exactly as they
   are unless a task explicitly asks to change them.
   `src/api/` holds API call modules (`uploadReceipt.ts`, `extractReceipt.ts`,
-  `getReceipt.ts`, `listReceipts.ts`, `getApartments.ts`, shared `ApiError`,
-  shared response types in `types.ts` — including `ReceiptSummary`, the
-  list-row shape, and `Apartment` (`id`/`name`)); the backend URL is read
-  from `VITE_API_URL` (`.env.example` / `.env`, the latter gitignored).
+  `getReceipt.ts`, `listReceipts.ts`, `getApartments.ts`,
+  `updateReceiptApartment.ts`, shared `ApiError`, shared response types in
+  `types.ts` — including `ReceiptSummary`, the list-row shape, and
+  `Apartment` (`id`/`name`); `ReceiptExtraction` and `ReceiptSummary` both
+  carry flat `apartment_id`/`apartment_name` (`string | null`), matching
+  every backend receipt-shaped response); the backend URL is read from
+  `VITE_API_URL` (`.env.example` / `.env`, the latter gitignored).
   `ReceiptUpload.tsx` uploads a file then automatically calls extract and
   renders `ReceiptResult.tsx` with the structured result.
   **Apartment choice (`hooks/useApartments.ts`, `ui/RadioCardGroup.tsx`):**
@@ -85,9 +88,28 @@ the purchase info, and the result is displayed for review.
   `location.search` so external navigation remounts cleanly without
   disturbing `ReceiptUpload`'s own internal `replaceState` calls.
   `ReceiptHistory.tsx` lists saved receipts (store, date, total; "Not
-  detected" for anything missing) and navigates to `?receipt=<id>` on row
-  click; `ReceiptUpload.tsx` adds a "Back to history" link when showing a
-  result.
+  detected" for anything missing, each row's `apartment_name` as a small
+  icon+text badge or plain muted "Not assigned" when it's `null`/missing —
+  no filtering by apartment) and navigates to `?receipt=<id>` on row click;
+  `ReceiptUpload.tsx` adds a "Back to history" link when showing a result.
+  **Changing the apartment on a saved receipt (`ReceiptApartment.tsx`,
+  `src/api/updateReceiptApartment.ts`):** rendered by the saved-receipt
+  container (the same `if (result)` branch used right after extraction and
+  when reopening `?receipt=<uuid>`) directly above `ReceiptResult` —
+  `ReceiptResult.tsx` itself is never touched. The same `RadioCardGroup`,
+  legend "Apartment", with the receipt's `apartment_id` selected (or
+  nothing selected, with no extra message, when it's `null`); it fetches
+  its own apartment list via `useApartments(true)` (always enabled here,
+  since it only mounts in the saved-receipt view), sharing that hook's
+  module-level cache with the upload form's. Choosing another card calls
+  `PUT /receipts/{id}/apartment`: "Saving..." and the group disabled while
+  pending; success calls back up with the response so `ReceiptUpload`
+  updates `result` directly (no extra `GET`) and shows "Saved" in a
+  `role="status"`; failure shows an `Alert variant="error"` and reverts the
+  local selection to what it was before, so picking the same card again
+  retries. Hidden while the edit form is open (it's only in the
+  non-editing branch); calls neither `extractReceipt` nor the plain
+  `updateReceipt`/`PUT /receipts/{id}`.
   **Editing (`ReceiptEditForm.tsx`, `src/api/updateReceipt.ts`):** an
   "Edit" button in `ReceiptResult.tsx`'s own header (next to the store
   name, which is the page's `<h1>`) opens a form prefilled from the

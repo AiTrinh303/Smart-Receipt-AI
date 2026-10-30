@@ -9,10 +9,12 @@ these tokens, never hardcoded hex colors.
 Open `?view=styleguide` in a local `npm run dev` session (e.g.
 `http://localhost:5173/?view=styleguide`) to see every `Button` variant
 (enabled, disabled, loading), every `Alert` variant, the nav tab's active and
-inactive states, the logo mark, the `RadioCardGroup` apartment choice (none
-chosen / chosen / loading / failure), the dropzone's
-idle/drag-over/file-selected states, and a `Card`, all at once, with static
-sample data and no network calls. It's dev-only (gated on `import.meta.env.DEV`, via the mockable
+inactive states, the logo mark, the `RadioCardGroup` apartment choice on the
+upload form (none chosen / chosen / loading / failure), the `ReceiptApartment`
+control on a saved receipt (selected / none selected / saving / saved /
+error), the history row's apartment badge (assigned / not assigned), the
+dropzone's idle/drag-over/file-selected states, and a `Card`, all at once,
+with static sample data and no network calls. It's dev-only (gated on `import.meta.env.DEV`, via the mockable
 `src/env.ts`), not linked from the header, and excluded from production
 builds (`npm run build` and grep `dist/assets/*.js` for "StyleGuide" to
 confirm after changing anything about how it's wired in). After any visual
@@ -164,6 +166,29 @@ the full trail of evidence.
   field.
 - **`uploadReceipt(file, apartmentId)`** sends `apartment_id` as a second
   `FormData` field alongside `file`.
+
+## Changing the apartment on a saved receipt, and the history badge
+
+- **`ReceiptApartment.tsx`**, rendered by the saved-receipt container (the
+  same place used right after extraction and when reopening
+  `?receipt=<uuid>`) directly above the data card -- `ReceiptResult` itself
+  is untouched. The same `RadioCardGroup`, legend "Apartment" this time,
+  with the receipt's current apartment selected (or nothing selected, with
+  no extra message, when it's `null`). Choosing another card sends
+  `PUT /receipts/{id}/apartment` (`src/api/updateReceiptApartment.ts`, same
+  `ApiError` pattern as the other mutating calls): "Saving..." and the
+  group disabled while pending; success swaps in the response directly (no
+  extra `GET`) and shows "Saved" in a `role="status"`; failure shows an
+  `Alert variant="error"` and reverts the radio to the previous selection,
+  so retrying is just picking it again. Hidden while the edit form is open
+  (it's rendered only in the non-editing branch); never calls extract or
+  the plain `PUT /receipts/{id}`.
+- **History badge.** `ReceiptHistory.tsx` shows each row's
+  `apartment_name` as a small pill (a building icon + the name, `bg-brand-
+  soft`/`text-brand`, matching the nav/edited-badge pill pattern elsewhere);
+  `null` (or a missing field, for pre-migration data) renders as plain
+  muted "Not assigned" text instead of a badge -- never a broken pill. No
+  filtering by apartment.
 
 ## Changelog
 

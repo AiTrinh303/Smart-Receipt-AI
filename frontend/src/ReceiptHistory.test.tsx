@@ -191,6 +191,76 @@ describe('ReceiptHistory', () => {
     expect(callCount).toBe(2)
   })
 
+  test('a row with an apartment shows it as a badge', async () => {
+    // Given the server returns a receipt assigned to an apartment
+    fetchSpy.mockResolvedValue(
+      jsonResponse(200, {
+        items: [
+          {
+            receipt_id: '11111111-1111-1111-1111-111111111111',
+            original_filename: 'a.jpg',
+            store_name: 'Store A',
+            purchase_date: '2026-01-15',
+            currency: 'USD',
+            total: 10,
+            created_at: '2026-01-15T00:00:00+00:00',
+            apartment_id: 'oberaudorf-bergblick',
+            apartment_name: 'Oberaudorf Bergblick',
+          },
+        ],
+        count: 1,
+      }),
+    )
+
+    // When the history view is rendered
+    render(<ReceiptHistory />)
+
+    // Then the apartment name is shown as a badge on that row
+    await waitFor(() => {
+      expect(screen.getByText('Oberaudorf Bergblick')).toBeInTheDocument()
+    })
+  })
+
+  test('a row with no apartment shows plain muted "Not assigned", and a missing field renders without crashing', async () => {
+    // Given the server returns one receipt with apartment_name explicitly
+    // null and one that omits the field entirely (older/pre-migration data)
+    fetchSpy.mockResolvedValue(
+      jsonResponse(200, {
+        items: [
+          {
+            receipt_id: '11111111-1111-1111-1111-111111111111',
+            original_filename: 'a.jpg',
+            store_name: 'Store A',
+            purchase_date: '2026-01-15',
+            currency: 'USD',
+            total: 10,
+            created_at: '2026-01-15T00:00:00+00:00',
+            apartment_id: null,
+            apartment_name: null,
+          },
+          {
+            receipt_id: '22222222-2222-2222-2222-222222222222',
+            original_filename: 'b.jpg',
+            store_name: 'Store B',
+            purchase_date: '2026-01-16',
+            currency: 'USD',
+            total: 20,
+            created_at: '2026-01-16T00:00:00+00:00',
+          },
+        ],
+        count: 2,
+      }),
+    )
+
+    // When the history view is rendered
+    render(<ReceiptHistory />)
+
+    // Then both rows render without crashing and show plain muted "Not assigned"
+    await waitFor(() => {
+      expect(screen.getAllByText('Not assigned')).toHaveLength(2)
+    })
+  })
+
   test('network failure -> error shown, Retry calls the list again', async () => {
     // Given the list request fails outright
     let callCount = 0

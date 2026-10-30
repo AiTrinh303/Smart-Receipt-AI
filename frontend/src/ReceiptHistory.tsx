@@ -8,6 +8,35 @@ import { navigateTo } from './navigation'
 const LOADING_ROW_COUNT = 4
 
 const NOT_DETECTED = 'Not detected'
+const NOT_ASSIGNED = 'Not assigned'
+
+function ApartmentIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 flex-shrink-0" fill="none">
+      <path
+        d="M4 17.5V5.5a1 1 0 011-1h4.5v13M11.5 17.5V9h3.5a1 1 0 011 1v7.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M6 7.5h1M6 10.5h1M6 13.5h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function ApartmentBadge({ apartmentName }: { apartmentName: string | null | undefined }) {
+  if (!apartmentName) {
+    return <span className="text-ink-muted">{NOT_ASSIGNED}</span>
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">
+      <ApartmentIcon />
+      {apartmentName}
+    </span>
+  )
+}
 
 function displayText(value: string | null | undefined): string {
   return value === null || value === undefined || value === '' ? NOT_DETECTED : value
@@ -153,6 +182,9 @@ function ReceiptHistory() {
                   {displayText(item.store_name)}
                 </span>
                 <span className="block text-gray-500">{displayText(item.purchase_date)}</span>
+                <span className="mt-1 block">
+                  <ApartmentBadge apartmentName={item.apartment_name} />
+                </span>
               </span>
               <span className="font-semibold text-gray-900">
                 {displayAmount(item.total, item.currency)}

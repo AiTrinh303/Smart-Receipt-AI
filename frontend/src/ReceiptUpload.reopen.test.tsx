@@ -122,11 +122,14 @@ describe('reopening a saved receipt from its link', () => {
       expect(screen.getByText('Corner Store')).toBeInTheDocument()
     })
 
-    // And only the GET endpoint was called, never the extract endpoint
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
-    const [url, options] = fetchSpy.mock.calls[0]
+    // And the receipt GET endpoint was called, never the extract endpoint --
+    // the only other call is the GET /apartments the now-shown
+    // ReceiptApartment control fires once it mounts
+    expect(fetchSpy.mock.calls.filter(([url]) => !String(url).endsWith('/apartments'))).toHaveLength(1)
+    const [url, options] = fetchSpy.mock.calls.find(([callUrl]) => !String(callUrl).endsWith('/apartments'))!
     expect(url).toBe(`http://localhost:8001/receipts/${VALID_UUID}`)
     expect(options?.method ?? 'GET').toBe('GET')
+    expect(fetchSpy.mock.calls.some(([callUrl]) => String(callUrl).includes('/extract'))).toBe(false)
   })
 
   test('while loading -> "Loading receipt..." is shown in a busy status region with skeletons', async () => {

@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
+import { withApartments } from './test/apartmentsFetch'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -54,33 +55,34 @@ function routeFetch(
     del?: () => Promise<unknown>
   },
 ) {
-  fetchSpy.mockImplementation((url: unknown, options?: RequestInit) => {
-    const urlString = String(url)
-    const method = options?.method ?? 'GET'
+  fetchSpy.mockImplementation(
+    withApartments((urlString, options) => {
+      const method = options?.method ?? 'GET'
 
-    if (urlString.includes('/extract')) {
-      return Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
-    }
-    if (method === 'PUT') {
-      return Promise.reject(new Error(`Unexpected PUT call to ${urlString}`))
-    }
-    if (method === 'DELETE') {
-      return routes.del
-        ? routes.del()
-        : Promise.reject(new Error(`Unexpected DELETE call to ${urlString}`))
-    }
-    if (urlString.includes('/receipts?')) {
-      return routes.list
-        ? routes.list()
-        : Promise.reject(new Error(`Unexpected list call to ${urlString}`))
-    }
-    if (method === 'GET' && urlString.includes('/receipts/')) {
-      return routes.get
-        ? routes.get()
-        : Promise.reject(new Error(`Unexpected GET call to ${urlString}`))
-    }
-    return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
-  })
+      if (urlString.includes('/extract')) {
+        return Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
+      }
+      if (method === 'PUT') {
+        return Promise.reject(new Error(`Unexpected PUT call to ${urlString}`))
+      }
+      if (method === 'DELETE') {
+        return routes.del
+          ? routes.del()
+          : Promise.reject(new Error(`Unexpected DELETE call to ${urlString}`))
+      }
+      if (urlString.includes('/receipts?')) {
+        return routes.list
+          ? routes.list()
+          : Promise.reject(new Error(`Unexpected list call to ${urlString}`))
+      }
+      if (method === 'GET' && urlString.includes('/receipts/')) {
+        return routes.get
+          ? routes.get()
+          : Promise.reject(new Error(`Unexpected GET call to ${urlString}`))
+      }
+      return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
+    }),
+  )
 }
 
 async function openSavedReceipt(fetchSpy: jest.Mock) {

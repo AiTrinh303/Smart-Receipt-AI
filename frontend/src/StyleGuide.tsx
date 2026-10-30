@@ -32,9 +32,12 @@ function LogoMark() {
   )
 }
 
+type ReceiptApartmentState = 'selected' | 'none' | 'saving' | 'saved' | 'error'
+
 function StyleGuide() {
   const [dropzoneState, setDropzoneState] = useState<'idle' | 'drag-over' | 'file-selected'>('idle')
   const [apartmentChoice, setApartmentChoice] = useState<string | null>(null)
+  const [receiptApartmentState, setReceiptApartmentState] = useState<ReceiptApartmentState>('selected')
 
   return (
     <div className="flex flex-col gap-10 pb-16">
@@ -217,6 +220,73 @@ function StyleGuide() {
             Retry
           </Button>
         </div>
+      </Section>
+
+      <Section title="Apartment on a saved receipt (ReceiptApartment -- selected / none / saving / saved / error)">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setReceiptApartmentState('selected')}>
+            Show selected
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setReceiptApartmentState('none')}>
+            Show none selected
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setReceiptApartmentState('saving')}>
+            Show saving
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setReceiptApartmentState('saved')}>
+            Show saved
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setReceiptApartmentState('error')}>
+            Show error
+          </Button>
+        </div>
+
+        <Card className="flex flex-col gap-2">
+          <RadioCardGroup
+            legend="Apartment"
+            name="styleguide-receipt-apartment"
+            options={SAMPLE_APARTMENT_OPTIONS}
+            value={receiptApartmentState === 'none' ? null : SAMPLE_APARTMENT_OPTIONS[0].value}
+            onChange={() => {}}
+            disabled={receiptApartmentState === 'saving'}
+          />
+          {receiptApartmentState === 'saving' && (
+            <p className="text-sm text-ink-muted">Saving...</p>
+          )}
+          {receiptApartmentState === 'saved' && (
+            <p role="status" className="text-sm text-success">
+              Saved
+            </p>
+          )}
+          {receiptApartmentState === 'error' && (
+            <Alert variant="error">Could not update the apartment. Please try again.</Alert>
+          )}
+        </Card>
+      </Section>
+
+      <Section title="History row apartment badge (assigned / not assigned)">
+        <ul className="flex max-w-xs flex-col gap-2">
+          <li className="rounded border border-gray-200 px-3 py-2 text-sm">
+            <span className="block font-medium text-gray-900">Corner Store</span>
+            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">
+              <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 flex-shrink-0" fill="none">
+                <path
+                  d="M4 17.5V5.5a1 1 0 011-1h4.5v13M11.5 17.5V9h3.5a1 1 0 011 1v7.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M6 7.5h1M6 10.5h1M6 13.5h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              Oberaudorf Bergblick
+            </span>
+          </li>
+          <li className="rounded border border-gray-200 px-3 py-2 text-sm">
+            <span className="block font-medium text-gray-900">Other Store</span>
+            <span className="mt-1 block text-ink-muted">Not assigned</span>
+          </li>
+        </ul>
       </Section>
 
       <Section title="Dropzone (idle / drag-over / file-selected)">

@@ -63,7 +63,19 @@ Navigation is URL-based, with no router library:
 - `?view=history` — the receipt history list (newest first). Clicking a row
   navigates to `?receipt=<id>` and shows the same detail view as above
   (also without calling the AI); a "Back to history" link returns to the
-  list. Browser back/forward works for all of these.
+  list. Browser back/forward works for all of these. Each row shows its
+  apartment as a small badge, or plain muted "Not assigned" when it has
+  none.
+
+On any saved-receipt view (both right after extraction and when reopening
+`?receipt=<id>`), an "Apartment" card above the receipt data shows the same
+selectable-cards control as the upload form, with the receipt's current
+apartment already selected. Choosing another one saves it immediately
+(`PUT /receipts/{id}/apartment`): the control shows "Saving..." while that's
+in flight, "Saved" once it succeeds, and on failure shows the error and puts
+the previous selection back so you can try again. Hidden while the edit form
+is open; this never touches the receipt's data itself (no extract call, no
+plain `PUT /receipts/{id}`).
 
 On any saved-receipt view, an "Edit" button opens a form (prefilled from the
 current data) for correcting store name, date, currency, items, discounts,

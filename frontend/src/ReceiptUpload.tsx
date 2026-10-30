@@ -8,6 +8,7 @@ import { uploadReceipt } from './api/uploadReceipt'
 import type { ReceiptExtraction } from './api/types'
 import { navigateTo } from './navigation'
 import { useApartments } from './hooks/useApartments'
+import ReceiptApartment from './ReceiptApartment'
 import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
@@ -491,6 +492,11 @@ function ReceiptUpload() {
 
         <ReceiptDetailLayout receiptId={result.receipt_id} fileName={resultFileName} contentType={resultContentType}>
           <div className="flex flex-col gap-4">
+            <ReceiptApartment
+              receiptId={result.receipt_id}
+              apartmentId={result.apartment_id}
+              onUpdated={(updated) => setResult(updated)}
+            />
             <ReceiptResult data={result} onReset={handleReset} onEdit={() => setIsEditing(true)} />
 
             {isConfirmingDelete ? (

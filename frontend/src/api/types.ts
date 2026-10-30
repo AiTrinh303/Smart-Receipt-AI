@@ -34,6 +34,8 @@ export interface ReceiptExtraction {
   warnings: ReceiptWarning[]
   edited: boolean
   edited_at: string | null
+  apartment_id: string | null
+  apartment_name: string | null
 }
 
 export interface Apartment {
@@ -49,4 +51,6 @@ export interface ReceiptSummary {
   currency: string | null
   total: number | null
   created_at: string
+  apartment_id: string | null
+  apartment_name: string | null
 }
