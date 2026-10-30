@@ -465,6 +465,26 @@ the purchase info, and the result is displayed for review.
     is used as given. `backend/data/` and `*.db` are gitignored.
   - Dependency direction: `api` -> `adapters` -> `domain`, and `api` ->
     `domain` directly. Enforced by import-linter (`backend/.importlinter`).
+  - `scripts/` — operational tooling, deliberately outside the
+    domain/adapters/api layers (not covered by `.importlinter`, and must
+    never be imported by any of those three): `_common.py` (shared
+    constants/hashing: `MANIFEST_FILENAME`, `DB_ARCNAME`, `UPLOADS_PREFIX`,
+    `BACKUP_GLOB_PATTERN`, `sha256_file`/`sha256_bytes`), `backup.py`
+    (`python scripts/backup.py [--out DIR] [--keep N]` — copies the
+    database via `sqlite3.Connection.backup`, not a plain file copy, so the
+    copy is consistent even while the server is running; runs
+    `PRAGMA integrity_check` on the copy before zipping anything and aborts
+    with no zip left behind if it isn't `"ok"`; zips `receipts.db`, every
+    `backend/uploads/` file except `.gitkeep`, and a `manifest.json` of row
+    counts + a SHA-256 per file; writes to a `.partial` name and
+    `os.replace`s it into place only once complete; re-opens and verifies
+    the finished zip against its own manifest; `--keep N`, default 30,
+    deletes only the oldest files matching `receipts-backup-*.zip` in the
+    output directory. Pure backup/verify logic (`run_backup`) takes
+    explicit `database_path`/`uploads_dir` arguments and never imports
+    `config`/`adapters` itself — only the CLI's `main()` does, lazily, so
+    the logic stays trivially testable against temp paths. Never reads or
+    copies `backend/.env`).
   - **Note:** calling the extract endpoint sends the receipt file to
     OpenAI; the resulting receipt data is then stored locally in SQLite
     (the file itself stays in `backend/uploads/`, never in the database).

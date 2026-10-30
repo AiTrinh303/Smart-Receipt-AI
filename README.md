@@ -154,6 +154,36 @@ construction, the repository checks `PRAGMA table_info(receipts)` and runs
 `ALTER TABLE ... ADD COLUMN` only for a column that's missing, never
 dropping or recreating a table — so upgrading never loses existing rows.
 
+### Backups
+
+Receipts live only on this machine (the SQLite database plus the original
+files in `backend/uploads/`) and are tax records, so losing the laptop
+without a backup means losing them.
+
+```bash
+cd backend && source venv/bin/activate
+python scripts/backup.py [--out DIR] [--keep N]
+```
+
+- Output directory: `--out`, else the `BACKUP_DIR` environment variable,
+  else `backups/` at the repo root (created automatically; gitignored).
+- The database is copied with SQLite's online backup API (not a plain file
+  copy), so the backup is safe to run while the server is still running.
+  The copy is verified with `PRAGMA integrity_check` before anything is
+  zipped; on failure the command exits non-zero and leaves no zip behind.
+- The zip (`receipts-backup-<timestamp>.zip`) contains `receipts.db`, every
+  file from `backend/uploads/` (`.gitkeep` excluded), and a `manifest.json`
+  with row counts and a SHA-256 hash of every file — **`backend/.env` (and
+  therefore the OpenAI API key) is never included.** The finished zip is
+  re-opened and checked against its own manifest before the command
+  reports success.
+- `--keep N` (default 30) deletes only the oldest files matching
+  `receipts-backup-*.zip` in the output directory, keeping the `N` most
+  recent; nothing else in that folder is touched.
+- The command prints where the zip went and reminds you to copy it
+  somewhere else — a backup that only exists on the same laptop isn't a
+  backup.
+
 ### Endpoints
 
 - `GET /health` — liveness check.

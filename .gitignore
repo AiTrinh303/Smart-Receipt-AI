@@ -24,6 +24,9 @@ backend/uploads/*
 backend/data/
 *.db
 
+# --- Backend backups ---
+backups/
+
 # --- Env files ---
 .env
 .env.local
