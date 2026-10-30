@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
 import { mockObjectUrl } from './test/objectUrl'
 import { SAMPLE_APARTMENTS, clearApartmentsCache, jsonResponse, withApartments } from './test/apartmentsFetch'
+import { clearCategoriesCache, withCategories } from './test/categoriesFetch'
 
 const VALID_UUID = '11111111-1111-1111-1111-111111111111'
 
@@ -26,11 +27,14 @@ afterEach(() => {
 
 beforeEach(() => {
   clearApartmentsCache()
+  clearCategoriesCache()
 })
 
 let fetchSpy: jest.Mock
 beforeEach(() => {
-  fetchSpy = jest.fn().mockImplementation(withApartments(() => Promise.reject(new Error('Unexpected fetch call'))))
+  fetchSpy = jest
+    .fn()
+    .mockImplementation(withApartments(withCategories(() => Promise.reject(new Error('Unexpected fetch call')))))
   global.fetch = fetchSpy as unknown as typeof fetch
 })
 afterEach(() => {
@@ -53,6 +57,9 @@ function savedReceipt(overrides: Record<string, unknown> = {}) {
     edited_at: null,
     apartment_id: SAMPLE_APARTMENTS[0].id,
     apartment_name: SAMPLE_APARTMENTS[0].name,
+    category_id: null,
+    category_name: null,
+    status: 'needs_review',
     original_filename: 'receipt.jpg',
     content_type: 'image/jpeg',
     created_at: '2026-01-15T10:00:00+00:00',
@@ -68,27 +75,29 @@ function routeFetch(
   },
 ) {
   fetchSpy.mockImplementation(
-    withApartments((urlString, options) => {
-      const method = options?.method ?? 'GET'
+    withApartments(
+      withCategories((urlString, options) => {
+        const method = options?.method ?? 'GET'
 
-      if (urlString.includes('/extract')) {
-        return Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
-      }
-      if (urlString.endsWith('/apartment') && method === 'PUT') {
-        return routes.putApartment
-          ? routes.putApartment()
-          : Promise.reject(new Error(`Unexpected PUT apartment call to ${urlString}`))
-      }
-      if (method === 'PUT') {
-        return Promise.reject(new Error(`Unexpected plain PUT call to ${urlString}`))
-      }
-      if (method === 'GET' && urlString.includes('/receipts/')) {
-        return routes.get
-          ? routes.get()
-          : Promise.reject(new Error(`Unexpected GET call to ${urlString}`))
-      }
-      return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
-    }),
+        if (urlString.includes('/extract')) {
+          return Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
+        }
+        if (urlString.endsWith('/apartment') && method === 'PUT') {
+          return routes.putApartment
+            ? routes.putApartment()
+            : Promise.reject(new Error(`Unexpected PUT apartment call to ${urlString}`))
+        }
+        if (method === 'PUT') {
+          return Promise.reject(new Error(`Unexpected plain PUT call to ${urlString}`))
+        }
+        if (method === 'GET' && urlString.includes('/receipts/')) {
+          return routes.get
+            ? routes.get()
+            : Promise.reject(new Error(`Unexpected GET call to ${urlString}`))
+        }
+        return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
+      }),
+    ),
   )
 }
 
@@ -248,15 +257,17 @@ test('right after extraction, the extract response\'s apartment is shown', async
   // a receipt already carrying that same apartment
   routeFetch({})
   fetchSpy.mockImplementation(
-    withApartments((urlString) => {
-      if (urlString.endsWith('/receipts/upload')) {
-        return Promise.resolve(jsonResponse(201, { receipt_id: VALID_UUID, filename: 'receipt.jpg' }))
-      }
-      if (urlString.includes('/extract')) {
-        return Promise.resolve(jsonResponse(200, savedReceipt()))
-      }
-      return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
-    }),
+    withApartments(
+      withCategories((urlString) => {
+        if (urlString.endsWith('/receipts/upload')) {
+          return Promise.resolve(jsonResponse(201, { receipt_id: VALID_UUID, filename: 'receipt.jpg' }))
+        }
+        if (urlString.includes('/extract')) {
+          return Promise.resolve(jsonResponse(200, savedReceipt()))
+        }
+        return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
+      }),
+    ),
   )
   const user = userEvent.setup()
   render(<ReceiptUpload />)

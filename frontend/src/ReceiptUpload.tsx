@@ -9,6 +9,7 @@ import type { ReceiptExtraction } from './api/types'
 import { navigateTo } from './navigation'
 import { useApartments } from './hooks/useApartments'
 import ReceiptApartment from './ReceiptApartment'
+import ReceiptClassification from './ReceiptClassification'
 import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
@@ -495,6 +496,12 @@ function ReceiptUpload() {
             <ReceiptApartment
               receiptId={result.receipt_id}
               apartmentId={result.apartment_id}
+              onUpdated={(updated) => setResult(updated)}
+            />
+            <ReceiptClassification
+              receiptId={result.receipt_id}
+              categoryId={result.category_id}
+              status={result.status}
               onUpdated={(updated) => setResult(updated)}
             />
             <ReceiptResult data={result} onReset={handleReset} onEdit={() => setIsEditing(true)} />

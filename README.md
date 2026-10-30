@@ -64,8 +64,10 @@ Navigation is URL-based, with no router library:
   navigates to `?receipt=<id>` and shows the same detail view as above
   (also without calling the AI); a "Back to history" link returns to the
   list. Browser back/forward works for all of these. Each row shows its
-  apartment as a small badge, or plain muted "Not assigned" when it has
-  none.
+  apartment as a small badge (plain muted "Not assigned" when it has
+  none), its category as a small badge (plain muted "No category" when it
+  has none), and its review status as a badge with an icon ("Needs
+  review" or "Approved" — never color alone).
 
 On any saved-receipt view (both right after extraction and when reopening
 `?receipt=<id>`), an "Apartment" card above the receipt data shows the same
@@ -76,6 +78,19 @@ in flight, "Saved" once it succeeds, and on failure shows the error and puts
 the previous selection back so you can try again. Hidden while the edit form
 is open; this never touches the receipt's data itself (no extract call, no
 plain `PUT /receipts/{id}`).
+
+Next to it, a "Category" dropdown (placeholder "Choose a category") works
+the same way, saving immediately via `PUT /receipts/{id}/category`. A
+"Status" badge shows "Needs review" or "Approved"; a "Mark as approved"
+button (or, once approved, "Back to needs review") sends
+`PUT /receipts/{id}/status`. Approving requires an apartment, a category, a
+valid purchase date and a total — if any are missing, an error explains
+exactly what's left in plain words (e.g. "To approve this receipt, also
+set: apartment, category.") and the status doesn't change; a missing date
+also points you to the Edit button. Data-quality warnings never block
+approval — that decision is yours. Both controls are hidden while the edit
+form is open and never touch the extract endpoint or the plain
+`PUT /receipts/{id}`.
 
 On any saved-receipt view, an "Edit" button opens a form (prefilled from the
 current data) for correcting store name, date, currency, items, discounts,

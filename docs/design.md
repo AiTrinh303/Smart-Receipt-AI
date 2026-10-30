@@ -12,7 +12,9 @@ Open `?view=styleguide` in a local `npm run dev` session (e.g.
 inactive states, the logo mark, the `RadioCardGroup` apartment choice on the
 upload form (none chosen / chosen / loading / failure), the `ReceiptApartment`
 control on a saved receipt (selected / none selected / saving / saved /
-error), the history row's apartment badge (assigned / not assigned), the
+error), the category select and review-status controls on a saved receipt
+(selected / none / saving / saved / approved / approval blocked), the
+history row's apartment/category/status badges, the
 dropzone's idle/drag-over/file-selected states, and a `Card`, all at once,
 with static sample data and no network calls. It's dev-only (gated on `import.meta.env.DEV`, via the mockable
 `src/env.ts`), not linked from the header, and excluded from production
@@ -189,6 +191,44 @@ the full trail of evidence.
   `null` (or a missing field, for pre-migration data) renders as plain
   muted "Not assigned" text instead of a badge -- never a broken pill. No
   filtering by apartment.
+
+## Category choice and review status on a saved receipt, and the history badges
+
+- **`ReceiptClassification.tsx`**, rendered by the saved-receipt container
+  directly next to `ReceiptApartment` -- `ReceiptResult` itself is
+  untouched, and the whole control is hidden while the edit form is open.
+  Two independent controls:
+  - **Category**: a native `<select>` with a visible `<label>` ("Category"),
+    a `"Choose a category"` placeholder option, and the receipt's current
+    category selected (or the placeholder, when it's `null`). Choosing a
+    different option sends `PUT /receipts/{id}/category`
+    (`src/api/updateReceiptCategory.ts`, same `ApiError` pattern as the
+    other mutating calls): "Saving..." and the select disabled while
+    pending; success swaps in the response directly (no extra `GET`) and
+    shows "Saved" in a `role="status"`; failure shows an
+    `Alert variant="error"` and reverts the select to the previous value.
+  - **Status**: a `StatusBadge` (`src/components/ui/StatusBadge.tsx` --
+    shared with the history list below) shows "Needs review"
+    (`bg-warning-soft`/`text-warning`, a clock icon) or "Approved"
+    (`bg-success-soft`/`text-success`, a check icon) -- status is never
+    conveyed by color alone. A primary "Mark as approved" button shows
+    when `needs_review`; a secondary "Back to needs review" button shows
+    when `approved`. Both call `PUT /receipts/{id}/status`
+    (`src/api/updateReceiptStatus.ts`); while pending, "Saving..." shows
+    and the button is disabled (not hidden). If approving fails with a
+    `422` and a `missing` list (see `ApiError.missing`, which the response
+    parser keeps specifically for this), an `Alert variant="error"` shows
+    a plain-words message built from that list (e.g. "To approve this
+    receipt, also set: apartment, category."), the `date` code adds "You
+    can fix the date with Edit.", and the status stays unchanged. Never
+    calls extract or the plain `PUT /receipts/{id}`.
+- **History badges.** Each `ReceiptHistory.tsx` row now shows the category
+  name as a plain outlined pill (`border-border`/`text-ink`, deliberately
+  not `brand`-colored, so it reads as a distinct classification from the
+  apartment badge next to it) or muted "No category" text when `null`,
+  plus the same `StatusBadge` used on the saved-receipt view -- all three
+  badges (apartment, category, status) sit in one wrapped row. No
+  filtering by category or status.
 
 ## Changelog
 

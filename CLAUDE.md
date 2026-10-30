@@ -37,10 +37,18 @@ the purchase info, and the result is displayed for review.
   are unless a task explicitly asks to change them.
   `src/api/` holds API call modules (`uploadReceipt.ts`, `extractReceipt.ts`,
   `getReceipt.ts`, `listReceipts.ts`, `getApartments.ts`,
-  `updateReceiptApartment.ts`, shared `ApiError`, shared response types in
-  `types.ts` — including `ReceiptSummary`, the list-row shape, and
-  `Apartment` (`id`/`name`); `ReceiptExtraction` and `ReceiptSummary` both
-  carry flat `apartment_id`/`apartment_name` (`string | null`), matching
+  `updateReceiptApartment.ts`, `getCategories.ts`, `updateReceiptCategory.ts`,
+  `updateReceiptStatus.ts`, shared `ApiError` (carries an optional `missing:
+  string[]`, set only for a `422` from `updateReceiptStatus` whose body is
+  `{detail: {message, missing}}` — every other error, including a
+  malformed body, falls back to a plain message with no `missing`), shared
+  response types in
+  `types.ts` — including `ReceiptSummary`, the list-row shape,
+  `Apartment` (`id`/`name`), `Category` (`id`/`name`), and `ReceiptStatus`
+  (`'needs_review' | 'approved'`); `ReceiptExtraction` and `ReceiptSummary`
+  both carry flat `apartment_id`/`apartment_name` (`string | null`) and
+  `category_id`/`category_name` (`string | null`) plus `status`
+  (`ReceiptStatus`), matching
   every backend receipt-shaped response); the backend URL is read from
   `VITE_API_URL` (`.env.example` / `.env`, the latter gitignored).
   `ReceiptUpload.tsx` uploads a file then automatically calls extract and
@@ -89,8 +97,11 @@ the purchase info, and the result is displayed for review.
   disturbing `ReceiptUpload`'s own internal `replaceState` calls.
   `ReceiptHistory.tsx` lists saved receipts (store, date, total; "Not
   detected" for anything missing, each row's `apartment_name` as a small
-  icon+text badge or plain muted "Not assigned" when it's `null`/missing —
-  no filtering by apartment) and navigates to `?receipt=<id>` on row click;
+  icon+text badge or plain muted "Not assigned" when it's `null`/missing,
+  `category_name` as a plain outlined badge or muted "No category" when
+  `null`/missing, and `status` as a `StatusBadge` (icon+text, shared with
+  `ReceiptClassification.tsx`) — no filtering by apartment, category or
+  status) and navigates to `?receipt=<id>` on row click;
   `ReceiptUpload.tsx` adds a "Back to history" link when showing a result.
   **Changing the apartment on a saved receipt (`ReceiptApartment.tsx`,
   `src/api/updateReceiptApartment.ts`):** rendered by the saved-receipt
@@ -110,6 +121,35 @@ the purchase info, and the result is displayed for review.
   retries. Hidden while the edit form is open (it's only in the
   non-editing branch); calls neither `extractReceipt` nor the plain
   `updateReceipt`/`PUT /receipts/{id}`.
+  **Category and review status on a saved receipt
+  (`ReceiptClassification.tsx`, `hooks/useCategories.ts`,
+  `ui/StatusBadge.tsx`):** rendered next to `ReceiptApartment` in the same
+  non-editing branch (so it's hidden on the same condition, while the edit
+  form is open) — `ReceiptResult.tsx` itself is never touched. A native
+  `<select>` (visible `<label>` "Category", placeholder option "Choose a
+  category", the receipt's `category_id` selected or the placeholder when
+  it's `null`) fetches its own list via `useCategories(true)` (same
+  cache-successful-only/never-cache-failure pattern as `useApartments`, its
+  own module-level cache, test-only `clearCategoriesCache()`). Changing it
+  calls `PUT /receipts/{id}/category`: "Saving..." and the select disabled
+  while pending; success calls back up with the response (no extra `GET`)
+  and shows "Saved" in a `role="status"`; failure shows an
+  `Alert variant="error"` and reverts the select to its previous value.
+  Separately, a `StatusBadge` shows the current `status`
+  ("Needs review"/warning-toned clock icon, or "Approved"/success-toned
+  check icon — never color alone) next to a primary "Mark as approved"
+  button (shown when `needs_review`) or a secondary "Back to needs review"
+  button (shown when `approved`); either calls
+  `PUT /receipts/{id}/status`, showing "Saving..." and disabling the
+  visible button (not hiding it) while pending. A `422` with
+  `{detail: {message, missing}}` is turned into a plain-words
+  `Alert variant="error"` by a local `describeMissing()` mapping each code
+  (`apartment`/`category`/`date` -> "a valid purchase date"/`total`) and
+  joining them ("To approve this receipt, also set: apartment,
+  category."), appending "You can fix the date with Edit." only when
+  `date` is in the list; the status is left unchanged on this failure.
+  Calls neither `extractReceipt` nor the plain `updateReceipt`/
+  `PUT /receipts/{id}`.
   **Editing (`ReceiptEditForm.tsx`, `src/api/updateReceipt.ts`):** an
   "Edit" button in `ReceiptResult.tsx`'s own header (next to the store
   name, which is the page's `<h1>`) opens a form prefilled from the

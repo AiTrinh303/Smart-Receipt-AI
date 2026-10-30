@@ -261,6 +261,79 @@ describe('ReceiptHistory', () => {
     })
   })
 
+  test('a row with a category and status shows both as badges', async () => {
+    // Given the server returns a receipt with a category and an approved status
+    fetchSpy.mockResolvedValue(
+      jsonResponse(200, {
+        items: [
+          {
+            receipt_id: '11111111-1111-1111-1111-111111111111',
+            original_filename: 'a.jpg',
+            store_name: 'Store A',
+            purchase_date: '2026-01-15',
+            currency: 'USD',
+            total: 10,
+            created_at: '2026-01-15T00:00:00+00:00',
+            category_id: 'cleaning',
+            category_name: 'Cleaning and supplies',
+            status: 'approved',
+          },
+        ],
+        count: 1,
+      }),
+    )
+
+    // When the history view is rendered
+    render(<ReceiptHistory />)
+
+    // Then the category name and the "Approved" status both show as badges
+    await waitFor(() => {
+      expect(screen.getByText('Cleaning and supplies')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Approved')).toBeInTheDocument()
+  })
+
+  test('a row with no category shows plain muted "No category", and a missing field renders without crashing', async () => {
+    // Given one receipt with category_name explicitly null and one that
+    // omits the field entirely (older/pre-migration data)
+    fetchSpy.mockResolvedValue(
+      jsonResponse(200, {
+        items: [
+          {
+            receipt_id: '11111111-1111-1111-1111-111111111111',
+            original_filename: 'a.jpg',
+            store_name: 'Store A',
+            purchase_date: '2026-01-15',
+            currency: 'USD',
+            total: 10,
+            created_at: '2026-01-15T00:00:00+00:00',
+            category_id: null,
+            category_name: null,
+            status: 'needs_review',
+          },
+          {
+            receipt_id: '22222222-2222-2222-2222-222222222222',
+            original_filename: 'b.jpg',
+            store_name: 'Store B',
+            purchase_date: '2026-01-16',
+            currency: 'USD',
+            total: 20,
+            created_at: '2026-01-16T00:00:00+00:00',
+          },
+        ],
+        count: 2,
+      }),
+    )
+
+    // When the history view is rendered
+    render(<ReceiptHistory />)
+
+    // Then both rows render without crashing and show plain muted "No category"
+    await waitFor(() => {
+      expect(screen.getAllByText('No category')).toHaveLength(2)
+    })
+  })
+
   test('network failure -> error shown, Retry calls the list again', async () => {
     // Given the list request fails outright
     let callCount = 0

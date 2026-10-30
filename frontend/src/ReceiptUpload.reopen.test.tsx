@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
 import { mockObjectUrl } from './test/objectUrl'
 import { SAMPLE_APARTMENTS, withApartments } from './test/apartmentsFetch'
+import { withCategories } from './test/categoriesFetch'
 
 const VALID_UUID = '11111111-1111-1111-1111-111111111111'
 
@@ -45,26 +46,28 @@ function routeFetch(
   },
 ) {
   fetchSpy.mockImplementation(
-    withApartments((urlString, options) => {
-      const method = options?.method ?? 'GET'
+    withApartments(
+      withCategories((urlString, options) => {
+        const method = options?.method ?? 'GET'
 
-      if (urlString.endsWith('/receipts/upload')) {
-        return routes.upload
-          ? routes.upload()
-          : Promise.reject(new Error(`Unexpected upload call to ${urlString}`))
-      }
-      if (urlString.includes('/extract')) {
-        return routes.extract
-          ? routes.extract()
-          : Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
-      }
-      if (method === 'GET' && urlString.includes('/receipts/')) {
-        return routes.get
-          ? routes.get()
-          : Promise.reject(new Error(`Unexpected GET call to ${urlString}`))
-      }
-      return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
-    }),
+        if (urlString.endsWith('/receipts/upload')) {
+          return routes.upload
+            ? routes.upload()
+            : Promise.reject(new Error(`Unexpected upload call to ${urlString}`))
+        }
+        if (urlString.includes('/extract')) {
+          return routes.extract
+            ? routes.extract()
+            : Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
+        }
+        if (method === 'GET' && urlString.includes('/receipts/')) {
+          return routes.get
+            ? routes.get()
+            : Promise.reject(new Error(`Unexpected GET call to ${urlString}`))
+        }
+        return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
+      }),
+    ),
   )
 }
 
@@ -123,10 +126,13 @@ describe('reopening a saved receipt from its link', () => {
     })
 
     // And the receipt GET endpoint was called, never the extract endpoint --
-    // the only other call is the GET /apartments the now-shown
-    // ReceiptApartment control fires once it mounts
-    expect(fetchSpy.mock.calls.filter(([url]) => !String(url).endsWith('/apartments'))).toHaveLength(1)
-    const [url, options] = fetchSpy.mock.calls.find(([callUrl]) => !String(callUrl).endsWith('/apartments'))!
+    // the only other calls are the GET /apartments and GET /categories the
+    // now-shown ReceiptApartment/ReceiptClassification controls fire once
+    // they mount
+    const isClassificationCall = ([url]: [unknown]) =>
+      String(url).endsWith('/apartments') || String(url).endsWith('/categories')
+    expect(fetchSpy.mock.calls.filter((call) => !isClassificationCall(call))).toHaveLength(1)
+    const [url, options] = fetchSpy.mock.calls.find((call) => !isClassificationCall(call))!
     expect(url).toBe(`http://localhost:8001/receipts/${VALID_UUID}`)
     expect(options?.method ?? 'GET').toBe('GET')
     expect(fetchSpy.mock.calls.some(([callUrl]) => String(callUrl).includes('/extract'))).toBe(false)

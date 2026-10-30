@@ -3,12 +3,14 @@ import { ApiError } from './api/ApiError'
 import { listReceipts } from './api/listReceipts'
 import type { ReceiptSummary } from './api/types'
 import Skeleton from './components/ui/Skeleton'
+import StatusBadge from './components/ui/StatusBadge'
 import { navigateTo } from './navigation'
 
 const LOADING_ROW_COUNT = 4
 
 const NOT_DETECTED = 'Not detected'
 const NOT_ASSIGNED = 'Not assigned'
+const NO_CATEGORY = 'No category'
 
 function ApartmentIcon() {
   return (
@@ -34,6 +36,18 @@ function ApartmentBadge({ apartmentName }: { apartmentName: string | null | unde
     <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">
       <ApartmentIcon />
       {apartmentName}
+    </span>
+  )
+}
+
+function CategoryBadge({ categoryName }: { categoryName: string | null | undefined }) {
+  if (!categoryName) {
+    return <span className="text-ink-muted">{NO_CATEGORY}</span>
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-ink">
+      {categoryName}
     </span>
   )
 }
@@ -182,8 +196,10 @@ function ReceiptHistory() {
                   {displayText(item.store_name)}
                 </span>
                 <span className="block text-gray-500">{displayText(item.purchase_date)}</span>
-                <span className="mt-1 block">
+                <span className="mt-1 flex flex-wrap items-center gap-1.5">
                   <ApartmentBadge apartmentName={item.apartment_name} />
+                  <CategoryBadge categoryName={item.category_name} />
+                  <StatusBadge status={item.status} />
                 </span>
               </span>
               <span className="font-semibold text-gray-900">

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { withApartments } from './test/apartmentsFetch'
+import { withCategories } from './test/categoriesFetch'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -56,7 +57,7 @@ function routeFetch(
   },
 ) {
   fetchSpy.mockImplementation(
-    withApartments((urlString, options) => {
+    withApartments(withCategories((urlString, options) => {
       const method = options?.method ?? 'GET'
 
       if (urlString.includes('/extract')) {
@@ -81,7 +82,7 @@ function routeFetch(
           : Promise.reject(new Error(`Unexpected GET call to ${urlString}`))
       }
       return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
-    }),
+    })),
   )
 }
 
