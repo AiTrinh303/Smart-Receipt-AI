@@ -184,6 +184,44 @@ python scripts/backup.py [--out DIR] [--keep N]
   somewhere else — a backup that only exists on the same laptop isn't a
   backup.
 
+To restore a backup:
+
+```bash
+cd backend && source venv/bin/activate
+python scripts/restore.py backups/receipts-backup-<timestamp>.zip --target /path/to/restored-data [--force]
+```
+
+- Restores into `--target` (a plain data folder: `receipts.db` plus
+  `uploads/`), **never into the live `backend/data/`/`backend/uploads/`
+  directly** — point `DATABASE_PATH` and the uploads location at the
+  restored copy afterwards, or copy the restored files over yourself once
+  the server is stopped.
+- Refuses a `--target` that already has a `receipts.db` or upload files
+  unless `--force` is given; with `--force` the existing data is moved
+  aside into `<target>/pre-restore-<timestamp>/` first, never deleted.
+- Every member of the zip is validated before anything is written: path
+  safety (no absolute paths, no `..`, nothing outside `--target`), a
+  `manifest.json` must be present, every file's hash must match the
+  manifest, and the restored database must pass `PRAGMA integrity_check`
+  with row counts matching the manifest. A zip that fails any of these
+  checks is rejected and nothing is written.
+
+**Keeping backups safe (the 3-2-1 idea):** keep a copy on this laptop, a
+copy on an external drive, and a copy in the cloud or at a second
+location — then actually try a restore at least once so you know it
+works, not just that the command exits `0`. Backup zips contain personal
+receipt data and are **not encrypted**, so store them somewhere private
+(or encrypt the drive/location they live on). Original receipt files may
+need to be kept for a legally required retention period — ask a tax
+advisor how long applies.
+
+Example crontab line for a daily backup at 2am (documentation only — this
+project does not install any cron job or systemd unit):
+
+```cron
+0 2 * * * cd /path/to/Smart-Receipt-AI/backend && venv/bin/python scripts/backup.py --out /path/to/external-drive/receipt-backups
+```
+
 ### Endpoints
 
 - `GET /health` — liveness check.

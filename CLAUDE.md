@@ -484,7 +484,17 @@ the purchase info, and the result is displayed for review.
     explicit `database_path`/`uploads_dir` arguments and never imports
     `config`/`adapters` itself — only the CLI's `main()` does, lazily, so
     the logic stays trivially testable against temp paths. Never reads or
-    copies `backend/.env`).
+    copies `backend/.env`), `restore.py`
+    (`python scripts/restore.py ZIPFILE --target DIR [--force]` — restores
+    into a plain data folder, **never the live data directly**; every zip
+    member is read into memory and fully validated — manifest present,
+    every path safe (no absolute path, no `..`, zip-slip protected), every
+    file's SHA-256 matching the manifest, the restored database passing
+    `PRAGMA integrity_check` with row counts matching the manifest — before
+    anything is written to `--target`, so a rejected zip leaves the target
+    untouched; refuses a `--target` that already has data unless `--force`,
+    which moves the existing `receipts.db`/`uploads/` into
+    `<target>/pre-restore-<timestamp>/` first instead of deleting them).
   - **Note:** calling the extract endpoint sends the receipt file to
     OpenAI; the resulting receipt data is then stored locally in SQLite
     (the file itself stays in `backend/uploads/`, never in the database).
