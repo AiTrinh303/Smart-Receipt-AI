@@ -307,6 +307,31 @@ Re-extracting a receipt (Retry) keeps its category and apartment, but
 resets `status` back to `"needs_review"`, since the underlying data was
 just replaced.
 
+The category and status are changed through their own endpoints, never
+through `PUT /receipts/{id}` (the data-correction endpoint) or the reset
+endpoint:
+
+- `PUT /receipts/{receipt_id}/category`, body `{"category_id": "<id>"}`
+  (strict — any other field is rejected). `400` for a non-UUID id, `404`
+  if the receipt doesn't exist or was never extracted, `422` for a
+  missing, null, unknown, or inactive category.
+- `PUT /receipts/{receipt_id}/status`, body `{"status": "needs_review"
+  | "approved"}` (strict). Same `400`/`404` rules for the id; `422` for a
+  missing or invalid status value. Setting `"needs_review"` is always
+  allowed. Setting `"approved"` requires **all** of: an apartment, a
+  category, a valid ISO purchase date, and a total — if any are missing,
+  the response is `422` with
+  `{"detail": {"message": "...", "missing": [...]}}`, listing only what's
+  actually missing (in the fixed order `apartment`, `category`, `date`,
+  `total`). **Data-quality warnings never block approval** — the user
+  decides whether to approve despite them.
+
+Both endpoints return the same shape as `GET`, and a `500` with a generic
+message if the database update itself fails. Editing a receipt's data
+(`PUT /receipts/{id}`) never changes its status — an already-approved
+receipt stays approved even after a correction, silently; there is no
+extra confirmation step for this in the API.
+
 #### Data-quality warnings
 
 Every response that carries receipt data (`extract`, `GET`, `PUT`, and

@@ -282,11 +282,17 @@ the purchase info, and the result is displayed for review.
     `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
     `list_receipts`/`update_receipt`/`reset_receipt`/`delete_receipt`/
     `list_apartments`/`get_apartment`/`set_receipt_apartment`/
-    `list_categories`/`get_category`, plus the
+    `list_categories`/`get_category`/`set_receipt_category`/
+    `set_receipt_status`, plus the
     strict, separate `ReceiptUpdate`/`LineItemUpdate`/`DiscountUpdate`/
     `TaxUpdate` models in `models.py` for user-submitted corrections, and
     `ApartmentAssignment` (`apartment_id: str`, `extra="forbid"`) for
-    `PUT /receipts/{id}/apartment`'s body — its own model, deliberately
+    `PUT /receipts/{id}/apartment`'s body, `CategoryAssignment`
+    (`category_id: str`, `extra="forbid"`) for
+    `PUT /receipts/{id}/category`'s body, and `StatusAssignment`
+    (`status: str`, `extra="forbid"`, a `field_validator` rejecting
+    anything outside `ALLOWED_RECEIPT_STATUSES`) for
+    `PUT /receipts/{id}/status`'s body — each its own model, deliberately
     separate from `ReceiptUpdate`, so a classification change can never be
     confused with (or smuggled into) a data correction — deliberately
     distinct from the lenient `ReceiptData` family used to parse AI output,
@@ -332,6 +338,11 @@ the purchase info, and the result is displayed for review.
     whatever is already there untouched) but always resets `status` to
     `'needs_review'` on every save, first or re-extract alike, since the
     underlying data was just replaced.
+    `set_receipt_category`/`set_receipt_status` mirror
+    `set_receipt_apartment`: one transaction, updates only `category_id`/
+    `status` plus `updated_at`, returns `None` if no `receipts` row exists
+    (so the route 404s), never touches `edited_at`, `extracted_json`,
+    `ai_result_json`, `created_at`, or each other's column.
     `list_receipts` orders by `created_at DESC, receipt_id ASC` (stable
     tie-break) and builds each row from `extracted_json` (same source as
     `get_receipt`, so `total`'s JSON type matches); a row with unparseable
@@ -424,6 +435,35 @@ the purchase info, and the result is displayed for review.
     `ai_result_json` and `created_at` are always left untouched. A later
     re-extract keeps this apartment, since `extract_receipt`'s own
     `ON CONFLICT` branch never overwrites `apartment_id`.
+    `PUT /receipts/{receipt_id}/category` — same shape of rules as the
+    apartment PUT above, against `CategoryAssignment` and
+    `repository.get_category()`/`set_receipt_category()`.
+    `PUT /receipts/{receipt_id}/status` — body validated against
+    `StatusAssignment` (FastAPI's own `422` for a missing/invalid/extra
+    field); 400 non-UUID id; 404 if no `receipts` row exists. Setting
+    `ReceiptStatus.NEEDS_REVIEW` is always allowed; setting
+    `ReceiptStatus.APPROVED` first calls `_missing_approval_fields(saved)`
+    — a pure helper checking, in this fixed order, `apartment_id is None`,
+    `category_id is None`, `normalize_purchase_date(purchase_date) is
+    None` (the same shared date rule `domain.rules` uses elsewhere — never
+    a bare `date.fromisoformat`, so a stray-but-recoverable date like
+    `"2025-06-26 11"` still counts as valid), and `total is None` — and if
+    that list is non-empty, `422`s with
+    `{"detail": {"message": "...", "missing": [...]}}` listing only the
+    actually-missing ones, never all four unconditionally. Data-quality
+    `warnings` are deliberately never checked here — approval is a human
+    decision, not a data-quality gate. 500 generic on a repository
+    failure; 200 with the same shape as GET either way. Calls
+    `repository.set_receipt_status(...)`, never `update_receipt`/
+    `reset_receipt`/`set_receipt_apartment`/`set_receipt_category` — so
+    `edited_at`, `extracted_json`, `ai_result_json`, `created_at`,
+    `apartment_id` and `category_id` are always left untouched.
+    **Editing an approved receipt:** `PUT /receipts/{id}` (the
+    data-correction endpoint) never reads or changes `status` — an
+    already-approved receipt silently stays `approved` after a
+    correction; `tests/test_category_status_endpoints.py`'s
+    `test_editing_an_approved_receipt_keeps_it_approved` documents this
+    rather than adding a gate, per the ticket that introduced it.
     `DELETE /receipts/{receipt_id}` — 204 (empty body) on success, 400 for
     a non-UUID id, 404 if no `receipts` row exists (unknown id, or
     uploaded-but-never-extracted — nothing touched on disk or in the DB);

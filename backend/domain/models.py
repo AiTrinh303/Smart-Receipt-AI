@@ -181,6 +181,32 @@ class ApartmentAssignment(BaseModel):
     apartment_id: str = Field(min_length=1)
 
 
+class CategoryAssignment(BaseModel):
+    """Body of PUT /receipts/{id}/category -- a classification change,
+    deliberately its own strict model, same reasoning as
+    ApartmentAssignment above."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: str = Field(min_length=1)
+
+
+class StatusAssignment(BaseModel):
+    """Body of PUT /receipts/{id}/status -- strict, only the two allowed
+    status values."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = Field(min_length=1)
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, value: str) -> str:
+        if value not in ALLOWED_RECEIPT_STATUSES:
+            raise ValueError("status must be 'needs_review' or 'approved'.")
+        return value
+
+
 class ReceiptUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

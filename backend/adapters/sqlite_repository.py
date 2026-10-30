@@ -529,6 +529,45 @@ class SqliteReceiptRepository:
 
         return self.get_receipt(receipt_id)
 
+    def set_receipt_category(self, receipt_id: str, category_id: str) -> SavedReceipt | None:
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM receipts WHERE receipt_id = ?", (receipt_id,)
+            ).fetchone()
+            if existing is None:
+                return None
+
+            # Classification change, like set_receipt_apartment: only
+            # category_id and updated_at change here -- edited_at,
+            # extracted_json, ai_result_json, created_at and status are all
+            # left untouched.
+            conn.execute(
+                "UPDATE receipts SET category_id = ?, updated_at = ? WHERE receipt_id = ?",
+                (category_id, now, receipt_id),
+            )
+
+        return self.get_receipt(receipt_id)
+
+    def set_receipt_status(self, receipt_id: str, status: str) -> SavedReceipt | None:
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM receipts WHERE receipt_id = ?", (receipt_id,)
+            ).fetchone()
+            if existing is None:
+                return None
+
+            # Classification change: only status and updated_at change here
+            # -- edited_at, extracted_json, ai_result_json, created_at,
+            # apartment_id and category_id are all left untouched.
+            conn.execute(
+                "UPDATE receipts SET status = ?, updated_at = ? WHERE receipt_id = ?",
+                (status, now, receipt_id),
+            )
+
+        return self.get_receipt(receipt_id)
+
     def delete_receipt(self, receipt_id: str) -> bool:
         with self._connect() as conn:
             existing = conn.execute(

@@ -11,7 +11,13 @@ import config
 from adapters.file_storage import delete_file, find_file, save_file
 from adapters.openai_extractor import OpenAIReceiptExtractor
 from adapters.sqlite_repository import SqliteReceiptRepository
-from domain.models import ApartmentAssignment, ReceiptStatus, ReceiptUpdate
+from domain.models import (
+    ApartmentAssignment,
+    CategoryAssignment,
+    ReceiptStatus,
+    ReceiptUpdate,
+    StatusAssignment,
+)
 from domain.ports import (
     ExtractionError,
     ExtractionUnavailableError,
@@ -24,6 +30,7 @@ from domain.rules import (
     UnsupportedFileTypeError,
     check_receipt,
     media_type_for_extension,
+    normalize_purchase_date,
     validate_upload,
 )
 
@@ -44,6 +51,22 @@ def get_repository() -> ReceiptRepository:
 def _warnings_payload(data) -> list[dict]:
     """Computed fresh on every call, never stored."""
     return [warning.model_dump() for warning in check_receipt(data, date.today())]
+
+
+def _missing_approval_fields(saved) -> list[str]:
+    """Fields required to set status='approved', in a fixed, stable order.
+    Data-quality warnings are deliberately not checked here -- the user
+    decides whether to approve despite them."""
+    missing: list[str] = []
+    if saved.apartment_id is None:
+        missing.append("apartment")
+    if saved.category_id is None:
+        missing.append("category")
+    if normalize_purchase_date(saved.purchase_date) is None:
+        missing.append("date")
+    if saved.total is None:
+        missing.append("total")
+    return missing
 
 
 @router.get("/health")
@@ -354,6 +377,89 @@ def update_receipt_apartment(
         raise HTTPException(
             status_code=500,
             detail="Could not update the apartment. Please try again.",
+        )
+
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    return {**saved.model_dump(), "warnings": _warnings_payload(saved)}
+
+
+@router.put("/receipts/{receipt_id}/category")
+def update_receipt_category(
+    receipt_id: str,
+    assignment: CategoryAssignment,
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    existing = repository.get_receipt(str(validated_id))
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    category = repository.get_category(assignment.category_id)
+    if category is None:
+        raise HTTPException(status_code=422, detail="Unknown category.")
+    if not category.active:
+        raise HTTPException(status_code=422, detail="This category is no longer active.")
+
+    try:
+        saved = repository.set_receipt_category(str(validated_id), assignment.category_id)
+    except Exception:
+        # Never tell the client the category changed when it did not; the
+        # real cause is logged for developers only.
+        logger.exception("Failed to update receipt category: receipt_id=%s", receipt_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not update the category. Please try again.",
+        )
+
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    return {**saved.model_dump(), "warnings": _warnings_payload(saved)}
+
+
+@router.put("/receipts/{receipt_id}/status")
+def update_receipt_status(
+    receipt_id: str,
+    assignment: StatusAssignment,
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    existing = repository.get_receipt(str(validated_id))
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    # Setting 'needs_review' is always allowed; data-quality warnings never
+    # block approval either -- the user makes the final call either way.
+    if assignment.status == ReceiptStatus.APPROVED:
+        missing = _missing_approval_fields(existing)
+        if missing:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "This receipt is missing required information before it can be approved.",
+                    "missing": missing,
+                },
+            )
+
+    try:
+        saved = repository.set_receipt_status(str(validated_id), assignment.status)
+    except Exception:
+        # Never tell the client the status changed when it did not; the
+        # real cause is logged for developers only.
+        logger.exception("Failed to update receipt status: receipt_id=%s", receipt_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not update the status. Please try again.",
         )
 
     if saved is None:
