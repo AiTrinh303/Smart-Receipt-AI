@@ -11,7 +11,7 @@ import config
 from adapters.file_storage import delete_file, find_file, save_file
 from adapters.openai_extractor import OpenAIReceiptExtractor
 from adapters.sqlite_repository import SqliteReceiptRepository
-from domain.models import ApartmentAssignment, ReceiptUpdate
+from domain.models import ApartmentAssignment, ReceiptStatus, ReceiptUpdate
 from domain.ports import (
     ExtractionError,
     ExtractionUnavailableError,
@@ -104,6 +104,12 @@ async def upload_receipt(
 def list_apartments(repository: ReceiptRepository = Depends(get_repository)):
     items = repository.list_apartments()
     return {"items": [{"id": a.id, "name": a.name} for a in items], "count": len(items)}
+
+
+@router.get("/categories")
+def list_categories(repository: ReceiptRepository = Depends(get_repository)):
+    items = repository.list_categories()
+    return {"items": [{"id": c.id, "name": c.name} for c in items], "count": len(items)}
 
 
 @router.get("/receipts")
@@ -205,6 +211,9 @@ def extract_receipt(
         "edited_at": None,
         "apartment_id": saved.apartment_id if saved else None,
         "apartment_name": saved.apartment_name if saved else None,
+        "category_id": saved.category_id if saved else None,
+        "category_name": saved.category_name if saved else None,
+        "status": saved.status if saved else ReceiptStatus.NEEDS_REVIEW,
     }
 
 

@@ -3,6 +3,7 @@ from typing import Protocol
 
 from domain.models import (
     Apartment,
+    Category,
     ReceiptData,
     ReceiptSummary,
     ReceiptUpdate,
@@ -58,3 +59,7 @@ class ReceiptRepository(Protocol):
     def get_apartment(self, apartment_id: str) -> Apartment | None: ...
 
     def set_receipt_apartment(self, receipt_id: str, apartment_id: str) -> SavedReceipt | None: ...
+
+    def list_categories(self) -> list[Category]: ...
+
+    def get_category(self, category_id: str) -> Category | None: ...

@@ -287,6 +287,26 @@ Changing it is a classification change, not a data edit: it never sets
 `created_at`. `PUT /receipts/{id}` and the reset endpoint never change it;
 it is changed only via `PUT /receipts/{receipt_id}/apartment` — see below.
 
+#### Categories and review status
+
+- `GET /categories` — the ten seeded expense categories, as
+  `{"items": [{"id", "name"}], "count": n}`, only the active ones, in
+  `sort_order`. The seeded names are **placeholders** and must be
+  confirmed with a tax advisor before being relied on for an actual
+  filing.
+
+Every receipt-shaped response also carries flat **`category_id`**,
+**`category_name`** (both `string` or `null`) and **`status`**
+(`"needs_review"` or `"approved"`, default `"needs_review"`), with the
+same key set and JSON types everywhere. A receipt belongs to at most one
+category. Changing the category or the status is a classification
+change, not a data edit: it never sets `edited_at` and never touches
+`extracted_json`, `ai_result_json`, or `created_at`. `PUT /receipts/{id}`
+and the reset endpoint never change category, status or apartment.
+Re-extracting a receipt (Retry) keeps its category and apartment, but
+resets `status` back to `"needs_review"`, since the underlying data was
+just replaced.
+
 #### Data-quality warnings
 
 Every response that carries receipt data (`extract`, `GET`, `PUT`, and

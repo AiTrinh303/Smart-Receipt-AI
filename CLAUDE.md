@@ -252,6 +252,16 @@ the purchase info, and the result is displayed for review.
     `apartment_id`/`apartment_name` (`str | None`) — same key set and JSON
     types across upload/extract/GET/PUT/reset/list-item, see
     [docs/adr/0002-apartments-and-expense-ledger.md](docs/adr/0002-apartments-and-expense-ledger.md).
+    `Category` (id/name/sort_order/active) and `DEFAULT_CATEGORIES` — the
+    ten seeded, PLACEHOLDER expense categories (to be confirmed with a tax
+    advisor), seeded the same way as `DEFAULT_APARTMENTS`; `ReceiptStatus`
+    — plain string constants `NEEDS_REVIEW`/`APPROVED` (not an Enum, so
+    they serialize as plain strings) and `ALLOWED_RECEIPT_STATUSES`.
+    `SavedReceipt` and `ReceiptSummary` additionally carry flat
+    `category_id`/`category_name` (`str | None`) and `status` (`str`,
+    `"needs_review"` or `"approved"`) — same key set and JSON types across
+    extract/GET/PUT/reset/apartment-PUT/list-item, see
+    [docs/adr/0003-category-and-review-status.md](docs/adr/0003-category-and-review-status.md).
     `rules.py` (allowed file
     types, size limit, `media_type_for_extension()` — a pure
     extension -> fixed media type map used by the file-serving endpoint, so
@@ -271,7 +281,8 @@ the purchase info, and the result is displayed for review.
     `ExtractionUnavailableError`, `ReceiptRepository` Protocol —
     `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
     `list_receipts`/`update_receipt`/`reset_receipt`/`delete_receipt`/
-    `list_apartments`/`get_apartment`/`set_receipt_apartment`, plus the
+    `list_apartments`/`get_apartment`/`set_receipt_apartment`/
+    `list_categories`/`get_category`, plus the
     strict, separate `ReceiptUpdate`/`LineItemUpdate`/`DiscountUpdate`/
     `TaxUpdate` models in `models.py` for user-submitted corrections, and
     `ApartmentAssignment` (`apartment_id: str`, `extra="forbid"`) for
@@ -297,20 +308,30 @@ the purchase info, and the result is displayed for review.
     already-missing file as a no-op, not an error, so a retry is safe),
     `sqlite_repository.py`
     (`SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads`,
-    `receipts` and `apartments` tables; schema created via
+    `receipts`, `apartments` and `categories` tables; schema created via
     `CREATE TABLE IF NOT EXISTS`, plus a small additive migration on
     construction — `PRAGMA table_info` then
     `ALTER TABLE ... ADD COLUMN` only for a column that's missing, never
     dropping/recreating a table, so existing rows always survive an
-    upgrade; this is how `edited_at` and the nullable `apartment_id`
-    columns on `uploads`/`receipts` were added. `apartments` itself is a
-    new table (no migration needed there) seeded with `DEFAULT_APARTMENTS`
+    upgrade; this is how `edited_at`, the nullable `apartment_id` columns
+    on `uploads`/`receipts`, the nullable `category_id` column, and the
+    `status TEXT NOT NULL DEFAULT 'needs_review'` column on `receipts`
+    were all added — the `NOT NULL DEFAULT` applies to existing rows too,
+    so every receipt that predates the column still gets `needs_review`.
+    `apartments` and `categories` are both new tables (no migration
+    needed there) seeded with `DEFAULT_APARTMENTS`/`DEFAULT_CATEGORIES`
     via `INSERT OR IGNORE` every time, so it's idempotent).
-    `list_apartments` returns only `active = 1` rows ordered by
-    `sort_order`; `get_apartment` returns a row regardless of `active`
-    (the route distinguishes "unknown" from "inactive" itself, and a
-    receipt's `apartment_name` must still resolve even if deactivated
-    later).
+    `list_apartments`/`list_categories` return only `active = 1` rows
+    ordered by `sort_order`; `get_apartment`/`get_category` return a row
+    regardless of `active` (the route distinguishes "unknown" from
+    "inactive" itself, and a receipt's `apartment_name`/`category_name`
+    must still resolve even if deactivated later).
+    `save_receipt`'s `INSERT`/`ON CONFLICT` deliberately omits
+    `category_id` from the `ON CONFLICT` `SET` clause (same reasoning as
+    `apartment_id`: a first save inserts `NULL`, a re-extract leaves
+    whatever is already there untouched) but always resets `status` to
+    `'needs_review'` on every save, first or re-extract alike, since the
+    underlying data was just replaced.
     `list_receipts` orders by `created_at DESC, receipt_id ASC` (stable
     tie-break) and builds each row from `extracted_json` (same source as
     `get_receipt`, so `total`'s JSON type matches); a row with unparseable
@@ -365,7 +386,9 @@ the purchase info, and the result is displayed for review.
     handler that creates the repository — and therefore the SQLite schema
     — at startup, not the deprecated `on_event`),
     `routes.py` (`/health`, `GET /apartments` — active apartments only,
-    `sort_order`, `{"id", "name"}` per item, `POST /receipts/upload` —
+    `sort_order`, `{"id", "name"}` per item, `GET /categories` — same
+    shape, active categories only, ordered by `sort_order`,
+    `POST /receipts/upload` —
     `apartment_id` is a **required** form field, validated via
     `repository.get_apartment()` *before* the existing file-type/size
     validation and before anything is written (missing -> FastAPI's own
@@ -413,7 +436,12 @@ the purchase info, and the result is displayed for review.
     `_warnings_payload()` helper — computed fresh on every request, never
     stored, never blocking any action. The extract/GET/PUT contract test
     (`tests/test_get_receipt.py`'s `EXTRACTED_FIELD_NAMES`) includes
-    `"warnings"`.
+    `"warnings"`, `"category_id"`, `"category_name"` and `"status"`.
+    `extract_receipt`'s response includes `category_id`/`category_name`/
+    `status` the same way it does `apartment_id`/`apartment_name` — read
+    from the `get_receipt()` re-fetch right after saving, falling back to
+    `None`/`ReceiptStatus.NEEDS_REVIEW` if that re-fetch somehow returns
+    nothing.
     `GET /receipts/{receipt_id}/file` — serves the original upload via
     `FileResponse` for a saved receipt (same existence check as GET); 400
     for a non-UUID id, 404 if no saved receipt exists or the file is

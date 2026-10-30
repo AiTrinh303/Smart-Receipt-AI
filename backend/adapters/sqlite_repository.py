@@ -7,10 +7,13 @@ from pathlib import Path
 
 from domain.models import (
     Apartment,
+    Category,
     DEFAULT_APARTMENTS,
+    DEFAULT_CATEGORIES,
     Discount,
     LineItem,
     ReceiptData,
+    ReceiptStatus,
     ReceiptSummary,
     ReceiptUpdate,
     SavedReceipt,
@@ -89,6 +92,16 @@ class SqliteReceiptRepository:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS categories (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    sort_order INTEGER NOT NULL,
+                    active INTEGER NOT NULL DEFAULT 1
+                )
+                """
+            )
 
             # Safe, additive migration for databases created before these
             # columns existed: never drops or recreates a table, so existing
@@ -100,6 +113,14 @@ class SqliteReceiptRepository:
                 conn.execute("ALTER TABLE receipts ADD COLUMN edited_at TEXT NULL")
             if "apartment_id" not in receipts_columns:
                 conn.execute("ALTER TABLE receipts ADD COLUMN apartment_id TEXT NULL")
+            if "category_id" not in receipts_columns:
+                conn.execute("ALTER TABLE receipts ADD COLUMN category_id TEXT NULL")
+            if "status" not in receipts_columns:
+                # The NOT NULL DEFAULT applies to existing rows too, so every
+                # receipt that predates this column still gets 'needs_review'.
+                conn.execute(
+                    f"ALTER TABLE receipts ADD COLUMN status TEXT NOT NULL DEFAULT '{ReceiptStatus.NEEDS_REVIEW}'"
+                )
 
             uploads_columns = {row[1] for row in conn.execute("PRAGMA table_info(uploads)")}
             if "apartment_id" not in uploads_columns:
@@ -112,6 +133,11 @@ class SqliteReceiptRepository:
                 conn.execute(
                     "INSERT OR IGNORE INTO apartments (id, name, sort_order, active) VALUES (?, ?, ?, ?)",
                     (apartment.id, apartment.name, apartment.sort_order, int(apartment.active)),
+                )
+            for category in DEFAULT_CATEGORIES:
+                conn.execute(
+                    "INSERT OR IGNORE INTO categories (id, name, sort_order, active) VALUES (?, ?, ?, ?)",
+                    (category.id, category.name, category.sort_order, int(category.active)),
                 )
 
     def save_upload(
@@ -193,18 +219,22 @@ class SqliteReceiptRepository:
             ).fetchone()
             created_at = existing[0] if existing is not None else now
 
-            # apartment_id is deliberately absent from the ON CONFLICT SET
-            # clause: a first save (INSERT) stores the upload's apartment,
-            # but a re-extract (the ON CONFLICT branch) leaves whatever is
-            # already there untouched -- never overwritten, never nulled.
+            # apartment_id and category_id are deliberately absent from the
+            # ON CONFLICT SET clause: a first save (INSERT) stores the
+            # upload's apartment and a null category, but a re-extract (the
+            # ON CONFLICT branch) leaves whatever is already there untouched
+            # -- never overwritten, never nulled. status, however, IS reset
+            # to 'needs_review' on every save (first save relies on the
+            # column default; a re-extract explicitly resets it) since the
+            # underlying data was just replaced.
             conn.execute(
-                """
+                f"""
                 INSERT INTO receipts (
                     receipt_id, store_name, purchase_date, currency, total,
                     extracted_json, ai_result_json, created_at, updated_at, edited_at,
-                    apartment_id
+                    apartment_id, category_id, status
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL, '{ReceiptStatus.NEEDS_REVIEW}')
                 ON CONFLICT(receipt_id) DO UPDATE SET
                     store_name = excluded.store_name,
                     purchase_date = excluded.purchase_date,
@@ -213,7 +243,8 @@ class SqliteReceiptRepository:
                     extracted_json = excluded.extracted_json,
                     ai_result_json = excluded.ai_result_json,
                     updated_at = excluded.updated_at,
-                    edited_at = NULL
+                    edited_at = NULL,
+                    status = '{ReceiptStatus.NEEDS_REVIEW}'
                 """,
                 (
                     receipt_id,
@@ -235,10 +266,11 @@ class SqliteReceiptRepository:
                 """
                 SELECT r.receipt_id, r.extracted_json, r.created_at, r.updated_at,
                        u.original_filename, u.content_type, r.edited_at,
-                       r.apartment_id, ap.name
+                       r.apartment_id, ap.name, r.category_id, cat.name, r.status
                 FROM receipts r
                 LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
                 LEFT JOIN apartments ap ON ap.id = r.apartment_id
+                LEFT JOIN categories cat ON cat.id = r.category_id
                 WHERE r.receipt_id = ?
                 """,
                 (receipt_id,),
@@ -280,6 +312,9 @@ class SqliteReceiptRepository:
             edited_at=edited_at,
             apartment_id=row[7],
             apartment_name=row[8],
+            category_id=row[9],
+            category_name=row[10],
+            status=row[11],
         )
 
     def list_receipts(self, limit: int) -> list[ReceiptSummary]:
@@ -287,10 +322,11 @@ class SqliteReceiptRepository:
             rows = conn.execute(
                 """
                 SELECT r.receipt_id, r.extracted_json, r.created_at, u.original_filename,
-                       r.apartment_id, ap.name
+                       r.apartment_id, ap.name, r.category_id, cat.name, r.status
                 FROM receipts r
                 LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
                 LEFT JOIN apartments ap ON ap.id = r.apartment_id
+                LEFT JOIN categories cat ON cat.id = r.category_id
                 ORDER BY r.created_at DESC, r.receipt_id ASC
                 LIMIT ?
                 """,
@@ -298,7 +334,17 @@ class SqliteReceiptRepository:
             ).fetchall()
 
         summaries: list[ReceiptSummary] = []
-        for receipt_id, extracted_json, created_at, original_filename, apartment_id, apartment_name in rows:
+        for (
+            receipt_id,
+            extracted_json,
+            created_at,
+            original_filename,
+            apartment_id,
+            apartment_name,
+            category_id,
+            category_name,
+            status,
+        ) in rows:
             try:
                 # Same source (extracted_json) as get_receipt(), so `total`
                 # carries the same JSON type here as in the extract/GET
@@ -322,6 +368,9 @@ class SqliteReceiptRepository:
                     created_at=created_at,
                     apartment_id=apartment_id,
                     apartment_name=apartment_name,
+                    category_id=category_id,
+                    category_name=category_name,
+                    status=status,
                 )
             )
 
@@ -435,6 +484,26 @@ class SqliteReceiptRepository:
         if row is None:
             return None
         return Apartment(id=row[0], name=row[1], sort_order=row[2], active=bool(row[3]))
+
+    def list_categories(self) -> list[Category]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, name, sort_order, active FROM categories WHERE active = 1 ORDER BY sort_order"
+            ).fetchall()
+        return [Category(id=row[0], name=row[1], sort_order=row[2], active=bool(row[3])) for row in rows]
+
+    def get_category(self, category_id: str) -> Category | None:
+        # Regardless of active -- same reasoning as get_apartment: a
+        # receipt's own category_name must still resolve even if that
+        # category is deactivated later, and the route distinguishes
+        # "unknown" from "inactive" itself.
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, name, sort_order, active FROM categories WHERE id = ?", (category_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return Category(id=row[0], name=row[1], sort_order=row[2], active=bool(row[3]))
 
     def set_receipt_apartment(self, receipt_id: str, apartment_id: str) -> SavedReceipt | None:
         now = _utc_now_iso()

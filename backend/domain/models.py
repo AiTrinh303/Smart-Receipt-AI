@@ -46,6 +46,43 @@ DEFAULT_APARTMENTS: list[Apartment] = [
 ]
 
 
+class Category(BaseModel):
+    id: str
+    name: str
+    sort_order: int
+    active: bool
+
+
+class ReceiptStatus:
+    """String constants, not an Enum, so they serialize as plain strings in
+    every response without any extra JSON-schema machinery."""
+
+    NEEDS_REVIEW = "needs_review"
+    APPROVED = "approved"
+
+
+ALLOWED_RECEIPT_STATUSES = (ReceiptStatus.NEEDS_REVIEW, ReceiptStatus.APPROVED)
+
+
+# Seeded at startup via INSERT OR IGNORE (adapters/sqlite_repository.py), so
+# adding, renaming or reordering an entry here takes effect on existing
+# databases too without a destructive migration -- only a new id is ever
+# inserted. These are PLACEHOLDER categories and must be confirmed with a
+# tax advisor before being relied on for an actual filing.
+DEFAULT_CATEGORIES: list[Category] = [
+    Category(id="cleaning", name="Cleaning and supplies", sort_order=1, active=True),
+    Category(id="repairs", name="Repairs and maintenance", sort_order=2, active=True),
+    Category(id="furniture", name="Furniture and equipment", sort_order=3, active=True),
+    Category(id="linen", name="Linen and textiles", sort_order=4, active=True),
+    Category(id="consumables", name="Guest consumables", sort_order=5, active=True),
+    Category(id="utilities", name="Utilities and services", sort_order=6, active=True),
+    Category(id="garden", name="Garden and outdoor", sort_order=7, active=True),
+    Category(id="insurance", name="Insurance and fees", sort_order=8, active=True),
+    Category(id="travel", name="Travel and transport", sort_order=9, active=True),
+    Category(id="other", name="Other", sort_order=10, active=True),
+]
+
+
 class ReceiptData(BaseModel):
     store_name: str | None
     purchase_date: str | None
@@ -75,6 +112,9 @@ class SavedReceipt(ReceiptData):
     edited_at: str | None
     apartment_id: str | None
     apartment_name: str | None
+    category_id: str | None
+    category_name: str | None
+    status: str
 
 
 class ReceiptWarning(BaseModel):
@@ -97,6 +137,9 @@ class ReceiptSummary(BaseModel):
     created_at: str
     apartment_id: str | None
     apartment_name: str | None
+    category_id: str | None
+    category_name: str | None
+    status: str
 
 
 # --- Editable-field models (user corrections), deliberately separate from
