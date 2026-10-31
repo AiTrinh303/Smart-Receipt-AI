@@ -319,23 +319,27 @@ class SqliteReceiptRepository:
             status=row[11],
         )
 
-    def list_receipts(
+    def _filtered_receipt_rows(
         self,
-        limit: int,
+        conn,
         apartment_id: str | None = None,
         year: int | None = None,
         undated: bool = False,
         status: str | None = None,
         category_id: str | None = None,
         no_category: bool = False,
-    ) -> list[ReceiptSummary]:
-        # apartment_id/status/category_id are plain column equality, so they
-        # are filtered in SQL (parameterized); year/undated need
-        # normalize_purchase_date -- the same shared domain rule used
-        # everywhere else, never duplicated as a SQL date regex -- so those
-        # are filtered in Python below, on every matching row, BEFORE the
-        # final `limit` slice (an SQL-level LIMIT would cut rows before the
-        # date filter ever saw them).
+    ) -> list[tuple]:
+        """Shared by list_receipts() and list_matching_receipts(): every
+        receipt matching the given filters, each as a tuple of
+        (receipt_id, parsed ReceiptData, created_at, updated_at,
+        original_filename, content_type, edited_at, apartment_id,
+        apartment_name, category_id, category_name, status), ordered
+        `created_at DESC, receipt_id ASC`, with NO limit applied -- callers
+        slice as needed. apartment_id/status/category_id are plain column
+        equality, so they are filtered in SQL (parameterized); year/undated
+        need normalize_purchase_date -- the same shared domain rule used
+        everywhere else, never duplicated as a SQL date regex -- so those
+        are filtered in Python on every row returned by the query."""
         where_clauses: list[str] = []
         params: list[str] = []
         if apartment_id is not None:
@@ -352,36 +356,36 @@ class SqliteReceiptRepository:
 
         where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-        with self._connect() as conn:
-            rows = conn.execute(
-                f"""
-                SELECT r.receipt_id, r.extracted_json, r.created_at, u.original_filename,
-                       r.apartment_id, ap.name, r.category_id, cat.name, r.status
-                FROM receipts r
-                LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
-                LEFT JOIN apartments ap ON ap.id = r.apartment_id
-                LEFT JOIN categories cat ON cat.id = r.category_id
-                {where_sql}
-                ORDER BY r.created_at DESC, r.receipt_id ASC
-                """,
-                params,
-            ).fetchall()
+        rows = conn.execute(
+            f"""
+            SELECT r.receipt_id, r.extracted_json, r.created_at, r.updated_at,
+                   u.original_filename, u.content_type, r.edited_at,
+                   r.apartment_id, ap.name, r.category_id, cat.name, r.status
+            FROM receipts r
+            LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
+            LEFT JOIN apartments ap ON ap.id = r.apartment_id
+            LEFT JOIN categories cat ON cat.id = r.category_id
+            {where_sql}
+            ORDER BY r.created_at DESC, r.receipt_id ASC
+            """,
+            params,
+        ).fetchall()
 
-        summaries: list[ReceiptSummary] = []
+        results: list[tuple] = []
         for (
             receipt_id,
             extracted_json,
             created_at,
+            updated_at,
             original_filename,
+            content_type,
+            edited_at,
             apartment_id_value,
             apartment_name,
             category_id_value,
             category_name,
             status_value,
         ) in rows:
-            if len(summaries) >= limit:
-                break
-
             try:
                 # Same source (extracted_json) as get_receipt(), so `total`
                 # carries the same JSON type here as in the extract/GET
@@ -402,6 +406,58 @@ class SqliteReceiptRepository:
                 if year is not None and (is_undated or int(normalized_date[:4]) != year):
                     continue
 
+            results.append(
+                (
+                    receipt_id,
+                    extracted,
+                    created_at,
+                    updated_at,
+                    original_filename,
+                    content_type,
+                    edited_at,
+                    apartment_id_value,
+                    apartment_name,
+                    category_id_value,
+                    category_name,
+                    status_value,
+                )
+            )
+
+        return results
+
+    def list_receipts(
+        self,
+        limit: int,
+        apartment_id: str | None = None,
+        year: int | None = None,
+        undated: bool = False,
+        status: str | None = None,
+        category_id: str | None = None,
+        no_category: bool = False,
+    ) -> list[ReceiptSummary]:
+        with self._connect() as conn:
+            rows = self._filtered_receipt_rows(
+                conn, apartment_id, year, undated, status, category_id, no_category
+            )
+
+        summaries: list[ReceiptSummary] = []
+        for (
+            receipt_id,
+            extracted,
+            created_at,
+            _updated_at,
+            original_filename,
+            _content_type,
+            _edited_at,
+            apartment_id_value,
+            apartment_name,
+            category_id_value,
+            category_name,
+            status_value,
+        ) in rows:
+            if len(summaries) >= limit:
+                break
+
             summaries.append(
                 ReceiptSummary(
                     receipt_id=receipt_id,
@@ -420,6 +476,68 @@ class SqliteReceiptRepository:
             )
 
         return summaries
+
+    def list_matching_receipts(
+        self,
+        apartment_id: str | None = None,
+        year: int | None = None,
+        undated: bool = False,
+        status: str | None = None,
+        category_id: str | None = None,
+        no_category: bool = False,
+    ) -> list[SavedReceipt]:
+        """Every receipt matching the same filters list_receipts() accepts,
+        with its full parsed data (items included) -- used by GET /items to
+        flatten line items, reusing _filtered_receipt_rows() rather than
+        duplicating its filter logic. Unlike list_receipts()'s summaries,
+        purchase_date here is the raw, unnormalized value from
+        extracted_json; domain.rules.flatten_line_items normalizes it for
+        display, the same way get_receipt() does."""
+        with self._connect() as conn:
+            rows = self._filtered_receipt_rows(
+                conn, apartment_id, year, undated, status, category_id, no_category
+            )
+
+        receipts: list[SavedReceipt] = []
+        for (
+            receipt_id,
+            extracted,
+            created_at,
+            updated_at,
+            original_filename,
+            content_type,
+            edited_at,
+            apartment_id_value,
+            apartment_name,
+            category_id_value,
+            category_name,
+            status_value,
+        ) in rows:
+            receipts.append(
+                SavedReceipt(
+                    receipt_id=receipt_id,
+                    original_filename=original_filename,
+                    content_type=content_type,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    store_name=extracted.store_name,
+                    purchase_date=extracted.purchase_date,
+                    currency=extracted.currency,
+                    items=extracted.items,
+                    discounts=extracted.discounts,
+                    taxes=extracted.taxes,
+                    total=extracted.total,
+                    edited=edited_at is not None,
+                    edited_at=edited_at,
+                    apartment_id=apartment_id_value,
+                    apartment_name=apartment_name,
+                    category_id=category_id_value,
+                    category_name=category_name,
+                    status=status_value,
+                )
+            )
+
+        return receipts
 
     def get_receipt_facets(self, apartment_id: str | None = None) -> ReceiptFacets:
         with self._connect() as conn:

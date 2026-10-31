@@ -1,0 +1,430 @@
+import json
+import sqlite3
+import uuid
+
+import pytest
+from fastapi.testclient import TestClient
+
+import main
+from adapters.sqlite_repository import SqliteReceiptRepository
+from api.routes import get_repository
+from domain.models import ReceiptData, ReceiptStatus
+
+client = TestClient(main.app)
+
+OBERAUDORF = "oberaudorf-bergblick"
+WALDGLUECK = "sankt-englmar-waldglueck"
+
+
+@pytest.fixture(autouse=True)
+def temp_repository(tmp_path):
+    repository = SqliteReceiptRepository(tmp_path / "test.db")
+    main.app.dependency_overrides[get_repository] = lambda: repository
+    return repository
+
+
+@pytest.fixture(autouse=True)
+def clear_dependency_overrides():
+    yield
+    main.app.dependency_overrides.clear()
+
+
+def make_receipt_data(**overrides) -> ReceiptData:
+    defaults = dict(
+        store_name="Corner Store",
+        purchase_date="2026-01-15",
+        currency="USD",
+        items=[],
+        discounts=[],
+        taxes=[],
+        total=19.99,
+    )
+    defaults.update(overrides)
+    return ReceiptData(**defaults)
+
+
+def seed(
+    repository,
+    apartment_id: str | None = None,
+    category_id: str | None = None,
+    status: str = ReceiptStatus.NEEDS_REVIEW,
+    **data_overrides,
+) -> str:
+    receipt_id = str(uuid.uuid4())
+    repository.save_receipt(receipt_id, make_receipt_data(**data_overrides), apartment_id=apartment_id)
+    with repository._connect() as conn:
+        conn.execute(
+            "UPDATE receipts SET category_id = ?, status = ? WHERE receipt_id = ?",
+            (category_id, status, receipt_id),
+        )
+        conn.commit()
+    return receipt_id
+
+
+def item(name=None, quantity=None, unit_price=None, line_total=None):
+    return {"name": name, "quantity": quantity, "unit_price": unit_price, "line_total": line_total}
+
+
+def item_names(response) -> list[str | None]:
+    return [row["name"] for row in response.json()["items"]]
+
+
+def receipt_ids(response) -> list[str]:
+    return [row["receipt_id"] for row in response.json()["items"]]
+
+
+# --- Ordering and flattening -------------------------------------------
+
+
+def test_rows_from_two_receipts_in_order_with_correct_line_index(temp_repository):
+    import time
+
+    # Given an older receipt with two items, then a newer one with one item
+    older = seed(
+        temp_repository,
+        apartment_id=OBERAUDORF,
+        items=[item(name="Milk", quantity=1, unit_price=2.5, line_total=2.5), item(name="Bread")],
+    )
+    time.sleep(0.01)
+    newer = seed(temp_repository, apartment_id=OBERAUDORF, items=[item(name="Eggs")])
+
+    # When the items list is fetched
+    response = client.get("/items")
+
+    # Then the newer receipt's row comes first, then the older receipt's two
+    # rows in their original order, each with the right line_index
+    assert response.status_code == 200
+    body = response.json()
+    assert [(r["receipt_id"], r["line_index"], r["name"]) for r in body["items"]] == [
+        (newer, 0, "Eggs"),
+        (older, 0, "Milk"),
+        (older, 1, "Bread"),
+    ]
+    assert body["count"] == 3
+    assert body["total"] == 3
+
+
+def test_a_receipt_with_no_items_contributes_nothing(temp_repository):
+    # Given one receipt with items and one with an empty items list
+    with_items = seed(temp_repository, items=[item(name="Milk")])
+    seed(temp_repository, items=[])
+
+    response = client.get("/items")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["receipt_id"] == with_items
+
+
+def test_null_item_fields_stay_null(temp_repository):
+    # Given a line item with every field null except the name
+    seed(temp_repository, items=[item(name="Mystery item")])
+
+    response = client.get("/items")
+
+    row = response.json()["items"][0]
+    assert row["name"] == "Mystery item"
+    assert row["quantity"] is None
+    assert row["unit_price"] is None
+    assert row["line_total"] is None
+
+
+# --- Filters -------------------------------------------------------------
+
+
+@pytest.fixture
+def filtered_seed(temp_repository):
+    ids = {}
+    ids["r1"] = seed(
+        temp_repository,
+        apartment_id=OBERAUDORF,
+        category_id="cleaning",
+        status=ReceiptStatus.NEEDS_REVIEW,
+        purchase_date="2026-01-15",
+        store_name="Hardware Store",
+        items=[item(name="Mop")],
+    )
+    ids["r2"] = seed(
+        temp_repository,
+        apartment_id=OBERAUDORF,
+        category_id="repairs",
+        status=ReceiptStatus.APPROVED,
+        purchase_date="2025-06-01",
+        store_name="Plumber",
+        items=[item(name="Pipe")],
+    )
+    ids["r3"] = seed(
+        temp_repository,
+        apartment_id=WALDGLUECK,
+        category_id=None,
+        status=ReceiptStatus.NEEDS_REVIEW,
+        purchase_date=None,
+        store_name="Garden Center",
+        items=[item(name="Seeds")],
+    )
+    return ids
+
+
+def test_filter_by_apartment_alone(filtered_seed):
+    response = client.get(f"/items?apartment_id={OBERAUDORF}")
+    assert response.status_code == 200
+    assert set(receipt_ids(response)) == {filtered_seed["r1"], filtered_seed["r2"]}
+
+
+def test_filter_by_year_alone(filtered_seed):
+    response = client.get("/items?year=2026")
+    assert response.status_code == 200
+    assert receipt_ids(response) == [filtered_seed["r1"]]
+
+
+def test_filter_by_year_none(filtered_seed):
+    response = client.get("/items?year=none")
+    assert response.status_code == 200
+    assert receipt_ids(response) == [filtered_seed["r3"]]
+
+
+def test_filter_by_status_alone(filtered_seed):
+    response = client.get(f"/items?status={ReceiptStatus.APPROVED}")
+    assert response.status_code == 200
+    assert receipt_ids(response) == [filtered_seed["r2"]]
+
+
+def test_filter_by_category_alone(filtered_seed):
+    response = client.get("/items?category_id=cleaning")
+    assert response.status_code == 200
+    assert receipt_ids(response) == [filtered_seed["r1"]]
+
+
+def test_filter_by_category_none(filtered_seed):
+    response = client.get("/items?category_id=none")
+    assert response.status_code == 200
+    assert receipt_ids(response) == [filtered_seed["r3"]]
+
+
+def test_combined_filters(filtered_seed):
+    response = client.get(f"/items?apartment_id={OBERAUDORF}&status={ReceiptStatus.APPROVED}")
+    assert response.status_code == 200
+    assert receipt_ids(response) == [filtered_seed["r2"]]
+
+
+def test_unknown_apartment_returns_422(filtered_seed):
+    response = client.get("/items?apartment_id=does-not-exist")
+    assert response.status_code == 422
+
+
+def test_bad_status_returns_422(filtered_seed):
+    response = client.get("/items?status=archived")
+    assert response.status_code == 422
+
+
+def test_unknown_category_returns_422(filtered_seed):
+    response = client.get("/items?category_id=does-not-exist")
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("bad_year", ["1999", "25", "2025x"])
+def test_bad_year_returns_422(filtered_seed, bad_year):
+    response = client.get(f"/items?year={bad_year}")
+    assert response.status_code == 422
+
+
+# --- Search (q) ------------------------------------------------------------
+
+
+def test_q_single_word_matches_item_name(temp_repository):
+    seed(temp_repository, items=[item(name="Whole Milk"), item(name="Bread")])
+
+    response = client.get("/items?q=milk")
+
+    assert response.status_code == 200
+    assert item_names(response) == ["Whole Milk"]
+
+
+def test_q_several_words_requires_all_of_them(temp_repository):
+    seed(temp_repository, items=[item(name="Whole Milk"), item(name="Milk Chocolate")])
+
+    response = client.get("/items?q=whole milk")
+
+    assert response.status_code == 200
+    assert item_names(response) == ["Whole Milk"]
+
+
+def test_q_is_case_insensitive(temp_repository):
+    seed(temp_repository, items=[item(name="Milch")])
+
+    response = client.get("/items?q=MILCH")
+
+    assert response.status_code == 200
+    assert item_names(response) == ["Milch"]
+
+
+def test_q_matches_through_store_name_even_with_null_item_name(temp_repository):
+    seed(temp_repository, store_name="Hardware Store", items=[item(name=None, line_total=5.0)])
+
+    response = client.get("/items?q=hardware")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["name"] is None
+
+
+def test_q_longer_than_100_chars_returns_422(temp_repository):
+    seed(temp_repository, items=[item(name="Milk")])
+
+    response = client.get(f"/items?q={'a' * 101}")
+
+    assert response.status_code == 422
+
+
+def test_blank_q_is_ignored(temp_repository):
+    seed(temp_repository, items=[item(name="Milk")])
+
+    response = client.get("/items?q=   ")
+
+    assert response.status_code == 200
+    assert item_names(response) == ["Milk"]
+
+
+# --- limit/offset/total ------------------------------------------------
+
+
+def test_limit_and_offset_with_total(temp_repository):
+    seed(
+        temp_repository,
+        items=[item(name="A"), item(name="B"), item(name="C"), item(name="D")],
+    )
+
+    response = client.get("/items?limit=2&offset=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert item_names(response) == ["B", "C"]
+    assert body["count"] == 2
+    assert body["total"] == 4
+
+
+def test_empty_result_is_200_with_zero_count_and_total(temp_repository):
+    response = client.get("/items")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "count": 0, "total": 0}
+
+
+@pytest.mark.parametrize("bad_limit", ["0", "501"])
+def test_bad_limit_returns_422(temp_repository, bad_limit):
+    response = client.get(f"/items?limit={bad_limit}")
+    assert response.status_code == 422
+
+
+def test_bad_offset_returns_422(temp_repository):
+    response = client.get("/items?offset=-1")
+    assert response.status_code == 422
+
+
+# --- Data integrity ------------------------------------------------------
+
+
+def test_a_deleted_receipts_rows_disappear(temp_repository):
+    receipt_id = seed(temp_repository, items=[item(name="Milk")])
+    assert client.get("/items").json()["count"] == 1
+
+    delete_response = client.delete(f"/receipts/{receipt_id}")
+    assert delete_response.status_code == 204
+
+    response = client.get("/items")
+    assert response.json() == {"items": [], "count": 0, "total": 0}
+
+
+def test_corrupted_json_row_is_skipped_others_still_returned(temp_repository):
+    good_id = seed(temp_repository, items=[item(name="Milk")])
+    bad_id = str(uuid.uuid4())
+    conn = sqlite3.connect(temp_repository._database_path)
+    conn.execute(
+        """
+        INSERT INTO receipts (
+            receipt_id, store_name, purchase_date, currency, total,
+            extracted_json, ai_result_json, created_at, updated_at
+        )
+        VALUES (?, NULL, NULL, NULL, NULL, ?, ?, ?, ?)
+        """,
+        (bad_id, "{not valid json", "{not valid json", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+    )
+    conn.commit()
+    conn.close()
+
+    response = client.get("/items")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["receipt_id"] == good_id
+
+
+def test_never_extracted_upload_is_not_listed(temp_repository):
+    receipt_id = str(uuid.uuid4())
+    temp_repository.save_upload(
+        receipt_id=receipt_id,
+        original_filename="receipt.jpg",
+        stored_filename="abc.jpg",
+        content_type="image/jpeg",
+    )
+
+    response = client.get("/items")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "count": 0, "total": 0}
+
+
+def test_legacy_raw_date_is_shown_normalized(temp_repository):
+    # Given a row saved as if by an older version of the app, with a raw
+    # (non-ISO) date already sitting in extracted_json -- written directly
+    receipt_id = str(uuid.uuid4())
+    raw_data = {
+        "store_name": "Store",
+        "purchase_date": "2025-06-26 11",
+        "currency": "USD",
+        "items": [{"name": "Milk", "quantity": None, "unit_price": None, "line_total": None}],
+        "discounts": [],
+        "taxes": [],
+        "total": 10.0,
+    }
+    now = "2026-01-15T10:00:00+00:00"
+    with sqlite3.connect(temp_repository._database_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO receipts (receipt_id, store_name, purchase_date, currency, total,
+                extracted_json, ai_result_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                receipt_id, "Store", "2025-06-26 11", "USD", "10.0",
+                json.dumps(raw_data), json.dumps(raw_data), now, now,
+            ),
+        )
+        conn.commit()
+
+    response = client.get("/items")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["purchase_date"] == "2025-06-26"
+
+
+# --- Route collision -------------------------------------------------------
+
+
+def test_items_route_does_not_collide_with_other_routes(temp_repository):
+    receipt_id = seed(temp_repository, items=[item(name="Milk")])
+
+    items_response = client.get("/items")
+    assert items_response.status_code == 200
+    assert "items" in items_response.json()
+
+    receipts_response = client.get("/receipts")
+    assert receipts_response.status_code == 200
+
+    receipt_response = client.get(f"/receipts/{receipt_id}")
+    assert receipt_response.status_code == 200
+    assert receipt_response.json()["receipt_id"] == receipt_id

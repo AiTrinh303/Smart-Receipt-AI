@@ -2,7 +2,7 @@ import re
 from datetime import date, timedelta
 from decimal import Decimal
 
-from domain.models import ReceiptData, ReceiptWarning
+from domain.models import LineItemRow, ReceiptData, ReceiptWarning, SavedReceipt
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "application/pdf"}
@@ -227,3 +227,51 @@ def check_receipt(data: ReceiptData, today: date) -> list[ReceiptWarning]:
             )
 
     return warnings
+
+
+# --- GET /items: flattening line items and matching a search query --------
+
+
+def flatten_line_items(saved_receipt: SavedReceipt) -> list[LineItemRow]:
+    """Flattens one receipt's line items into LineItemRow rows, in the
+    receipt's own item order (line_index 0, 1, 2, ...). purchase_date is
+    normalized for display with the same rule get_receipt uses -- a raw,
+    unparseable date still shows its extractable leading ISO date, never
+    the raw text, unless even that fails. Never computes or converts
+    money; nulls stay null."""
+    normalized_date = normalize_purchase_date(saved_receipt.purchase_date)
+    display_date = normalized_date if normalized_date is not None else saved_receipt.purchase_date
+
+    return [
+        LineItemRow(
+            receipt_id=saved_receipt.receipt_id,
+            line_index=index,
+            name=item.name,
+            quantity=item.quantity,
+            unit_price=item.unit_price,
+            line_total=item.line_total,
+            currency=saved_receipt.currency,
+            purchase_date=display_date,
+            store_name=saved_receipt.store_name,
+            apartment_id=saved_receipt.apartment_id,
+            apartment_name=saved_receipt.apartment_name,
+            category_name=saved_receipt.category_name,
+            status=saved_receipt.status,
+        )
+        for index, item in enumerate(saved_receipt.items)
+    ]
+
+
+def matches_query(row: LineItemRow, q: str) -> bool:
+    """True if every whitespace-separated word in `q` appears,
+    case-insensitively (via `str.casefold()`, not `.lower()`, so non-ASCII
+    casing still matches correctly), in the item name or the store name --
+    a row with a null item name can still match through the store name
+    alone. `q` is expected already trimmed; a blank `q` matches every row,
+    though callers should simply skip calling this at all for a blank
+    query rather than relying on that."""
+    words = q.split()
+    if not words:
+        return True
+    haystack = " ".join(part for part in (row.name, row.store_name) if part).casefold()
+    return all(word.casefold() in haystack for word in words)

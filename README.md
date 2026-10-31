@@ -429,6 +429,33 @@ All amount math uses `Decimal(str(value))`, never raw floats.
   an unknown `apartment_id` is `422`. Registered ahead of
   `GET /receipts/{receipt_id}` so the literal path `/receipts/facets`
   is never captured by that route's `{receipt_id}` segment.
+- `GET /items` — a flat list of every purchased line item across receipts,
+  for seeing what was bought and opening the original receipt:
+  `{"items": [{receipt_id, line_index, name, quantity, unit_price,
+  line_total, currency, purchase_date, store_name, apartment_id,
+  apartment_name, category_name, status}, ...], "count": <returned>,
+  "total": <all matching rows>}`. `purchase_date` is normalized for
+  display exactly like `GET /receipts/{id}`. Ordered by the receipt's
+  `created_at` (newest first), then by the item's original position in
+  the receipt (`line_index`, stable). Accepts the exact same
+  `apartment_id`/`year`/`status`/`category_id` filters as `GET /receipts`
+  (same validation and `422` rules), plus:
+  - `q` — a search trimmed of surrounding whitespace, at most 100
+    characters (longer is `422`); a blank query (after trimming) is
+    ignored, not an error. Split into words; **every** word must appear,
+    case-insensitively, in the item's name or its receipt's store name —
+    so a row with no item name can still match through the store name.
+  - `limit` (default 100, 1–500) and `offset` (default 0, ≥ 0) — an
+    out-of-range value is `422`.
+  An empty result is `200` with `items: []`, `count: 0`, `total: 0`, never
+  `404`. A receipt that was only uploaded, never extracted, contributes no
+  rows, same as `GET /receipts`. **Implementation note:** filtering by
+  apartment/year/status/category happens the same way `GET /receipts`
+  does; flattening each matching receipt's items, the `q` search, and the
+  `limit`/`offset` slice all then happen in Python, after fetching every
+  matching receipt — fine at this app's scale (thousands of rows, not
+  millions), but would need a dedicated indexed table if that ever
+  stopped being true.
 - `PUT /receipts/{receipt_id}` — corrects a saved receipt's editable fields
   (`store_name`, `purchase_date`, `currency`, `items`, `discounts`, `taxes`,
   `total`). Returns `200` with the same shape/types as `GET /receipts/{id}`.

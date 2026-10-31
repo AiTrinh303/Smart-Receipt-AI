@@ -79,3 +79,13 @@ class ReceiptRepository(Protocol):
     def set_receipt_status(self, receipt_id: str, status: str) -> SavedReceipt | None: ...
 
     def get_receipt_facets(self, apartment_id: str | None = None) -> ReceiptFacets: ...
+
+    def list_matching_receipts(
+        self,
+        apartment_id: str | None = None,
+        year: int | None = None,
+        undated: bool = False,
+        status: str | None = None,
+        category_id: str | None = None,
+        no_category: bool = False,
+    ) -> list[SavedReceipt]: ...

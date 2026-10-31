@@ -30,6 +30,8 @@ from domain.rules import (
     FileTooLargeError,
     UnsupportedFileTypeError,
     check_receipt,
+    flatten_line_items,
+    matches_query,
     media_type_for_extension,
     normalize_purchase_date,
     validate_upload,
@@ -159,15 +161,16 @@ def list_categories(repository: ReceiptRepository = Depends(get_repository)):
     return {"items": [{"id": c.id, "name": c.name} for c in items], "count": len(items)}
 
 
-@router.get("/receipts")
-def list_receipts(
-    limit: int = Query(default=50, ge=1, le=200),
-    apartment_id: str | None = Query(default=None),
-    year: str | None = Query(default=None),
-    status: str | None = Query(default=None),
-    category_id: str | None = Query(default=None),
-    repository: ReceiptRepository = Depends(get_repository),
-):
+def _validate_receipt_filters(
+    repository: ReceiptRepository,
+    apartment_id: str | None,
+    year: str | None,
+    status: str | None,
+    category_id: str | None,
+) -> dict:
+    """Shared by GET /receipts and GET /items: validates the four filters
+    they both accept and returns them ready to pass straight to
+    repository.list_receipts()/list_matching_receipts() as keyword args."""
     if apartment_id is not None and repository.get_apartment(apartment_id) is None:
         raise HTTPException(status_code=422, detail="Unknown apartment.")
 
@@ -183,16 +186,72 @@ def list_receipts(
             raise HTTPException(status_code=422, detail="Unknown category.")
         category_id_value = category_id
 
-    items = repository.list_receipts(
-        limit,
-        apartment_id=apartment_id,
-        year=year_value,
-        undated=undated,
-        status=status,
-        category_id=category_id_value,
-        no_category=no_category,
-    )
+    return {
+        "apartment_id": apartment_id,
+        "year": year_value,
+        "undated": undated,
+        "status": status,
+        "category_id": category_id_value,
+        "no_category": no_category,
+    }
+
+
+@router.get("/receipts")
+def list_receipts(
+    limit: int = Query(default=50, ge=1, le=200),
+    apartment_id: str | None = Query(default=None),
+    year: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    category_id: str | None = Query(default=None),
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    filters = _validate_receipt_filters(repository, apartment_id, year, status, category_id)
+    items = repository.list_receipts(limit, **filters)
     return {"items": [item.model_dump() for item in items], "count": len(items)}
+
+
+MAX_ITEM_SEARCH_LENGTH = 100
+
+
+@router.get("/items")
+def list_items(
+    apartment_id: str | None = Query(default=None),
+    year: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    category_id: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    filters = _validate_receipt_filters(repository, apartment_id, year, status, category_id)
+
+    q_value: str | None = None
+    if q is not None:
+        trimmed = q.strip()
+        if len(trimmed) > MAX_ITEM_SEARCH_LENGTH:
+            raise HTTPException(
+                status_code=422, detail=f"q must be at most {MAX_ITEM_SEARCH_LENGTH} characters."
+            )
+        q_value = trimmed or None  # a blank query (after trimming) is ignored, not an error
+
+    receipts = repository.list_matching_receipts(**filters)
+
+    # Flattening, the q filter, and the limit/offset slice all happen here
+    # in Python, after the adapter has already applied the apartment/year/
+    # status/category filters in SQL (and the date filter in Python) and
+    # returned the matching receipts. This is fine at this app's scale --
+    # thousands of rows, not millions -- but would need a dedicated
+    # line_items table (with its own indexed search column) if that ever
+    # stops being true.
+    rows = [row for receipt in receipts for row in flatten_line_items(receipt)]
+    if q_value is not None:
+        rows = [row for row in rows if matches_query(row, q_value)]
+
+    total = len(rows)
+    page = rows[offset : offset + limit]
+
+    return {"items": [row.model_dump() for row in page], "count": len(page), "total": total}
 
 
 @router.get("/receipts/facets")

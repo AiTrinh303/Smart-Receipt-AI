@@ -151,6 +151,26 @@ class ApartmentFacet(BaseModel):
     count: int
 
 
+class LineItemRow(BaseModel):
+    """One flattened row of GET /items -- one purchased line item, with
+    enough of its receipt's context to filter, display, and open the
+    original. Built by domain.rules.flatten_line_items; never stored."""
+
+    receipt_id: str
+    line_index: int
+    name: str | None
+    quantity: float | None
+    unit_price: float | None
+    line_total: float | None
+    currency: str | None
+    purchase_date: str | None
+    store_name: str | None
+    apartment_id: str | None
+    apartment_name: str | None
+    category_name: str | None
+    status: str
+
+
 class ReceiptFacets(BaseModel):
     """GET /receipts/facets's response body. `years` is sorted descending
     (newest first, matching the list's own default order); `has_undated`

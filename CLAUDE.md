@@ -354,6 +354,11 @@ the purchase info, and the result is displayed for review.
     `"needs_review"` or `"approved"`) — same key set and JSON types across
     extract/GET/PUT/reset/apartment-PUT/list-item, see
     [docs/adr/0003-category-and-review-status.md](docs/adr/0003-category-and-review-status.md).
+    `LineItemRow` — one flattened `GET /items` row (`receipt_id`,
+    `line_index`, `name`, `quantity`, `unit_price`, `line_total`,
+    `currency`, `purchase_date`, `store_name`, `apartment_id`,
+    `apartment_name`, `category_name`, `status`); never stored, built
+    fresh per request by `rules.flatten_line_items()`.
     `rules.py` (allowed file
     types, size limit, `media_type_for_extension()` — a pure
     extension -> fixed media type map used by the file-serving endpoint, so
@@ -368,14 +373,25 @@ the purchase info, and the result is displayed for review.
     item has a usable amount; tolerant of either tax-added-on-top or
     tax-already-included, tolerance `0.05`)/`LINE_MISMATCH` (per
     `Decimal(str(value))` math, never raw floats); raises domain
-    exceptions, no HTTP/FastAPI/file I/O),
+    exceptions, no HTTP/FastAPI/file I/O; `flatten_line_items(saved_receipt)`
+    — pure, no I/O — turns one `SavedReceipt`'s `items` into `LineItemRow`s
+    in their original order (`line_index` 0, 1, 2, ...), normalizing
+    `purchase_date` for display with the same `normalize_purchase_date`
+    call `get_receipt()` uses (never duplicated, never computes or converts
+    money, nulls stay null); `matches_query(row, q)` — pure — splits `q`
+    (assumed already trimmed) on whitespace and requires every word to
+    appear, via `str.casefold()` (not `.lower()`), in the row's item name
+    or store name; a null item name can still match through the store
+    name; an empty `q` matches every row, though `api/routes.py` simply
+    skips calling this at all for a blank query),
     `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError` /
     `ExtractionUnavailableError`, `ReceiptRepository` Protocol —
     `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
     `list_receipts`/`update_receipt`/`reset_receipt`/`delete_receipt`/
     `list_apartments`/`get_apartment`/`set_receipt_apartment`/
     `list_categories`/`get_category`/`set_receipt_category`/
-    `set_receipt_status`, plus the
+    `set_receipt_status`/`get_receipt_facets`/`list_matching_receipts`,
+    plus the
     strict, separate `ReceiptUpdate`/`LineItemUpdate`/`DiscountUpdate`/
     `TaxUpdate` models in `models.py` for user-submitted corrections, and
     `ApartmentAssignment` (`apartment_id: str`, `extra="forbid"`) for
@@ -454,7 +470,18 @@ the purchase info, and the result is displayed for review.
     Because the date filter runs after the SQL query, the SQL side has NO
     `LIMIT` when any filter is given; `limit` is applied in Python as rows
     are accepted, after the corrupted-JSON skip and the date filter, so a
-    filtered call never over- or under-counts. `get_receipt_facets`
+    filtered call never over- or under-counts.
+    The SQL `WHERE`-building and the row-filtering/parsing loop above both
+    live in a private `_filtered_receipt_rows(conn, ...)` shared by
+    `list_receipts` and `list_matching_receipts` — the latter is
+    `GET /items`'s source: same filters, same order, no `limit`, but each
+    row rebuilt into a full `SavedReceipt` (not a `ReceiptSummary`) so
+    `domain.rules.flatten_line_items` has every item to flatten. Unlike
+    `list_receipts`'s summaries, `list_matching_receipts`'s
+    `SavedReceipt.purchase_date` is left raw/unnormalized — normalizing it
+    for display is `flatten_line_items`'s job, not the adapter's, so that
+    responsibility stays in one place (`domain/rules.py`) rather than
+    being duplicated across two adapter methods. `get_receipt_facets`
     (`ApartmentFacet`/`ReceiptFacets` in `models.py`) computes `apartments`
     (one row per apartment via `LEFT JOIN` + `COUNT`, always *every*
     receipt for that apartment, ignoring `apartment_id`) and `total`
@@ -526,7 +553,10 @@ the purchase info, and the result is displayed for review.
     `GET /receipts?limit=N` — list, newest first, `limit` default 50
     (1–200, else `422`), `{"items": [...], "count": N}`, empty DB ->
     `{"items": [], "count": 0}` never `404`. Optional filters, AND-combined,
-    no params unchanged from before: `apartment_id` (422 via
+    no params unchanged from before, validated by the shared
+    `_validate_receipt_filters(repository, apartment_id, year, status,
+    category_id)` helper (also used by `GET /items`, below, so the two
+    endpoints' filter rules can never drift apart): `apartment_id` (422 via
     `repository.get_apartment()` if unknown — same check and message as the
     apartment PUT), `year` (`_parse_year_filter()`: a 4-digit `\d{4}`
     2000–2100 or the literal string `"none"` for null/non-ISO dates; the
@@ -541,7 +571,27 @@ the purchase info, and the result is displayed for review.
     order is what FastAPI matches on) so the literal path `/receipts/facets`
     is never captured by that route's `{receipt_id}` segment; 422 for an
     unknown `apartment_id`; returns `repository.get_receipt_facets(...)
-    .model_dump()` directly. `PUT /receipts/{receipt_id}`
+    .model_dump()` directly.
+    `GET /items` — a flat list of purchased line items across receipts:
+    `{"items": [...], "count": <returned>, "total": <all matching rows>}`.
+    Accepts the identical `apartment_id`/`year`/`status`/`category_id`
+    (same `_validate_receipt_filters()` call, same `422` rules) plus `q`
+    (stripped; `422` if longer than `MAX_ITEM_SEARCH_LENGTH` = 100 *after*
+    stripping; a blank result is treated as "no search," not an error) and
+    `limit`/`offset` (`Query(default=100, ge=1, le=500)`/
+    `Query(default=0, ge=0)`, else `422`). Calls
+    `repository.list_matching_receipts(**filters)` (unlimited, already
+    apartment/year/status/category-filtered), then — entirely in Python,
+    documented in a code comment as fine at this app's scale but not
+    forever — flattens every matching receipt via
+    `domain.rules.flatten_line_items`, filters by `q` via
+    `domain.rules.matches_query` when `q` isn't blank, and slices
+    `rows[offset : offset + limit]`; `total` is `len(rows)` *before* that
+    slice, `count` is `len(page)` after it. Row order (receipt
+    `created_at` DESC/`receipt_id` ASC, then `line_index` ASC) falls out
+    entirely from `list_matching_receipts`'s own order plus
+    `flatten_line_items` enumerating each receipt's `items` in place — no
+    separate sort needed. `PUT /receipts/{receipt_id}`
     — corrects the editable fields, `FastAPI`-validates the body against
     `ReceiptUpdate` (auto-`422`), 404 if the receipt doesn't exist (PUT
     never creates one), 200 with the same shape/types as GET,
