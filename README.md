@@ -391,12 +391,33 @@ All amount math uses `Decimal(str(value))`, never raw floats.
   original file.
 - `GET /receipts?limit=N` — lists saved receipts newest first, as
   `{"items": [{receipt_id, original_filename, store_name, purchase_date,
-  currency, total, created_at, apartment_id, apartment_name}, ...],
+  currency, total, created_at, apartment_id, apartment_name, category_id,
+  category_name, status}, ...],
   "count": <number>}` (no items,
   discounts or taxes — use `GET /receipts/{id}` for the full detail).
   `limit` defaults to 50 (1–200); an out-of-range or non-integer value
   returns `422`. An empty database returns `{"items": [], "count": 0}`,
-  never `404`.
+  never `404`. Optional filters, combined with AND, with no params meaning
+  "everything" (unchanged):
+  - `apartment_id` — a known apartment id, else `422`.
+  - `year` — a 4-digit year (2000–2100), or `"none"` for receipts whose
+    date is null or isn't a valid ISO date; a year matches only a
+    receipt whose date normalizes to that exact year (so a raw,
+    unparseable date like `"26/06/2025"` never matches `year=2025` — it
+    only matches `year=none`); anything else is `422`.
+  - `status` — `"needs_review"` or `"approved"`, else `422`.
+  - `category_id` — a known category id, or `"none"` for receipts with no
+    category, else `422`.
+- `GET /receipts/facets?apartment_id=<optional>` — the counts behind the
+  history view's apartment tabs and filter dropdowns:
+  `{"apartments": [{"id", "name", "count"}, ...], "total": <number>,
+  "years": [2026, 2025, ...], "has_undated": <bool>}`. Each apartment's
+  `count` is always every receipt it has, regardless of `apartment_id`;
+  `total` is always every receipt in the database. `years` (sorted newest
+  first) and `has_undated` are scoped to `apartment_id` when it's given —
+  an unknown `apartment_id` is `422`. Registered ahead of
+  `GET /receipts/{receipt_id}` so the literal path `/receipts/facets`
+  is never captured by that route's `{receipt_id}` segment.
 - `PUT /receipts/{receipt_id}` — corrects a saved receipt's editable fields
   (`store_name`, `purchase_date`, `currency`, `items`, `discounts`, `taxes`,
   `total`). Returns `200` with the same shape/types as `GET /receipts/{id}`.

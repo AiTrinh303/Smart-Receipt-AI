@@ -7,12 +7,14 @@ from pathlib import Path
 
 from domain.models import (
     Apartment,
+    ApartmentFacet,
     Category,
     DEFAULT_APARTMENTS,
     DEFAULT_CATEGORIES,
     Discount,
     LineItem,
     ReceiptData,
+    ReceiptFacets,
     ReceiptStatus,
     ReceiptSummary,
     ReceiptUpdate,
@@ -317,20 +319,52 @@ class SqliteReceiptRepository:
             status=row[11],
         )
 
-    def list_receipts(self, limit: int) -> list[ReceiptSummary]:
+    def list_receipts(
+        self,
+        limit: int,
+        apartment_id: str | None = None,
+        year: int | None = None,
+        undated: bool = False,
+        status: str | None = None,
+        category_id: str | None = None,
+        no_category: bool = False,
+    ) -> list[ReceiptSummary]:
+        # apartment_id/status/category_id are plain column equality, so they
+        # are filtered in SQL (parameterized); year/undated need
+        # normalize_purchase_date -- the same shared domain rule used
+        # everywhere else, never duplicated as a SQL date regex -- so those
+        # are filtered in Python below, on every matching row, BEFORE the
+        # final `limit` slice (an SQL-level LIMIT would cut rows before the
+        # date filter ever saw them).
+        where_clauses: list[str] = []
+        params: list[str] = []
+        if apartment_id is not None:
+            where_clauses.append("r.apartment_id = ?")
+            params.append(apartment_id)
+        if status is not None:
+            where_clauses.append("r.status = ?")
+            params.append(status)
+        if no_category:
+            where_clauses.append("r.category_id IS NULL")
+        elif category_id is not None:
+            where_clauses.append("r.category_id = ?")
+            params.append(category_id)
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
         with self._connect() as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT r.receipt_id, r.extracted_json, r.created_at, u.original_filename,
                        r.apartment_id, ap.name, r.category_id, cat.name, r.status
                 FROM receipts r
                 LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
                 LEFT JOIN apartments ap ON ap.id = r.apartment_id
                 LEFT JOIN categories cat ON cat.id = r.category_id
+                {where_sql}
                 ORDER BY r.created_at DESC, r.receipt_id ASC
-                LIMIT ?
                 """,
-                (limit,),
+                params,
             ).fetchall()
 
         summaries: list[ReceiptSummary] = []
@@ -339,12 +373,15 @@ class SqliteReceiptRepository:
             extracted_json,
             created_at,
             original_filename,
-            apartment_id,
+            apartment_id_value,
             apartment_name,
-            category_id,
+            category_id_value,
             category_name,
-            status,
+            status_value,
         ) in rows:
+            if len(summaries) >= limit:
+                break
+
             try:
                 # Same source (extracted_json) as get_receipt(), so `total`
                 # carries the same JSON type here as in the extract/GET
@@ -357,6 +394,14 @@ class SqliteReceiptRepository:
                 logger.error("Skipping receipt with unparseable extracted_json: receipt_id=%s", receipt_id)
                 continue
 
+            if year is not None or undated:
+                normalized_date = normalize_purchase_date(extracted.purchase_date)
+                is_undated = normalized_date is None
+                if undated and not is_undated:
+                    continue
+                if year is not None and (is_undated or int(normalized_date[:4]) != year):
+                    continue
+
             summaries.append(
                 ReceiptSummary(
                     receipt_id=receipt_id,
@@ -366,15 +411,56 @@ class SqliteReceiptRepository:
                     currency=extracted.currency,
                     total=extracted.total,
                     created_at=created_at,
-                    apartment_id=apartment_id,
+                    apartment_id=apartment_id_value,
                     apartment_name=apartment_name,
-                    category_id=category_id,
+                    category_id=category_id_value,
                     category_name=category_name,
-                    status=status,
+                    status=status_value,
                 )
             )
 
         return summaries
+
+    def get_receipt_facets(self, apartment_id: str | None = None) -> ReceiptFacets:
+        with self._connect() as conn:
+            apartment_rows = conn.execute(
+                """
+                SELECT ap.id, ap.name, COUNT(r.receipt_id)
+                FROM apartments ap
+                LEFT JOIN receipts r ON r.apartment_id = ap.id
+                GROUP BY ap.id
+                ORDER BY ap.sort_order
+                """
+            ).fetchall()
+            total = conn.execute("SELECT COUNT(*) FROM receipts").fetchone()[0]
+
+            if apartment_id is not None:
+                date_rows = conn.execute(
+                    "SELECT extracted_json FROM receipts WHERE apartment_id = ?",
+                    (apartment_id,),
+                ).fetchall()
+            else:
+                date_rows = conn.execute("SELECT extracted_json FROM receipts").fetchall()
+
+        years: set[int] = set()
+        has_undated = False
+        for (extracted_json,) in date_rows:
+            try:
+                extracted = ReceiptData.model_validate_json(extracted_json)
+            except Exception:
+                continue
+            normalized_date = normalize_purchase_date(extracted.purchase_date)
+            if normalized_date is None:
+                has_undated = True
+            else:
+                years.add(int(normalized_date[:4]))
+
+        return ReceiptFacets(
+            apartments=[ApartmentFacet(id=row[0], name=row[1], count=row[2]) for row in apartment_rows],
+            total=total,
+            years=sorted(years, reverse=True),
+            has_undated=has_undated,
+        )
 
     def update_receipt(self, receipt_id: str, update: ReceiptUpdate) -> SavedReceipt | None:
         corrected = ReceiptData(

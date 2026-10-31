@@ -142,6 +142,27 @@ class ReceiptSummary(BaseModel):
     status: str
 
 
+class ApartmentFacet(BaseModel):
+    """One row of GET /receipts/facets's `apartments` list -- the count is
+    always every receipt for that apartment, regardless of any filter."""
+
+    id: str
+    name: str
+    count: int
+
+
+class ReceiptFacets(BaseModel):
+    """GET /receipts/facets's response body. `years` is sorted descending
+    (newest first, matching the list's own default order); `has_undated`
+    and `years` are scoped to `apartment_id` when one was given, but
+    `apartments` and `total` are not."""
+
+    apartments: list[ApartmentFacet]
+    total: int
+    years: list[int]
+    has_undated: bool
+
+
 # --- Editable-field models (user corrections), deliberately separate from
 # ReceiptData/LineItem/Discount/Tax above: those parse lenient AI output and
 # must stay lenient, while these validate strictly against user input. ---

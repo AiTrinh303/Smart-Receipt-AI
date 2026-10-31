@@ -387,7 +387,30 @@ the purchase info, and the result is displayed for review.
     tie-break) and builds each row from `extracted_json` (same source as
     `get_receipt`, so `total`'s JSON type matches); a row with unparseable
     `extracted_json` is logged (receipt_id only) and skipped rather than
-    failing the whole list. `update_receipt` replaces `extracted_json` and
+    failing the whole list.
+    **Filtering (`apartment_id`/`year`/`undated`/`status`/`category_id`/
+    `no_category` params):** `apartment_id`, `status` and `category_id`
+    (plain column equality) are filtered in a parameterized SQL `WHERE`
+    clause built from a list of clauses/params — never string-formatted
+    user input. `year`/`undated` can't be done that way without duplicating
+    date-validity logic in SQL, so they're filtered in Python instead, by
+    calling `domain.rules.normalize_purchase_date` on each matching row's
+    `extracted_json`-sourced `purchase_date` (the same shared rule
+    `check_receipt`/`save_receipt`/`get_receipt` all use) — a year matches
+    only when normalization succeeds and the result starts with that year
+    (so a raw `"26/06/2025"` never matches `year=2025`, only `undated`).
+    Because the date filter runs after the SQL query, the SQL side has NO
+    `LIMIT` when any filter is given; `limit` is applied in Python as rows
+    are accepted, after the corrupted-JSON skip and the date filter, so a
+    filtered call never over- or under-counts. `get_receipt_facets`
+    (`ApartmentFacet`/`ReceiptFacets` in `models.py`) computes `apartments`
+    (one row per apartment via `LEFT JOIN` + `COUNT`, always *every*
+    receipt for that apartment, ignoring `apartment_id`) and `total`
+    (`COUNT(*)` over all receipts) in one query each; `years`/`has_undated`
+    are computed the same way as the date filter above (via
+    `normalize_purchase_date` over each row's `extracted_json`), scoped to
+    `apartment_id` via a parameterized `WHERE` when one is given.
+    `update_receipt` replaces `extracted_json` and
     the four denormalized columns, sets `edited_at` to now, in one
     transaction, refreshes `updated_at`, and **never touches
     `ai_result_json` or `created_at`** — the original AI output stays
@@ -450,7 +473,23 @@ the purchase info, and the result is displayed for review.
     `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`,
     `GET /receipts?limit=N` — list, newest first, `limit` default 50
     (1–200, else `422`), `{"items": [...], "count": N}`, empty DB ->
-    `{"items": [], "count": 0}` never `404`, `PUT /receipts/{receipt_id}`
+    `{"items": [], "count": 0}` never `404`. Optional filters, AND-combined,
+    no params unchanged from before: `apartment_id` (422 via
+    `repository.get_apartment()` if unknown — same check and message as the
+    apartment PUT), `year` (`_parse_year_filter()`: a 4-digit `\d{4}`
+    2000–2100 or the literal string `"none"` for null/non-ISO dates; the
+    `\d{4}` regex check happens *before* `int()` + range, so `"2025x"`/
+    `"25"`/`"20255"` are rejected the same way a too-small/too-large year
+    is, all `422`), `status` (`"needs_review"`/`"approved"` else `422`),
+    `category_id` (a known id via `repository.get_category()`, or the
+    literal string `"none"` for a null category, else `422` — `"none"` is
+    checked *before* calling `get_category()`, so it's never treated as an
+    unknown id). `GET /receipts/facets?apartment_id=<optional>` —
+    registered *before* `GET /receipts/{receipt_id}` in `routes.py` (source
+    order is what FastAPI matches on) so the literal path `/receipts/facets`
+    is never captured by that route's `{receipt_id}` segment; 422 for an
+    unknown `apartment_id`; returns `repository.get_receipt_facets(...)
+    .model_dump()` directly. `PUT /receipts/{receipt_id}`
     — corrects the editable fields, `FastAPI`-validates the body against
     `ReceiptUpdate` (auto-`422`), 404 if the receipt doesn't exist (PUT
     never creates one), 200 with the same shape/types as GET,

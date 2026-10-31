@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 import uuid
 from datetime import date
@@ -51,6 +52,29 @@ def get_repository() -> ReceiptRepository:
 def _warnings_payload(data) -> list[dict]:
     """Computed fresh on every call, never stored."""
     return [warning.model_dump() for warning in check_receipt(data, date.today())]
+
+
+YEAR_PATTERN = re.compile(r"^\d{4}$")
+MIN_FILTER_YEAR = 2000
+MAX_FILTER_YEAR = 2100
+NONE_FILTER_VALUE = "none"
+
+
+def _parse_year_filter(year: str | None) -> tuple[int | None, bool]:
+    """Returns (year_value, undated) for the `year` query param: None/False
+    for no filter, (None, True) for "none" (undated), or (year_value, False)
+    for a 4-digit year in range. Raises HTTPException(422) for anything
+    else -- never guesses, same spirit as normalize_purchase_date."""
+    if year is None:
+        return None, False
+    if year == NONE_FILTER_VALUE:
+        return None, True
+    if not YEAR_PATTERN.match(year):
+        raise HTTPException(status_code=422, detail="year must be a 4-digit year (2000-2100) or 'none'.")
+    year_value = int(year)
+    if not (MIN_FILTER_YEAR <= year_value <= MAX_FILTER_YEAR):
+        raise HTTPException(status_code=422, detail="year must be a 4-digit year (2000-2100) or 'none'.")
+    return year_value, False
 
 
 def _missing_approval_fields(saved) -> list[str]:
@@ -138,10 +162,51 @@ def list_categories(repository: ReceiptRepository = Depends(get_repository)):
 @router.get("/receipts")
 def list_receipts(
     limit: int = Query(default=50, ge=1, le=200),
+    apartment_id: str | None = Query(default=None),
+    year: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    category_id: str | None = Query(default=None),
     repository: ReceiptRepository = Depends(get_repository),
 ):
-    items = repository.list_receipts(limit)
+    if apartment_id is not None and repository.get_apartment(apartment_id) is None:
+        raise HTTPException(status_code=422, detail="Unknown apartment.")
+
+    year_value, undated = _parse_year_filter(year)
+
+    if status is not None and status not in (ReceiptStatus.NEEDS_REVIEW, ReceiptStatus.APPROVED):
+        raise HTTPException(status_code=422, detail="status must be 'needs_review' or 'approved'.")
+
+    no_category = category_id == NONE_FILTER_VALUE
+    category_id_value: str | None = None
+    if category_id is not None and not no_category:
+        if repository.get_category(category_id) is None:
+            raise HTTPException(status_code=422, detail="Unknown category.")
+        category_id_value = category_id
+
+    items = repository.list_receipts(
+        limit,
+        apartment_id=apartment_id,
+        year=year_value,
+        undated=undated,
+        status=status,
+        category_id=category_id_value,
+        no_category=no_category,
+    )
     return {"items": [item.model_dump() for item in items], "count": len(items)}
+
+
+@router.get("/receipts/facets")
+def get_receipt_facets(
+    apartment_id: str | None = Query(default=None),
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    # Registered BEFORE GET /receipts/{receipt_id} below so "facets" is
+    # never swallowed by that path's {receipt_id} segment.
+    if apartment_id is not None and repository.get_apartment(apartment_id) is None:
+        raise HTTPException(status_code=422, detail="Unknown apartment.")
+
+    facets = repository.get_receipt_facets(apartment_id=apartment_id)
+    return facets.model_dump()
 
 
 def get_extractor() -> ReceiptExtractor:
