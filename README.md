@@ -60,14 +60,25 @@ again.
 
 Navigation is URL-based, with no router library:
 - No parameter — the upload view (default).
-- `?view=history` — the receipt history list (newest first). Clicking a row
-  navigates to `?receipt=<id>` and shows the same detail view as above
-  (also without calling the AI); a "Back to history" link returns to the
-  list. Browser back/forward works for all of these. Each row shows its
-  apartment as a small badge (plain muted "Not assigned" when it has
-  none), its category as a small badge (plain muted "No category" when it
-  has none), and its review status as a badge with an icon ("Needs
-  review" or "Approved" — never color alone).
+- `?view=history` — the receipt history list (newest first), split by
+  apartment with filters. A tab bar shows "All apartments (N)" plus one
+  tab per apartment with its own count; arrow keys/Home/End move between
+  tabs. Below it, three dropdowns filter by Year (plus "No valid date"
+  when some receipt has no usable date), Status (Needs review/Approved),
+  and Category (plus "No category"); a "Clear filters" button appears
+  once any of those three is set and resets them without changing the
+  selected apartment tab. All of this lives in the URL
+  (`?view=history&apartment=<id>&year=<v>&status=<v>&category=<v>`), so
+  Back/Forward and reload all work, and an unrecognized value in the URL
+  is simply ignored rather than breaking the page. Inside one apartment's
+  tab, that row's own apartment badge is hidden (redundant with the tab);
+  in "All apartments" it's shown, same as the category and status badges.
+  A filtered search with no matches shows "No receipts match these
+  filters." instead of the plain empty state, which only appears with no
+  filters at all. Clicking a row navigates to `?receipt=<id>` and shows
+  the same detail view as above (also without calling the AI); a "Back to
+  history" link returns to the same tab and filters you came from.
+  Browser back/forward works for all of these.
 
 On any saved-receipt view (both right after extraction and when reopening
 `?receipt=<id>`), an "Apartment" card above the receipt data shows the same

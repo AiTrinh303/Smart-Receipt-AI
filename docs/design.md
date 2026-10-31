@@ -14,7 +14,9 @@ upload form (none chosen / chosen / loading / failure), the `ReceiptApartment`
 control on a saved receipt (selected / none selected / saving / saved /
 error), the category select and review-status controls on a saved receipt
 (selected / none / saving / saved / approved / approval blocked), the
-history row's apartment/category/status badges, the
+history row's apartment/category/status badges, the history view's
+apartment tab bar and year/status/category filter selects (all apartments
+selected / one apartment selected), the
 dropzone's idle/drag-over/file-selected states, and a `Card`, all at once,
 with static sample data and no network calls. It's dev-only (gated on `import.meta.env.DEV`, via the mockable
 `src/env.ts`), not linked from the header, and excluded from production
@@ -227,8 +229,75 @@ the full trail of evidence.
   not `brand`-colored, so it reads as a distinct classification from the
   apartment badge next to it) or muted "No category" text when `null`,
   plus the same `StatusBadge` used on the saved-receipt view -- all three
-  badges (apartment, category, status) sit in one wrapped row. No
-  filtering by category or status.
+  badges (apartment, category, status) sit in one wrapped row. (Filtering
+  by category/status was added later -- see the next section.)
+
+## Splitting the history by apartment, with filters
+
+- **Apartment tab bar.** `ReceiptHistory.tsx`'s top follows the WAI-ARIA
+  tabs pattern: `role="tablist"` (`aria-label="Apartment"`) containing one
+  `role="tab"` per apartment plus a leading "All apartments (N)" tab, each
+  labelled with its live count from `GET /receipts/facets`. The selected
+  tab gets `aria-selected="true"`, `tabIndex={0}`, and bold text plus a
+  white background/shadow against the `slate-100` tab-bar background --
+  never color alone. Every other tab is `tabIndex={-1}` (roving tabindex);
+  arrow keys / Home / End move the selection and immediately navigate
+  (automatic activation), and a small `sessionStorage` handoff
+  (`receiptHistoryFocusTabIndex`) restores keyboard focus to the newly
+  selected tab across the full remount that navigating causes (see below)
+  -- without it, the arrow-key interaction would silently drop focus back
+  to the document body every time. Each tab button has a 44px minimum
+  touch target and the tab bar wraps on narrow screens.
+- **Filter selects.** Below the tabs, three native `<select>`s with visible
+  `<label>`s -- "Year" (All years, each year from the facets descending,
+  plus "No valid date" *only* when the facets say `has_undated`), "Status"
+  (All, Needs review, Approved) and "Category" (All, each category from
+  `useCategories`, then "No category"). They stack in a column below `sm`
+  and sit in a row from it.
+- **State lives in the URL**, not component state:
+  `?view=history&apartment=<id>&year=<v>&status=<v>&category=<v>`.
+  Changing a tab or select calls the existing `navigateTo()` helper, which
+  `pushState`s the new URL and dispatches a synthetic `popstate` --
+  `App.tsx` already keys `<ReceiptHistory key={locationKey} />` on
+  `location.search`, so this **fully remounts** `ReceiptHistory` (same
+  mechanism `ReceiptUpload` already relies on), and the remount re-fetches
+  facets/categories/the list fresh from the new URL. Nothing here needed a
+  new effect-driven "re-fetch when filters change" path -- the existing
+  remount-on-navigate architecture already provides it.
+- **Validating URL values ("ignored" vs. "applied with zero results"):** a
+  structurally invalid value (`year` not matching `/^\d{4}$/` and not
+  `"none"`, or `status` outside the two allowed values) is dropped
+  entirely with no network round trip. A referentially invalid value
+  (`apartment`/`category` not among the ids the facets/categories calls
+  actually returned) is also dropped, but only after that lookup -- this
+  distinguishes "the id doesn't exist" (ignored) from "the id exists but
+  matches nothing" (a legitimate filter that correctly shows zero
+  results). `GET /receipts/facets` is called unscoped first (always
+  needed for the tab bar), which doubles as the apartment-id validation
+  source; a second, scoped call (`?apartment_id=...`) only fires when that
+  apartment turns out to be valid, to get the Year select's options
+  correctly limited to that apartment.
+- **Row count and Clear filters.** `role="status"` shows "N receipts" (the
+  list response's own `count`). A "Clear filters" button appears only
+  when a year/status/category select is actually active (not just an
+  apartment tab) and clears those three while leaving the apartment tab
+  untouched, per spec. The plain "No receipts yet..." empty state is
+  reserved for the truly unfiltered case (All apartments tab, nothing
+  else active); any other empty result shows "No receipts match these
+  filters." instead, using the same "Clear filters" button above it
+  rather than a duplicate.
+- **Apartment badge visibility.** Inside a specific apartment's tab, that
+  row's own apartment badge is hidden (it would just repeat the tab
+  already selected); in "All apartments" it shows as before. Category and
+  status badges always show.
+- **Returning from a filtered list.** Opening a receipt from a tab/filter
+  other than the plain unfiltered view attaches `&from=<encoded search>`
+  to the `?receipt=<id>` URL (never for the plain case, so that URL shape
+  is unchanged); `ReceiptUpload.tsx`'s "Back to history" link reads that
+  `from` value (only trusting one that starts with `?view=history`) so it
+  returns to the same tab and filters instead of always resetting to the
+  unfiltered list. The real browser Back button needs no special
+  handling, since every tab/filter change is a real `pushState` entry.
 
 ## Changelog
 

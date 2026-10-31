@@ -67,3 +67,16 @@ export interface ReceiptSummary {
   category_name: string | null
   status: ReceiptStatus
 }
+
+export interface ApartmentFacet {
+  id: string
+  name: string
+  count: number
+}
+
+export interface ReceiptFacets {
+  apartments: ApartmentFacet[]
+  total: number
+  years: number[]
+  has_undated: boolean
+}

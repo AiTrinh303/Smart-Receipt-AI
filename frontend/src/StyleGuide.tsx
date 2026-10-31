@@ -48,6 +48,7 @@ function StyleGuide() {
   const [receiptApartmentState, setReceiptApartmentState] = useState<ReceiptApartmentState>('selected')
   const [receiptCategoryState, setReceiptCategoryState] = useState<ReceiptCategoryState>('selected')
   const [receiptStatusState, setReceiptStatusState] = useState<ReceiptStatusState>('needs_review')
+  const [historyTab, setHistoryTab] = useState<'all' | 'oberaudorf'>('all')
 
   return (
     <div className="flex flex-col gap-10 pb-16">
@@ -398,6 +399,107 @@ function StyleGuide() {
             </span>
           </li>
         </ul>
+      </Section>
+
+      <Section title="History tab bar and filters (ReceiptHistory -- All apartments / one apartment selected)">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setHistoryTab('all')}>
+            Show "All apartments" selected
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setHistoryTab('oberaudorf')}>
+            Show an apartment tab selected
+          </Button>
+        </div>
+
+        <Card className="flex flex-col gap-4">
+          <div
+            role="tablist"
+            aria-label="Apartment"
+            className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1"
+          >
+            {[
+              { id: 'all', label: 'All apartments (3)' },
+              { id: 'oberaudorf', label: `${SAMPLE_APARTMENT_OPTIONS[0].label} (2)` },
+              { id: 'waldglueck', label: `${SAMPLE_APARTMENT_OPTIONS[1].label} (1)` },
+            ].map((tab) => {
+              const selected = tab.id === historyTab
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => setHistoryTab(tab.id as 'all' | 'oberaudorf')}
+                  className={`min-h-[44px] flex-1 rounded-md px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                    selected ? 'bg-white font-semibold text-brand shadow-sm' : 'font-medium text-ink-muted'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-1 flex-col gap-1">
+              <label htmlFor="styleguide-history-year" className="text-sm font-medium text-ink">
+                Year
+              </label>
+              <select
+                id="styleguide-history-year"
+                onChange={() => {}}
+                className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                <option value="">All years</option>
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+                <option value="none">No valid date</option>
+              </select>
+            </div>
+            <div className="flex flex-1 flex-col gap-1">
+              <label htmlFor="styleguide-history-status" className="text-sm font-medium text-ink">
+                Status
+              </label>
+              <select
+                id="styleguide-history-status"
+                onChange={() => {}}
+                className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                <option value="">All</option>
+                <option value="needs_review">Needs review</option>
+                <option value="approved">Approved</option>
+              </select>
+            </div>
+            <div className="flex flex-1 flex-col gap-1">
+              <label htmlFor="styleguide-history-category" className="text-sm font-medium text-ink">
+                Category
+              </label>
+              <select
+                id="styleguide-history-category"
+                onChange={() => {}}
+                className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                <option value="">All</option>
+                {SAMPLE_CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                <option value="none">No category</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <p role="status" className="text-sm text-ink-muted">
+              {historyTab === 'all' ? '3 receipts' : '2 receipts'}
+            </p>
+            <Button variant="secondary" size="sm">
+              Clear filters
+            </Button>
+          </div>
+        </Card>
       </Section>
 
       <Section title="Dropzone (idle / drag-over / file-selected)">

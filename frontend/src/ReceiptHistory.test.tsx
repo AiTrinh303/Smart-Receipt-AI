@@ -1,9 +1,12 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { useEffect, useState } from 'react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptHistory from './ReceiptHistory'
+import { clearCategoriesCache } from './hooks/useCategories'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
+  clearCategoriesCache()
 })
 
 afterEach(() => {
@@ -24,6 +27,24 @@ function createDeferred<T>() {
     resolve = res
   })
   return { promise, resolve }
+}
+
+const OBERAUDORF = { id: 'oberaudorf-bergblick', name: 'Oberaudorf Bergblick' }
+const WALDGLUECK = { id: 'sankt-englmar-waldglueck', name: 'Sankt Englmar Waldglück' }
+
+const SAMPLE_CATEGORIES = [
+  { id: 'cleaning', name: 'Cleaning and supplies' },
+  { id: 'repairs', name: 'Repairs and maintenance' },
+]
+
+const DEFAULT_FACETS = {
+  apartments: [
+    { ...OBERAUDORF, count: 2 },
+    { ...WALDGLUECK, count: 1 },
+  ],
+  total: 3,
+  years: [2026, 2025],
+  has_undated: false,
 }
 
 const THREE_ITEMS = [
@@ -56,11 +77,52 @@ const THREE_ITEMS = [
   },
 ]
 
+interface Routes {
+  categories?: () => Promise<unknown>
+  facets?: (urlString: string) => Promise<unknown>
+  list?: (urlString: string) => Promise<unknown>
+}
+
+function routeFetch(routes: Routes = {}) {
+  return (url: unknown) => {
+    const urlString = String(url)
+    if (urlString.includes('/categories')) {
+      return routes.categories
+        ? routes.categories()
+        : Promise.resolve(jsonResponse(200, { items: SAMPLE_CATEGORIES, count: SAMPLE_CATEGORIES.length }))
+    }
+    if (urlString.includes('/receipts/facets')) {
+      return routes.facets
+        ? routes.facets(urlString)
+        : Promise.resolve(jsonResponse(200, DEFAULT_FACETS))
+    }
+    if (urlString.includes('/receipts?')) {
+      return routes.list
+        ? routes.list(urlString)
+        : Promise.reject(new Error(`Unexpected list call to ${urlString}`))
+    }
+    return Promise.reject(new Error(`Unexpected fetch call to ${urlString}`))
+  }
+}
+
+/** Mirrors App.tsx's own key={locationKey}/popstate remount behavior, so
+ * tests can exercise real tab/filter navigation (which fully remounts
+ * ReceiptHistory in the real app) without rendering the whole App. */
+function HistoryHarness() {
+  const [key, setKey] = useState(() => window.location.search)
+  useEffect(() => {
+    const handlePopState = () => setKey(window.location.search)
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+  return <ReceiptHistory key={key} />
+}
+
 describe('ReceiptHistory', () => {
   let fetchSpy: jest.Mock
 
   beforeEach(() => {
-    fetchSpy = jest.fn()
+    fetchSpy = jest.fn().mockImplementation(routeFetch())
     global.fetch = fetchSpy as unknown as typeof fetch
   })
 
@@ -71,7 +133,9 @@ describe('ReceiptHistory', () => {
 
   test('three items are shown in the given (server) order', async () => {
     // Given the server returns three receipts, newest first
-    fetchSpy.mockResolvedValue(jsonResponse(200, { items: THREE_ITEMS, count: 3 }))
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3 })) }),
+    )
 
     // When the history view is rendered
     render(<ReceiptHistory />)
@@ -80,44 +144,52 @@ describe('ReceiptHistory', () => {
     await waitFor(() => {
       expect(screen.getByText('Store C')).toBeInTheDocument()
     })
-    const rows = screen.getAllByRole('button')
+    const rows = screen.getAllByRole('button', { name: /store/i })
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('Store C')
     expect(rows[1]).toHaveTextContent('Store B')
     expect(rows[2]).toHaveTextContent('Store A')
   })
 
-  test('empty list -> empty-state message shown', async () => {
-    // Given the server has no saved receipts
-    fetchSpy.mockResolvedValue(jsonResponse(200, { items: [], count: 0 }))
+  test('empty list with no filters -> plain empty-state message shown', async () => {
+    // Given the server has no saved receipts at all
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: () => Promise.resolve(jsonResponse(200, { apartments: [], total: 0, years: [], has_undated: false })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      }),
+    )
 
     // When the history view is rendered
     render(<ReceiptHistory />)
 
-    // Then the empty-state message is shown
+    // Then the plain empty-state message is shown
     await waitFor(() => {
-      expect(
-        screen.getByText('No receipts yet. Upload your first receipt.'),
-      ).toBeInTheDocument()
+      expect(screen.getByText('No receipts yet. Upload your first receipt.')).toBeInTheDocument()
     })
   })
 
   test('item with null store, date and total -> "Not detected" shown, no null/undefined/NaN text', async () => {
     // Given a saved receipt with every nullable field null
-    fetchSpy.mockResolvedValue(
-      jsonResponse(200, {
-        items: [
-          {
-            receipt_id: '11111111-1111-1111-1111-111111111111',
-            original_filename: null,
-            store_name: null,
-            purchase_date: null,
-            currency: null,
-            total: null,
-            created_at: '2026-01-15T00:00:00+00:00',
-          },
-        ],
-        count: 1,
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () =>
+          Promise.resolve(
+            jsonResponse(200, {
+              items: [
+                {
+                  receipt_id: '11111111-1111-1111-1111-111111111111',
+                  original_filename: null,
+                  store_name: null,
+                  purchase_date: null,
+                  currency: null,
+                  total: null,
+                  created_at: '2026-01-15T00:00:00+00:00',
+                },
+              ],
+              count: 1,
+            }),
+          ),
       }),
     )
 
@@ -134,9 +206,14 @@ describe('ReceiptHistory', () => {
   })
 
   test('loading state is shown while the request is pending', async () => {
-    // Given the list request has not resolved yet
+    // Given the facets request has not resolved yet
     const deferred = createDeferred<unknown>()
-    fetchSpy.mockReturnValue(deferred.promise)
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: () => deferred.promise,
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      }),
+    )
 
     // When the history view is rendered
     render(<ReceiptHistory />)
@@ -149,26 +226,30 @@ describe('ReceiptHistory', () => {
     expect(status.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0)
 
     // When the request resolves
-    deferred.resolve(jsonResponse(200, { items: [], count: 0 }))
+    deferred.resolve(jsonResponse(200, { apartments: [], total: 0, years: [], has_undated: false }))
 
-    // Then the status region and skeletons are gone and the real content shows
+    // Then the status region and skeletons are gone and the real content is shown
     await waitFor(() =>
       expect(screen.getByText('No receipts yet. Upload your first receipt.')).toBeInTheDocument(),
     )
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.queryByText('Loading receipts...')).not.toBeInTheDocument()
   })
 
-  test('error response -> error shown, Retry calls the list again', async () => {
-    // Given the server returns an error
+  test('error response -> error shown, Retry calls everything again', async () => {
+    // Given the facets endpoint returns an error on the first call only
     let callCount = 0
-    fetchSpy.mockImplementation(() => {
-      callCount += 1
-      if (callCount === 1) {
-        return Promise.resolve(jsonResponse(500, { detail: 'Internal error' }))
-      }
-      return Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3 }))
-    })
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: () => {
+          callCount += 1
+          if (callCount === 1) {
+            return Promise.resolve(jsonResponse(500, { detail: 'Internal error' }))
+          }
+          return Promise.resolve(jsonResponse(200, DEFAULT_FACETS))
+        },
+        list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3 })),
+      }),
+    )
     const user = userEvent.setup()
 
     // When the history view is rendered
@@ -184,166 +265,28 @@ describe('ReceiptHistory', () => {
     // When the user clicks Retry
     await user.click(screen.getByRole('button', { name: /retry/i }))
 
-    // Then the list is requested again and shown
+    // Then the data is requested again and shown
     await waitFor(() => {
       expect(screen.getByText('Store C')).toBeInTheDocument()
     })
     expect(callCount).toBe(2)
   })
 
-  test('a row with an apartment shows it as a badge', async () => {
-    // Given the server returns a receipt assigned to an apartment
-    fetchSpy.mockResolvedValue(
-      jsonResponse(200, {
-        items: [
-          {
-            receipt_id: '11111111-1111-1111-1111-111111111111',
-            original_filename: 'a.jpg',
-            store_name: 'Store A',
-            purchase_date: '2026-01-15',
-            currency: 'USD',
-            total: 10,
-            created_at: '2026-01-15T00:00:00+00:00',
-            apartment_id: 'oberaudorf-bergblick',
-            apartment_name: 'Oberaudorf Bergblick',
-          },
-        ],
-        count: 1,
-      }),
-    )
-
-    // When the history view is rendered
-    render(<ReceiptHistory />)
-
-    // Then the apartment name is shown as a badge on that row
-    await waitFor(() => {
-      expect(screen.getByText('Oberaudorf Bergblick')).toBeInTheDocument()
-    })
-  })
-
-  test('a row with no apartment shows plain muted "Not assigned", and a missing field renders without crashing', async () => {
-    // Given the server returns one receipt with apartment_name explicitly
-    // null and one that omits the field entirely (older/pre-migration data)
-    fetchSpy.mockResolvedValue(
-      jsonResponse(200, {
-        items: [
-          {
-            receipt_id: '11111111-1111-1111-1111-111111111111',
-            original_filename: 'a.jpg',
-            store_name: 'Store A',
-            purchase_date: '2026-01-15',
-            currency: 'USD',
-            total: 10,
-            created_at: '2026-01-15T00:00:00+00:00',
-            apartment_id: null,
-            apartment_name: null,
-          },
-          {
-            receipt_id: '22222222-2222-2222-2222-222222222222',
-            original_filename: 'b.jpg',
-            store_name: 'Store B',
-            purchase_date: '2026-01-16',
-            currency: 'USD',
-            total: 20,
-            created_at: '2026-01-16T00:00:00+00:00',
-          },
-        ],
-        count: 2,
-      }),
-    )
-
-    // When the history view is rendered
-    render(<ReceiptHistory />)
-
-    // Then both rows render without crashing and show plain muted "Not assigned"
-    await waitFor(() => {
-      expect(screen.getAllByText('Not assigned')).toHaveLength(2)
-    })
-  })
-
-  test('a row with a category and status shows both as badges', async () => {
-    // Given the server returns a receipt with a category and an approved status
-    fetchSpy.mockResolvedValue(
-      jsonResponse(200, {
-        items: [
-          {
-            receipt_id: '11111111-1111-1111-1111-111111111111',
-            original_filename: 'a.jpg',
-            store_name: 'Store A',
-            purchase_date: '2026-01-15',
-            currency: 'USD',
-            total: 10,
-            created_at: '2026-01-15T00:00:00+00:00',
-            category_id: 'cleaning',
-            category_name: 'Cleaning and supplies',
-            status: 'approved',
-          },
-        ],
-        count: 1,
-      }),
-    )
-
-    // When the history view is rendered
-    render(<ReceiptHistory />)
-
-    // Then the category name and the "Approved" status both show as badges
-    await waitFor(() => {
-      expect(screen.getByText('Cleaning and supplies')).toBeInTheDocument()
-    })
-    expect(screen.getByText('Approved')).toBeInTheDocument()
-  })
-
-  test('a row with no category shows plain muted "No category", and a missing field renders without crashing', async () => {
-    // Given one receipt with category_name explicitly null and one that
-    // omits the field entirely (older/pre-migration data)
-    fetchSpy.mockResolvedValue(
-      jsonResponse(200, {
-        items: [
-          {
-            receipt_id: '11111111-1111-1111-1111-111111111111',
-            original_filename: 'a.jpg',
-            store_name: 'Store A',
-            purchase_date: '2026-01-15',
-            currency: 'USD',
-            total: 10,
-            created_at: '2026-01-15T00:00:00+00:00',
-            category_id: null,
-            category_name: null,
-            status: 'needs_review',
-          },
-          {
-            receipt_id: '22222222-2222-2222-2222-222222222222',
-            original_filename: 'b.jpg',
-            store_name: 'Store B',
-            purchase_date: '2026-01-16',
-            currency: 'USD',
-            total: 20,
-            created_at: '2026-01-16T00:00:00+00:00',
-          },
-        ],
-        count: 2,
-      }),
-    )
-
-    // When the history view is rendered
-    render(<ReceiptHistory />)
-
-    // Then both rows render without crashing and show plain muted "No category"
-    await waitFor(() => {
-      expect(screen.getAllByText('No category')).toHaveLength(2)
-    })
-  })
-
-  test('network failure -> error shown, Retry calls the list again', async () => {
-    // Given the list request fails outright
+  test('network failure -> error shown, Retry calls everything again', async () => {
+    // Given the facets request fails outright on the first attempt
     let callCount = 0
-    fetchSpy.mockImplementation(() => {
-      callCount += 1
-      if (callCount === 1) {
-        return Promise.reject(new TypeError('Failed to fetch'))
-      }
-      return Promise.resolve(jsonResponse(200, { items: [], count: 0 }))
-    })
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: () => {
+          callCount += 1
+          if (callCount === 1) {
+            return Promise.reject(new TypeError('Failed to fetch'))
+          }
+          return Promise.resolve(jsonResponse(200, { apartments: [], total: 0, years: [], has_undated: false }))
+        },
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      }),
+    )
     const user = userEvent.setup()
 
     // When the history view is rendered
@@ -359,10 +302,487 @@ describe('ReceiptHistory', () => {
     // When the user clicks Retry
     await user.click(screen.getByRole('button', { name: /retry/i }))
 
-    // Then the list is requested again
+    // Then the data is requested again
     await waitFor(() => {
       expect(screen.getByText('No receipts yet. Upload your first receipt.')).toBeInTheDocument()
     })
     expect(callCount).toBe(2)
+  })
+
+  // --- Row badges --------------------------------------------------------
+
+  test('in "All apartments", a row with an apartment shows it as a badge', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () =>
+          Promise.resolve(
+            jsonResponse(200, {
+              items: [
+                {
+                  receipt_id: '11111111-1111-1111-1111-111111111111',
+                  original_filename: 'a.jpg',
+                  store_name: 'Store A',
+                  purchase_date: '2026-01-15',
+                  currency: 'USD',
+                  total: 10,
+                  created_at: '2026-01-15T00:00:00+00:00',
+                  apartment_id: OBERAUDORF.id,
+                  apartment_name: OBERAUDORF.name,
+                },
+              ],
+              count: 1,
+            }),
+          ),
+      }),
+    )
+
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByText(OBERAUDORF.name)).toBeInTheDocument()
+    })
+  })
+
+  test('a row with no apartment shows plain muted "Not assigned", and a missing field renders without crashing', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () =>
+          Promise.resolve(
+            jsonResponse(200, {
+              items: [
+                {
+                  receipt_id: '11111111-1111-1111-1111-111111111111',
+                  original_filename: 'a.jpg',
+                  store_name: 'Store A',
+                  purchase_date: '2026-01-15',
+                  currency: 'USD',
+                  total: 10,
+                  created_at: '2026-01-15T00:00:00+00:00',
+                  apartment_id: null,
+                  apartment_name: null,
+                },
+                {
+                  receipt_id: '22222222-2222-2222-2222-222222222222',
+                  original_filename: 'b.jpg',
+                  store_name: 'Store B',
+                  purchase_date: '2026-01-16',
+                  currency: 'USD',
+                  total: 20,
+                  created_at: '2026-01-16T00:00:00+00:00',
+                },
+              ],
+              count: 2,
+            }),
+          ),
+      }),
+    )
+
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Not assigned')).toHaveLength(2)
+    })
+  })
+
+  test('a row with a category and status shows both as badges', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () =>
+          Promise.resolve(
+            jsonResponse(200, {
+              items: [
+                {
+                  receipt_id: '11111111-1111-1111-1111-111111111111',
+                  original_filename: 'a.jpg',
+                  store_name: 'Store A',
+                  purchase_date: '2026-01-15',
+                  currency: 'USD',
+                  total: 10,
+                  created_at: '2026-01-15T00:00:00+00:00',
+                  category_id: 'cleaning',
+                  category_name: 'Cleaning and supplies',
+                  status: 'approved',
+                },
+              ],
+              count: 1,
+            }),
+          ),
+      }),
+    )
+
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('list')).toHaveTextContent('Cleaning and supplies')
+    })
+    expect(within(screen.getByRole('list')).getByText('Cleaning and supplies')).toBeInTheDocument()
+    expect(within(screen.getByRole('list')).getByText('Approved')).toBeInTheDocument()
+  })
+
+  test('a row with no category shows plain muted "No category", and a missing field renders without crashing', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () =>
+          Promise.resolve(
+            jsonResponse(200, {
+              items: [
+                {
+                  receipt_id: '11111111-1111-1111-1111-111111111111',
+                  original_filename: 'a.jpg',
+                  store_name: 'Store A',
+                  purchase_date: '2026-01-15',
+                  currency: 'USD',
+                  total: 10,
+                  created_at: '2026-01-15T00:00:00+00:00',
+                  category_id: null,
+                  category_name: null,
+                  status: 'needs_review',
+                },
+                {
+                  receipt_id: '22222222-2222-2222-2222-222222222222',
+                  original_filename: 'b.jpg',
+                  store_name: 'Store B',
+                  purchase_date: '2026-01-16',
+                  currency: 'USD',
+                  total: 20,
+                  created_at: '2026-01-16T00:00:00+00:00',
+                },
+              ],
+              count: 2,
+            }),
+          ),
+      }),
+    )
+
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(within(screen.getByRole('list')).getAllByText('No category')).toHaveLength(2)
+    })
+  })
+
+  // --- Tabs ----------------------------------------------------------------
+
+  test('tabs render with counts from the facets', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+    )
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'All apartments (3)' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: `${WALDGLUECK.name} (1)` })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'All apartments (3)' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('choosing a tab sends apartment_id and updates the URL', async () => {
+    const user = userEvent.setup()
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: (urlString) => {
+          if (urlString.includes(`apartment_id=${OBERAUDORF.id}`)) {
+            return Promise.resolve(jsonResponse(200, { ...DEFAULT_FACETS, years: [2026], has_undated: false }))
+          }
+          return Promise.resolve(jsonResponse(200, DEFAULT_FACETS))
+        },
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      }),
+    )
+    render(<HistoryHarness />)
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` }))
+
+    await waitFor(() => {
+      expect(window.location.search).toContain(`apartment=${OBERAUDORF.id}`)
+    })
+    await waitFor(() => {
+      expect(
+        fetchSpy.mock.calls.some(([url]) => String(url).includes(`/receipts?`) && String(url).includes(`apartment_id=${OBERAUDORF.id}`)),
+      ).toBe(true)
+    })
+  })
+
+  test('arrow keys move the tab selection', async () => {
+    const user = userEvent.setup()
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+    )
+    render(<HistoryHarness />)
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'All apartments (3)' })).toBeInTheDocument()
+    })
+
+    screen.getByRole('tab', { name: 'All apartments (3)' }).focus()
+    await user.keyboard('{ArrowRight}')
+
+    await waitFor(() => {
+      expect(window.location.search).toContain(`apartment=${OBERAUDORF.id}`)
+    })
+    // Focus follows the selection across the remount a navigation causes.
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toHaveFocus()
+    })
+
+    await user.keyboard('{ArrowRight}')
+    await waitFor(() => {
+      expect(window.location.search).toContain(`apartment=${WALDGLUECK.id}`)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: `${WALDGLUECK.name} (1)` })).toHaveFocus()
+    })
+
+    await user.keyboard('{Home}')
+    await waitFor(() => {
+      expect(window.location.search).not.toContain('apartment=')
+    })
+  })
+
+  test('apartment badge is hidden in a specific apartment tab, shown in All apartments', async () => {
+    const item = {
+      receipt_id: '11111111-1111-1111-1111-111111111111',
+      original_filename: 'a.jpg',
+      store_name: 'Store A',
+      purchase_date: '2026-01-15',
+      currency: 'USD',
+      total: 10,
+      created_at: '2026-01-15T00:00:00+00:00',
+      apartment_id: OBERAUDORF.id,
+      apartment_name: OBERAUDORF.name,
+    }
+
+    // All apartments -- badge shown
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [item], count: 1 })) }),
+    )
+    const { unmount } = render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText(OBERAUDORF.name)).toBeInTheDocument()
+    })
+    unmount()
+
+    // A specific apartment tab -- badge hidden (redundant)
+    window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}`)
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('Store A')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(OBERAUDORF.name)).not.toBeInTheDocument()
+  })
+
+  // --- Filters ---------------------------------------------------------------
+
+  test('each select sends its own param', async () => {
+    const user = userEvent.setup()
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0 }))
+        },
+      }),
+    )
+    render(<HistoryHarness />)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+    })
+
+    await user.selectOptions(screen.getByLabelText('Year'), '2026')
+    await waitFor(() => expect(window.location.search).toContain('year=2026'))
+
+    await user.selectOptions(screen.getByLabelText('Status'), 'Approved')
+    await waitFor(() => expect(window.location.search).toContain('status=approved'))
+
+    await user.selectOptions(screen.getByLabelText('Category'), SAMPLE_CATEGORIES[0].name)
+    await waitFor(() => expect(window.location.search).toContain(`category=${SAMPLE_CATEGORIES[0].id}`))
+
+    const lastCall = calls[calls.length - 1]
+    expect(lastCall).toContain('year=2026')
+    expect(lastCall).toContain('status=approved')
+    expect(lastCall).toContain(`category_id=${SAMPLE_CATEGORIES[0].id}`)
+  })
+
+  test('"No valid date" option only appears when has_undated is true', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: () => Promise.resolve(jsonResponse(200, { ...DEFAULT_FACETS, has_undated: false })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      }),
+    )
+    const { unmount } = render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('No valid date')).not.toBeInTheDocument()
+    unmount()
+
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: () => Promise.resolve(jsonResponse(200, { ...DEFAULT_FACETS, has_undated: true })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('No valid date')).toBeInTheDocument()
+    })
+  })
+
+  test('a URL with filters loads the filtered list on first render', async () => {
+    window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}&year=2025&status=approved`)
+    let capturedUrl = ''
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          capturedUrl = urlString
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0 }))
+        },
+      }),
+    )
+
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(capturedUrl).toContain(`apartment_id=${OBERAUDORF.id}`)
+    })
+    expect(capturedUrl).toContain('year=2025')
+    expect(capturedUrl).toContain('status=approved')
+    expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('invalid URL values are ignored, showing the unfiltered result for that value', async () => {
+    window.history.replaceState({}, '', '/?view=history&apartment=does-not-exist&year=25&status=archived&category=nope')
+    let capturedUrl = ''
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          capturedUrl = urlString
+          return Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3 }))
+        },
+      }),
+    )
+
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Store C')).toBeInTheDocument()
+    })
+    expect(capturedUrl).not.toContain('apartment_id=')
+    expect(capturedUrl).not.toContain('year=')
+    expect(capturedUrl).not.toContain('status=')
+    expect(capturedUrl).not.toContain('category_id=')
+    expect(screen.getByRole('tab', { name: 'All apartments (3)' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('filters combine in one request', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      `/?view=history&apartment=${OBERAUDORF.id}&year=2026&status=needs_review&category=${SAMPLE_CATEGORIES[1].id}`,
+    )
+    let capturedUrl = ''
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          capturedUrl = urlString
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0 }))
+        },
+      }),
+    )
+
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(capturedUrl).toContain(`apartment_id=${OBERAUDORF.id}`)
+    })
+    expect(capturedUrl).toContain('year=2026')
+    expect(capturedUrl).toContain('status=needs_review')
+    expect(capturedUrl).toContain(`category_id=${SAMPLE_CATEGORIES[1].id}`)
+  })
+
+  test('"Clear filters" appears when a select is active and keeps the apartment tab', async () => {
+    const user = userEvent.setup()
+    window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}&year=2026`)
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+    )
+    render(<HistoryHarness />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+
+    await waitFor(() => {
+      expect(window.location.search).toContain(`apartment=${OBERAUDORF.id}`)
+    })
+    expect(window.location.search).not.toContain('year=')
+  })
+
+  test('no "Clear filters" button when only the apartment tab is selected', async () => {
+    window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}`)
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('0 receipts')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+  })
+
+  test('a filtered empty result shows "No receipts match these filters.", not the plain empty state', async () => {
+    window.history.replaceState({}, '', '/?view=history&status=approved')
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+    )
+
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByText('No receipts match these filters.')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('No receipts yet. Upload your first receipt.')).not.toBeInTheDocument()
+  })
+
+  test('Back restores the previous tab and filters', async () => {
+    const user = userEvent.setup()
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+    )
+    render(<HistoryHarness />)
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` }))
+    await waitFor(() => {
+      expect(window.location.search).toContain(`apartment=${OBERAUDORF.id}`)
+    })
+
+    window.history.back()
+
+    await waitFor(() => {
+      expect(window.location.search).not.toContain('apartment=')
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'All apartments (3)' })).toHaveAttribute('aria-selected', 'true')
+    })
+  })
+
+  test('the "N receipts" count is shown as a status', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3 })) }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('3 receipts')).toBeInTheDocument()
+    })
+    expect(screen.getByText('3 receipts')).toHaveAttribute('role', 'status')
   })
 })

@@ -26,6 +26,7 @@ const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png']
 const PDF_SIGNATURE = '%PDF-'
 const RECEIPT_QUERY_PARAM = 'receipt'
+const HISTORY_RETURN_PARAM = 'from'
 const APARTMENT_HELPER_ID = 'apartment-helper'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -86,9 +87,20 @@ function setReceiptIdInUrl(id: string) {
 function removeReceiptIdFromUrl() {
   const params = new URLSearchParams(window.location.search)
   params.delete(RECEIPT_QUERY_PARAM)
+  params.delete(HISTORY_RETURN_PARAM)
   const query = params.toString()
   const newUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
   window.history.replaceState({}, '', newUrl)
+}
+
+/** Reads the `from` param a filtered history list attaches when opening a
+ * receipt, so "Back to history" can return to the same apartment tab and
+ * filters instead of always resetting to the unfiltered list. Only ever
+ * trusts a value that actually points back at the history view. */
+function getHistoryReturnSearch(): string {
+  const params = new URLSearchParams(window.location.search)
+  const from = params.get(HISTORY_RETURN_PARAM)
+  return from && from.startsWith('?view=history') ? from : '?view=history'
 }
 
 interface UploadSuccess {
@@ -467,14 +479,15 @@ function ReceiptUpload() {
   }
 
   if (result) {
+    const historyReturnSearch = getHistoryReturnSearch()
     return (
       <div className="flex flex-col gap-4">
         {!isConfirmingDelete && (
           <a
-            href="/?view=history"
+            href={`/${historyReturnSearch}`}
             onClick={(e) => {
               e.preventDefault()
-              navigateTo('?view=history')
+              navigateTo(historyReturnSearch)
             }}
             className="inline-flex w-fit items-center gap-1.5 rounded-md px-1 py-2 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >

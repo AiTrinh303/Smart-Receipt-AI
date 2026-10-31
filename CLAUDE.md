@@ -36,16 +36,21 @@ the purchase info, and the result is displayed for review.
   "Upload another receipt", the 502/503 messages) must stay exactly as they
   are unless a task explicitly asks to change them.
   `src/api/` holds API call modules (`uploadReceipt.ts`, `extractReceipt.ts`,
-  `getReceipt.ts`, `listReceipts.ts`, `getApartments.ts`,
+  `getReceipt.ts`, `listReceipts.ts` (accepts `{limit?, apartmentId?,
+  year?, status?, categoryId?}`, building the query string itself),
+  `getApartments.ts`,
   `updateReceiptApartment.ts`, `getCategories.ts`, `updateReceiptCategory.ts`,
-  `updateReceiptStatus.ts`, shared `ApiError` (carries an optional `missing:
+  `updateReceiptStatus.ts`, `getReceiptFacets.ts` (`GET /receipts/facets`,
+  optional `apartmentId`), shared `ApiError` (carries an optional `missing:
   string[]`, set only for a `422` from `updateReceiptStatus` whose body is
   `{detail: {message, missing}}` — every other error, including a
   malformed body, falls back to a plain message with no `missing`), shared
   response types in
   `types.ts` — including `ReceiptSummary`, the list-row shape,
-  `Apartment` (`id`/`name`), `Category` (`id`/`name`), and `ReceiptStatus`
-  (`'needs_review' | 'approved'`); `ReceiptExtraction` and `ReceiptSummary`
+  `Apartment` (`id`/`name`), `Category` (`id`/`name`), `ReceiptStatus`
+  (`'needs_review' | 'approved'`), `ApartmentFacet` (`id`/`name`/`count`)
+  and `ReceiptFacets` (`apartments`/`total`/`years`/`has_undated`);
+  `ReceiptExtraction` and `ReceiptSummary`
   both carry flat `apartment_id`/`apartment_name` (`string | null`) and
   `category_id`/`category_name` (`string | null`) plus `status`
   (`ReceiptStatus`), matching
@@ -97,12 +102,59 @@ the purchase info, and the result is displayed for review.
   disturbing `ReceiptUpload`'s own internal `replaceState` calls.
   `ReceiptHistory.tsx` lists saved receipts (store, date, total; "Not
   detected" for anything missing, each row's `apartment_name` as a small
-  icon+text badge or plain muted "Not assigned" when it's `null`/missing,
+  icon+text badge or plain muted "Not assigned" when it's `null`/missing
+  (hidden entirely inside a specific apartment tab — redundant there),
   `category_name` as a plain outlined badge or muted "No category" when
   `null`/missing, and `status` as a `StatusBadge` (icon+text, shared with
-  `ReceiptClassification.tsx`) — no filtering by apartment, category or
-  status) and navigates to `?receipt=<id>` on row click;
-  `ReceiptUpload.tsx` adds a "Back to history" link when showing a result.
+  `ReceiptClassification.tsx`)) and navigates to `?receipt=<id>` on row
+  click; `ReceiptUpload.tsx` adds a "Back to history" link when showing a
+  result.
+  **Splitting the history by apartment, with filters:** all state lives in
+  the URL (`?view=history&apartment=<id>&year=<v>&status=<v>&category=
+  <v>`), never component state — a tab/select change calls the existing
+  `navigateTo()`, which (via `App.tsx`'s `key={locationKey}`) fully
+  remounts `ReceiptHistory`, the same mechanism `ReceiptUpload` already
+  relies on, so no new "re-fetch on filter change" effect was needed.
+  `ReceiptHistory` reads the URL once per mount (`readUrlParams()`), waits
+  for `useCategories(true)` to settle (success or failure — gates the
+  single data-loading effect via its `isLoading`), then: (1) fetches
+  `GET /receipts/facets` **unscoped** — always needed for the tab bar's
+  counts, and this is also the apartment-id validation source (a URL
+  `apartment` not among the returned ids is dropped, never sent to the
+  list endpoint); (2) if that leaves a valid apartment, fetches
+  `GET /receipts/facets?apartment_id=...` **again**, scoped, purely to get
+  the Year select's `years`/`has_undated` limited to that apartment (its
+  `apartments`/`total` are discarded — ticket-specified behavior: only
+  years/`has_undated` are apartment-scoped); (3) validates `year`
+  (`/^\d{4}$/` or `"none"`) and `status` (the two literal allowed values)
+  structurally, `category` against the loaded `useCategories` list
+  referentially, each invalid value simply dropped (never sent) rather
+  than erroring — this is "ignored," distinct from a well-formed value
+  that legitimately matches zero receipts; (4) calls `listReceipts(...)`
+  with whatever survived. The tab bar follows the WAI-ARIA tabs pattern:
+  `role="tablist"` (`aria-label="Apartment"`), one `role="tab"` per
+  apartment plus a leading "All apartments (N)", roving `tabIndex`
+  (selected = `0`, else `-1`), `aria-selected`, and selected = bold text +
+  white background/shadow against the tab bar's `slate-100`, never color
+  alone. Arrow keys/Home/End navigate immediately (automatic activation);
+  since that navigation remounts the whole component, a one-shot
+  `sessionStorage` key (`receiptHistoryFocusTabIndex`, read/cleared in an
+  effect gated on `!isLoading` — the tab bar doesn't exist in the DOM
+  until loading finishes) restores keyboard focus to the newly selected
+  tab across that remount. "N receipts" is a `role="status"`; "Clear
+  filters" shows only when a year/status/category select (not just an
+  apartment tab) is active, and resets exactly those three, leaving the
+  apartment tab alone, per spec. The plain "No receipts yet..." empty
+  state is reserved for truly no filters at all (`isUnfiltered`); any
+  other empty result shows "No receipts match these filters." instead,
+  relying on the one "Clear filters" button above rather than a second
+  copy. Opening a receipt attaches `&from=<encoded search>` to
+  `?receipt=<id>` **only** when a tab/filter is actually active (so the
+  unfiltered case's URL shape is byte-for-byte unchanged, keeping an
+  existing test's exact-URL assertion intact); `ReceiptUpload.tsx`'s
+  "Back to history" link reads that `from` param (`getHistoryReturnSearch()`,
+  only trusting a value starting with `?view=history`) to return to the
+  same tab/filters, falling back to the plain `?view=history`.
   **Changing the apartment on a saved receipt (`ReceiptApartment.tsx`,
   `src/api/updateReceiptApartment.ts`):** rendered by the saved-receipt
   container (the same `if (result)` branch used right after extraction and
