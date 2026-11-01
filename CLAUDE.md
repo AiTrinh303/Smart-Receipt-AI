@@ -429,7 +429,14 @@ the purchase info, and the result is displayed for review.
     `UPLOAD_DIR` only, never a client-supplied path — and treats an
     already-missing file as a no-op, not an error, so a retry is safe),
     `sqlite_repository.py`
-    (`SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads`,
+    (**concurrency:** every method opens its own short-lived connection via
+    `_connect()` and closes it immediately — never one shared/reused
+    connection — so `sqlite3`'s default `check_same_thread=True` is never
+    at risk; combined with `sqlite3.connect()`'s default 5s busy timeout,
+    this has been verified safe for light concurrency (a handful of
+    parallel upload+extract requests) by `tests/test_concurrency.py`,
+    without needing WAL mode or any other change.
+    `SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads`,
     `receipts`, `apartments` and `categories` tables; schema created via
     `CREATE TABLE IF NOT EXISTS`, plus a small additive migration on
     construction — `PRAGMA table_info` then
