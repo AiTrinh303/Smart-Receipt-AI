@@ -6,11 +6,12 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 import config
 from adapters.file_storage import delete_file, find_file, save_file
 from adapters.openai_extractor import OpenAIReceiptExtractor
+from adapters.pdf_archive import ArchiveError, make_archive_pdf
 from adapters.sqlite_repository import SqliteReceiptRepository
 from domain.models import (
     ApartmentAssignment,
@@ -29,6 +30,7 @@ from domain.rules import (
     EmptyFileError,
     FileTooLargeError,
     UnsupportedFileTypeError,
+    archive_filename,
     check_receipt,
     flatten_line_items,
     matches_query,
@@ -412,6 +414,59 @@ def get_receipt_file(receipt_id: str, repository: ReceiptRepository = Depends(ge
         headers={
             "X-Content-Type-Options": "nosniff",
             "Content-Disposition": "inline",
+            "Cache-Control": "private, no-cache",
+        },
+    )
+
+
+@router.get("/receipts/{receipt_id}/archive.pdf")
+def get_receipt_archive_pdf(receipt_id: str, repository: ReceiptRepository = Depends(get_repository)):
+    try:
+        validated_id = uuid.UUID(receipt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
+
+    # A saved (extracted) receipt must exist -- same lookup as GET
+    # /receipts/{id} and the plain file endpoint above.
+    existing = repository.get_receipt(str(validated_id))
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+
+    file_path = find_file(validated_id)
+    if file_path is None:
+        logger.warning("Receipt file missing on disk: receipt_id=%s", receipt_id)
+        raise HTTPException(status_code=404, detail="Receipt file not found.")
+
+    # Defined with `def`, not `async def`, so FastAPI runs the (potentially
+    # slow, CPU-bound) Pillow conversion in its threadpool rather than
+    # blocking the event loop. Nothing here is ever written to disk or the
+    # database -- the original file is only ever read, never modified.
+    try:
+        pdf_bytes = make_archive_pdf(file_path)
+    except ArchiveError:
+        # The real cause (e.g. a corrupt/truncated image, or an oversized
+        # one) is logged server-side only, identified by receipt_id alone;
+        # the client only ever sees a generic message.
+        logger.exception("Failed to convert receipt file to archive PDF: receipt_id=%s", receipt_id)
+        raise HTTPException(status_code=422, detail="This file could not be converted to PDF.")
+
+    filename = archive_filename(
+        apartment_id=existing.apartment_id,
+        purchase_date=existing.purchase_date,
+        store_name=existing.store_name,
+        total=existing.total,
+        currency=existing.currency,
+    )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            # archive_filename() is ASCII-only and excludes quotes/CR/LF/
+            # slashes by construction, so a plain quoted filename is safe
+            # here -- never the client-supplied original filename.
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
             "Cache-Control": "private, no-cache",
         },
     )

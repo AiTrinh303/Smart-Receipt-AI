@@ -674,7 +674,63 @@ the purchase info, and the result is displayed for review.
     `Cache-Control: private, no-cache`. No `X-Frame-Options` is set, since
     the frontend may show a PDF in a same-origin iframe. **No
     authentication**, same as every other endpoint here: anyone who can
-    reach the server and knows a receipt id can fetch its file;
+    reach the server and knows a receipt id can fetch its file.
+    `GET /receipts/{receipt_id}/archive.pdf`
+    (`adapters/pdf_archive.py`, `domain.rules.archive_filename`) —
+    downloads a saved receipt as a single-page PDF, for uniform documents
+    regardless of the original format; same 400/404 checks as the plain
+    file endpoint above (UUID, saved receipt exists, file exists on disk).
+    Defined with plain `def` (not `async def`) specifically so FastAPI
+    runs Pillow's conversion in its threadpool, never blocking the event
+    loop; nothing here is ever written to disk or the database — the
+    original is only ever read, never modified (`test_receipt_archive.py`
+    hashes the stored file before/after the call to prove this).
+    `make_archive_pdf(path)`: a `.pdf` original is returned byte-for-byte
+    via `path.read_bytes()`, no re-encoding at all; a `.jpg`/`.jpeg`/
+    `.png` is opened with `PIL.Image.open()` (which only reads header
+    metadata, not pixel data), and its `width * height` is checked against
+    `MAX_PIXELS` (`60_000_000`) **before** anything calls `.load()`/
+    `.convert()`/`.resize()` — so a small file crafted to decode into a
+    huge image (a decompression bomb) is rejected cheaply, never
+    decoded. `prepare_image(img)`: `ImageOps.exif_transpose()` first (so a
+    sideways phone photo's orientation tag — e.g. tag 6 — rotates the
+    pixels and correctly swaps width/height, rather than leaving the
+    image sideways), then any `RGBA`/`LA`/transparent-`P`-mode image is
+    flattened onto a plain white background and converted to `RGB`
+    (non-transparent images are just `.convert("RGB")`'d directly), then
+    downscaled — **never upscaled** — via `Image.LANCZOS` only if the
+    long edge exceeds `MAX_LONG_EDGE` (`3000`), aspect ratio preserved.
+    The PDF itself is `prepared.save(buffer, format="PDF")` with no
+    extra arguments, so Pillow sizes the page to the image itself (no
+    forced A4) and copies no EXIF/metadata from the original into the
+    output. Any failure (corrupt/truncated image, oversized image, I/O
+    error) raises `ArchiveError` (chaining the real cause via `from exc`
+    for the server log), which the route maps to `422` with the fixed,
+    generic message `"This file could not be converted to PDF."` — the
+    real exception is logged via `logger.exception(...)`, identified by
+    receipt_id only, exactly like the extract/save/update/delete failure
+    paths elsewhere in this file. `domain.rules.archive_filename(...)`
+    builds the `Content-Disposition` filename: every part (apartment id,
+    date, store name, amount+currency) is independently slugified —
+    lowercased, transliterated to ASCII (`"ß"` → `"ss"`, accents stripped
+    via NFKD), everything outside `a-z`/`0-9`/`.`/`-` collapsed to a
+    single `-` — so a hostile store name (CRLF/header-injection attempts,
+    path traversal, quotes, non-ASCII) can never produce an unsafe
+    filename; a missing/invalid part becomes a fixed placeholder
+    (`"no-apartment"`/`"undated"`/`"unknown-store"`/`"no-total"`) rather
+    than being silently dropped. `purchase_date` is only used if
+    `date.fromisoformat()` accepts it (never guessed); `total` is
+    formatted via `Decimal(str(total))` with exactly 2 decimals — never
+    float arithmetic. The store-name part is capped at 40 chars, the
+    whole filename (incl. `.pdf`) at 120. **`PIL` is used only in
+    `adapters/`** — `domain/rules.py`'s `archive_filename` never imports
+    it, and `PIL` was added to `domain`'s forbidden-modules list in
+    `.importlinter` alongside `fastapi`/`openai`/`sqlite3` (confirmed
+    still `KEPT` by `lint-imports`). **Pillow is a new dependency**
+    (`requirements.txt`, pinned to the latest stable release at the time
+    it was added) — `make_archive_pdf` is written generically enough
+    (any file in → PDF bytes out, for one receipt) to be reused later for
+    a batch/ZIP export, without changes;
     the `get_extractor` and `get_repository` dependencies; server-side
     logging of extraction, save, update, and delete failures; maps domain
     exceptions to HTTP status codes: 400/413 from upload rules, 502 from

@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -260,6 +261,80 @@ def flatten_line_items(saved_receipt: SavedReceipt) -> list[LineItemRow]:
         )
         for index, item in enumerate(saved_receipt.items)
     ]
+
+
+# --- Archive PDF filenames -------------------------------------------------
+
+_FILENAME_UNSAFE_PATTERN = re.compile(r"[^a-z0-9.\-]+")
+_REPEATED_DASH_PATTERN = re.compile(r"-{2,}")
+
+STORE_NAME_MAX_LENGTH = 40
+ARCHIVE_FILENAME_MAX_LENGTH = 120
+_ARCHIVE_EXTENSION = ".pdf"
+
+
+def _slugify(value: str, max_length: int | None = None) -> str:
+    """Lowercases, transliterates to ASCII (`"ß"` -> `"ss"`, accents
+    stripped via NFKD normalization), and collapses every run of
+    characters outside `a-z`/`0-9`/`.`/`-` into a single `-`. Never
+    produces CR, LF, quotes, slashes or non-ASCII, whatever the input."""
+    value = value.replace("ß", "ss")
+    value = unicodedata.normalize("NFKD", value)
+    value = value.encode("ascii", "ignore").decode("ascii")
+    value = value.lower()
+    value = _FILENAME_UNSAFE_PATTERN.sub("-", value)
+    value = _REPEATED_DASH_PATTERN.sub("-", value)
+    value = value.strip("-")
+    if max_length is not None:
+        value = value[:max_length].strip("-")
+    return value
+
+
+def archive_filename(
+    apartment_id: str | None,
+    purchase_date: str | None,
+    store_name: str | None,
+    total: float | None,
+    currency: str | None,
+) -> str:
+    """Builds a safe, ASCII-only filename for a receipt's archive PDF, e.g.
+    "oberaudorf-bergblick_2025-06-26_corner-store_19.99-usd.pdf". Every
+    part is slugified independently (via _slugify), so the result never
+    contains CR, LF, quotes, slashes or non-ASCII, regardless of input --
+    this is the only thing standing between a hostile store name and the
+    Content-Disposition header it ends up in. A missing or invalid part
+    becomes a fixed placeholder rather than being silently omitted, so the
+    filename's shape stays predictable: "no-apartment", "undated",
+    "unknown-store", "no-total". `purchase_date` is only used if it is a
+    valid ISO date (`date.fromisoformat`); `total` is formatted via
+    `Decimal(str(total))` with exactly 2 decimals -- never float
+    arithmetic, which could introduce a rounding artifact into the name.
+    The whole filename (including the ".pdf" extension) is capped at
+    ARCHIVE_FILENAME_MAX_LENGTH characters."""
+    apartment_part = _slugify(apartment_id) if apartment_id else ""
+    apartment_part = apartment_part or "no-apartment"
+
+    date_part = "undated"
+    if purchase_date is not None:
+        try:
+            date.fromisoformat(purchase_date)
+            date_part = purchase_date
+        except ValueError:
+            date_part = "undated"
+
+    store_part = _slugify(store_name, max_length=STORE_NAME_MAX_LENGTH) if store_name else ""
+    store_part = store_part or "unknown-store"
+
+    if total is not None:
+        amount = str(Decimal(str(total)).quantize(Decimal("0.01")))
+        currency_part = _slugify(currency) if currency else ""
+        total_part = _slugify(f"{amount}-{currency_part}" if currency_part else amount)
+    else:
+        total_part = "no-total"
+
+    name = "_".join([apartment_part, date_part, store_part, total_part])
+    name = name[: ARCHIVE_FILENAME_MAX_LENGTH - len(_ARCHIVE_EXTENSION)].rstrip("_-")
+    return f"{name}{_ARCHIVE_EXTENSION}"
 
 
 def matches_query(row: LineItemRow, q: str) -> bool:

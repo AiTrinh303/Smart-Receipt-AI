@@ -400,6 +400,28 @@ All amount math uses `Decimal(str(value))`, never raw floats.
   **Note:** like the other endpoints, this one has no authentication yet —
   anyone who can reach the server and knows a receipt's id can fetch its
   original file.
+- `GET /receipts/{receipt_id}/archive.pdf` — downloads a saved receipt as a
+  single-page PDF, for uniform documents regardless of whether the
+  original was a phone photo or already a PDF. Same existence/lookup
+  checks as the plain file endpoint (`400` non-UUID, `404` unknown/
+  never-extracted/deleted/missing-from-disk). A `.pdf` original is
+  returned completely unchanged; a `.jpg`/`.jpeg`/`.png` is converted with
+  [Pillow](https://pillow.readthedocs.io/): EXIF orientation is applied,
+  any transparency is flattened onto white, the image is converted to
+  RGB, and it's downscaled (never upscaled) if its long edge exceeds 3000
+  pixels — the PDF page is sized to the image itself, never forced to a
+  fixed page size like A4, and no EXIF or other metadata from the
+  original is copied into it. An image reporting more than 60,000,000
+  pixels is rejected *before* any pixel data is decoded (`422`, generic
+  message, real cause logged server-side with only the receipt id —
+  never the client's). **The original file on disk is never modified or
+  replaced** — this only ever reads it and returns new PDF bytes.
+  Response headers: `Content-Type: application/pdf`,
+  `Content-Disposition: attachment; filename="<generated-name>.pdf"` (an
+  ASCII-only, safe filename built from the apartment/date/store/total —
+  never the client's original filename), `X-Content-Type-Options:
+  nosniff`, `Cache-Control: private, no-cache`. Runs as a sync endpoint so
+  the conversion happens in FastAPI's threadpool, not on the event loop.
 - `GET /receipts?limit=N` — lists saved receipts newest first, as
   `{"items": [{receipt_id, original_filename, store_name, purchase_date,
   currency, total, created_at, apartment_id, apartment_name, category_id,

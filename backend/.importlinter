@@ -16,6 +16,7 @@ forbidden_modules =
     fastapi
     openai
     sqlite3
+    PIL
 
 [importlinter:contract:adapters-independence]
 name = Adapters must not depend on api
