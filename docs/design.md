@@ -299,6 +299,27 @@ the full trail of evidence.
   unfiltered list. The real browser Back button needs no special
   handling, since every tab/filter change is a real `pushState` entry.
 
+## Download PDF on the original file viewer
+
+- **`ReceiptFileViewer.tsx`** gets a second link-button, "Download PDF",
+  right next to "Open original" in the header — same shared
+  `LINK_BUTTON_CLASSES` (so identical secondary-button styling, 44px
+  touch target, visible focus ring), same `DownloadIcon`-prefixed shape as
+  `ExternalLinkIcon`-prefixed "Open original". It's a plain `<a href>`
+  pointing at `src/api/receiptArchiveUrl.ts`'s
+  `GET /receipts/{id}/archive.pdf` URL — no `fetch`, so no CORS handling
+  is needed; the server's `Content-Disposition: attachment` header is
+  what triggers the browser's own download, exactly like the backend/
+  frontend split that already lets `receiptFileUrl.ts`'s URL be used
+  directly as an `<img src>`/`<iframe src>`. Shown for both image and PDF
+  receipts (it doesn't depend on `kind` at all, unlike the zoom controls,
+  which only show for `kind === 'image'`); hidden together with "Open
+  original" whenever the viewer is in its `hasError` ("The original file
+  is not available.") state, via the same condition. Not added to
+  `?view=styleguide`, since `ReceiptFileViewer` itself isn't shown there
+  at all (no network-free way to demo an `<img>`/`<iframe>` pointed at a
+  real file).
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

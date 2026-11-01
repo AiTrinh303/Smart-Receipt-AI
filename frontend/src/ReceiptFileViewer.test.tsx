@@ -3,6 +3,7 @@ import ReceiptFileViewer from './ReceiptFileViewer'
 
 const RECEIPT_ID = '11111111-1111-1111-1111-111111111111'
 const EXPECTED_URL = `http://localhost:8001/receipts/${RECEIPT_ID}/file`
+const EXPECTED_ARCHIVE_URL = `http://localhost:8001/receipts/${RECEIPT_ID}/archive.pdf`
 
 test('the file name is shown, truncated, with the full name in a title attribute', () => {
   render(
@@ -109,6 +110,39 @@ test('the "Open original" link has the right href, target and rel', () => {
   expect(link).toHaveAttribute('href', EXPECTED_URL)
   expect(link).toHaveAttribute('target', '_blank')
   expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+})
+
+test('"Download PDF" has the exact archive.pdf href for an image receipt', () => {
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+  const link = screen.getByRole('link', { name: /download pdf/i })
+  expect(link).toHaveAttribute('href', EXPECTED_ARCHIVE_URL)
+})
+
+test('"Download PDF" has the exact archive.pdf href for a PDF receipt', () => {
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.pdf" contentType="application/pdf" />)
+  const link = screen.getByRole('link', { name: /download pdf/i })
+  expect(link).toHaveAttribute('href', EXPECTED_ARCHIVE_URL)
+})
+
+test('"Download PDF" is hidden when the image fails to load', () => {
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+  const img = screen.getByRole('img', { hidden: true })
+
+  // When the image fails to load
+  fireEvent.error(img)
+
+  // Then "Download PDF" (and "Open original") are both gone
+  expect(screen.queryByRole('link', { name: /download pdf/i })).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: /open original/i })).not.toBeInTheDocument()
+})
+
+test('"Open original" keeps its exact href, target and rel next to "Download PDF"', () => {
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+  const openOriginal = screen.getByRole('link', { name: /open original/i })
+  expect(openOriginal).toHaveAttribute('href', EXPECTED_URL)
+  expect(openOriginal).toHaveAttribute('target', '_blank')
+  expect(openOriginal).toHaveAttribute('rel', 'noopener noreferrer')
+  expect(screen.getByRole('link', { name: /download pdf/i })).toBeInTheDocument()
 })
 
 test('onError shows the "not available" message and no <img>', () => {

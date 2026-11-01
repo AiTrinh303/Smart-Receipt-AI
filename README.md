@@ -130,7 +130,11 @@ Next to the extracted data (both right after extraction and when reopening
 a saved receipt), the original uploaded file is shown via
 `GET /receipts/{id}/file` — a zoomable image viewer (50%–300%, with a
 "Fit" button) or, for a PDF, an embedded viewer — plus an "Open original"
-link. From the `lg` breakpoint up this is a two-column layout (file on the
+link and a "Download PDF" link next to it, which downloads the receipt as
+a single-page PDF (a plain link to `GET /receipts/{id}/archive.pdf`; the
+browser handles the download itself from the server's response headers,
+with no extra request from the page). Both links are hidden together if
+the original file fails to load. From the `lg` breakpoint up this is a two-column layout (file on the
 left, data on the right); below that, "Receipt data" and "Original" tabs
 switch between them without losing anything typed into the edit form,
 since both stay mounted. The edit form shows the same layout, so the

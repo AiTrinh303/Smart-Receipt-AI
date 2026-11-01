@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { receiptArchiveUrl } from './api/receiptArchiveUrl'
 import { receiptFileUrl } from './api/receiptFileUrl'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
@@ -83,6 +84,20 @@ function ExternalLinkIcon() {
   )
 }
 
+function DownloadIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+      <path
+        d="M10 3v9m0 0l-3.5-3.5M10 12l3.5-3.5M4 14.5v1a1 1 0 001 1h10a1 1 0 001-1v-1"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 interface ReceiptFileViewerProps {
   receiptId: string
   fileName: string | null
@@ -95,6 +110,7 @@ function ReceiptFileViewer({ receiptId, fileName, contentType }: ReceiptFileView
   const [hasError, setHasError] = useState(false)
 
   const fileUrl = receiptFileUrl(receiptId)
+  const archiveUrl = receiptArchiveUrl(receiptId)
   const kind = decideKind(contentType, fileName)
 
   const zoomIn = () => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))
@@ -146,6 +162,16 @@ function ReceiptFileViewer({ receiptId, fileName, contentType }: ReceiptFileView
             <a href={fileUrl} target="_blank" rel="noopener noreferrer" className={LINK_BUTTON_CLASSES}>
               <ExternalLinkIcon />
               Open original
+            </a>
+          )}
+
+          {!hasError && (
+            // A plain <a href> -- the server's Content-Disposition:
+            // attachment header triggers the browser's download directly,
+            // so no fetch (and therefore no CORS) is needed here.
+            <a href={archiveUrl} className={LINK_BUTTON_CLASSES}>
+              <DownloadIcon />
+              Download PDF
             </a>
           )}
         </div>

@@ -240,15 +240,23 @@ the purchase info, and the result is displayed for review.
   calls extract or PUT. `resetReceipt()` POSTs to
   `/receipts/{id}/reset`, same `ApiError` pattern as `deleteReceipt.ts`.
   **Original file viewer (`ReceiptFileViewer.tsx`, `src/api/receiptFileUrl.ts`,
+  `src/api/receiptArchiveUrl.ts`,
   `ReceiptDetailLayout.tsx`):** `receiptFileUrl(id)` builds the
   `GET /receipts/{id}/file` URL (no `fetch` — an `<img src>`/`<iframe src>`
   loads it directly, so no CORS is needed). `ReceiptFileViewer` decides
   image vs. PDF from `contentType` first, then the filename extension,
   else defaults to image. Renders as a framed card: a header row with the
   (truncated, `title`-attributed) file name, icon zoom/fit controls for
-  images (`aria-label`s "Zoom out"/"Zoom in"/"Fit", 50%–300%), and an
+  images (`aria-label`s "Zoom out"/"Zoom in"/"Fit", 50%–300%), an
   "Open original" link-styled `<a>` (kept a real anchor, not the `Button`
-  component, so it stays `role="link"` for `target="_blank"`); a body with
+  component, so it stays `role="link"` for `target="_blank"`), and a
+  "Download PDF" link-styled `<a>` right next to it, built from
+  `receiptArchiveUrl(id)` (`GET /receipts/{id}/archive.pdf`) — a plain
+  `href`, no `fetch`/CORS needed here either, since the server's
+  `Content-Disposition: attachment` header is what makes the browser
+  download it. Shown for both image and PDF receipts (unlike the zoom
+  controls, which are image-only) and hidden together with "Open
+  original" on the same `hasError` condition (a failed image load); a body with
   a `slate-100` background (so a white receipt stands out) that is either
   the image/iframe or, on a failed image load, an `Alert` with "The
   original file is not available." instead of a broken image.
