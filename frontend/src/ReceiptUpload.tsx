@@ -6,6 +6,12 @@ import { getReceipt } from './api/getReceipt'
 import { resetReceipt } from './api/resetReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
 import type { ReceiptExtraction } from './api/types'
+import {
+  EXTRACTION_FAILED_MESSAGE,
+  EXTRACTION_NOT_CONFIGURED_MESSAGE,
+  NETWORK_ERROR_MESSAGE,
+} from './errorMessages'
+import { IMAGE_EXTENSIONS, getExtension, isLikelyValidPdf, isValidFile } from './fileValidation'
 import { navigateTo } from './navigation'
 import { useApartments } from './hooks/useApartments'
 import ReceiptApartment from './ReceiptApartment'
@@ -21,48 +27,10 @@ import Skeleton from './components/ui/Skeleton'
 import Spinner from './components/ui/Spinner'
 import { formatFileSize } from './components/ui/formatFileSize'
 
-const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf']
-const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png']
-const PDF_SIGNATURE = '%PDF-'
 const RECEIPT_QUERY_PARAM = 'receipt'
 const HISTORY_RETURN_PARAM = 'from'
 const APARTMENT_HELPER_ID = 'apartment-helper'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function getExtension(filename: string) {
-  const index = filename.lastIndexOf('.')
-  return index === -1 ? '' : filename.slice(index).toLowerCase()
-}
-
-function isValidFile(file: File) {
-  const extension = getExtension(file.name)
-  if (!ACCEPTED_EXTENSIONS.includes(extension)) {
-    return false
-  }
-
-  // Some browsers/environments don't always set `file.type`; only check it
-  // when it's present, since the extension check already narrowed the type.
-  if (file.type && !ACCEPTED_MIME_TYPES.includes(file.type)) {
-    return false
-  }
-
-  return true
-}
-
-function readAsText(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'))
-    reader.readAsText(blob)
-  })
-}
-
-async function isLikelyValidPdf(file: File): Promise<boolean> {
-  const header = await readAsText(file.slice(0, PDF_SIGNATURE.length))
-  return header === PDF_SIGNATURE
-}
 
 function isValidUuid(value: string): boolean {
   return UUID_PATTERN.test(value)
@@ -108,11 +76,6 @@ interface UploadSuccess {
   filename: string
 }
 
-const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
-const EXTRACTION_FAILED_MESSAGE =
-  'We could not read this receipt. Please try again or upload a clearer image.'
-const EXTRACTION_NOT_CONFIGURED_MESSAGE =
-  'The AI service is not available (not configured or out of credit). Please check the server settings.'
 const LOAD_RECEIPT_FAILED_MESSAGE = 'Could not load this receipt. Please try again.'
 
 // The extract endpoint's response (ReceiptExtraction) never includes the

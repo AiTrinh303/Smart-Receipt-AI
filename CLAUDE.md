@@ -308,6 +308,78 @@ the purchase info, and the result is displayed for review.
   neither `URL.createObjectURL` nor `URL.revokeObjectURL`;
   `src/test/objectUrl.ts` is an explicit per-file mock (not a global
   polyfill) used by every test that selects an image.
+  **Shared file validation (`src/fileValidation.ts`) and error messages
+  (`src/errorMessages.ts`):** `isValidFile` (extension + MIME),
+  `isLikelyValidPdf` (reads the file's first 5 bytes and checks for the
+  `"%PDF-"` signature), `getExtension`, and the
+  `ACCEPTED_EXTENSIONS`/`ACCEPTED_MIME_TYPES`/`IMAGE_EXTENSIONS`/
+  `PDF_SIGNATURE` constants moved out of `ReceiptUpload.tsx` verbatim (no
+  behavior change) so the batch upload engine, below, can reuse the exact
+  same rules instead of duplicating them; `ReceiptUpload.tsx` now just
+  imports them. Likewise `NETWORK_ERROR_MESSAGE`/
+  `EXTRACTION_FAILED_MESSAGE`/`EXTRACTION_NOT_CONFIGURED_MESSAGE` (the
+  single-file flow's inline constants) moved to `errorMessages.ts`, so
+  both flows show the user the exact same wording for the same failure.
+  **Batch upload queue engine (`src/batch/batchReducer.ts`,
+  `src/batch/useBatchUpload.ts`) — logic only, no UI yet:**
+  `batchReducer` is a pure `(state, action) => state` reducer (no API
+  calls, no side effects) with two exported constants, `MAX_BATCH = 20`
+  and `CONCURRENCY = 2`. A `BatchItem` has a local `id`, the `File`, a
+  `status` (`"waiting" | "uploading" | "reading" | "done" | "failed"`),
+  and optional `receiptId`/`error`/`errorKind`
+  (`"upload" | "unreadable" | "unavailable" | "network"`)/
+  `warningsCount`. `BatchState` holds `items`, `rejected`
+  (`{fileName, reason}`), `pausedReason`
+  (`"unavailable" | "network" | "stopped" | null`), the `apartmentId`
+  captured once at `start()`, and `running`.
+  `useBatchUpload()` wraps the reducer with a scheduler `useEffect` that
+  re-evaluates after every state change: while `running` and
+  `pausedReason === null`, it starts as many `"waiting"` items as there's
+  room for (`CONCURRENCY` minus however many are currently
+  `"uploading"`/`"reading"`) by calling `uploadReceipt` then
+  `extractReceipt` directly (not dispatched — a plain async function
+  called from inside the effect, which dispatches status-update actions
+  as each call settles); once paused or stopped, the effect does nothing
+  at all, so in-flight items simply finish on their own via their own
+  already-running async calls, and nothing new ever starts. A
+  `mountedRef` guards every dispatch inside that async function, so an
+  unmount mid-request never triggers a state update.
+  **Pause rules:** an upload failing with a real server response
+  (any `ApiError`) fails just that one item (`errorKind: "upload"`, using
+  `err.message` as-is, exactly like the single-file flow) and the queue
+  keeps going; an upload failing with a network error (not an
+  `ApiError`), or an extract failing with `503`, fails that item (keeping
+  its `receiptId` if the failure happened at the extract step) **and**
+  sets `pausedReason` (`"network"` or `"unavailable"`) so no new item
+  starts until `resume()` clears it; an extract failing with any other
+  server status (e.g. `502`) fails just that item
+  (`errorKind: "unreadable"`) without pausing anything. `stop()` sets
+  `pausedReason: "stopped"` (same "let in-flight finish, start nothing
+  new" behavior); `resume()` clears whatever `pausedReason` is set.
+  `retry(itemId)` moves the item to the end of `items` (so
+  retries go to the back of the processing order), resets its `status` to
+  `"waiting"` (clearing `error`/`errorKind`, keeping `receiptId` if it has
+  one — so a retried item that already has a `receiptId` calls
+  `extractReceipt` only, never `uploadReceipt` again). `remove(itemId)` is
+  a no-op unless the item is `"waiting"` or `"failed"`. `reset()` is a
+  no-op if anything is `"uploading"`/`"reading"`. `addFiles(files)`
+  validates every file with `fileValidation.ts` (same rejection messages
+  as the single-file flow, plus `"duplicate"` for a file whose name, size
+  and `lastModified` all match one already in `items`, and a single
+  summary rejected entry — not one per file — when accepted files would
+  push the queue over `MAX_BATCH`); it *replaces* the whole queue when
+  `!running` (re-picking files before starting discards the old
+  selection, same spirit as the single-file flow), but *appends* to it
+  while `running` (adding more receipts mid-batch). Since `state.apartmentId`
+  is only ever set once, by `START`, and never touched by `STOP`/`RESUME`,
+  every upload the scheduler ever starts — including retries and anything
+  after a `resume()` — uses the exact apartment chosen at the original
+  `start()` call. **Test note:** this project's Jest setup (plain esbuild,
+  no `babel-plugin-jest-hoist`) doesn't support `jest.mock()`-based module
+  mocking reliably, so `useBatchUpload.test.ts` mocks at the `fetch`
+  boundary instead (the same pattern every other test file in this repo
+  already uses), which exercises the real `uploadReceipt`/`extractReceipt`
+  modules underneath.
   **Skeleton loading states (`components/ui/Skeleton.tsx`):** every
   loading area (the history list, the saved-receipt view, next to the
   extraction status) is a `role="status" aria-busy="true"` region that
