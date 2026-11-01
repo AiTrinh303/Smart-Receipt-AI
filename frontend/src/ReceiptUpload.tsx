@@ -14,6 +14,8 @@ import {
 import { IMAGE_EXTENSIONS, getExtension, isLikelyValidPdf, isValidFile } from './fileValidation'
 import { navigateTo } from './navigation'
 import { useApartments } from './hooks/useApartments'
+import BatchQueue from './batch/BatchQueue'
+import { useBatchUpload } from './batch/useBatchUpload'
 import ReceiptApartment from './ReceiptApartment'
 import ReceiptClassification from './ReceiptClassification'
 import ReceiptDetailLayout from './ReceiptDetailLayout'
@@ -77,6 +79,7 @@ interface UploadSuccess {
 }
 
 const LOAD_RECEIPT_FAILED_MESSAGE = 'Could not load this receipt. Please try again.'
+const STOPPED_MESSAGE = 'Stopped. The remaining receipts were not processed.'
 
 // The extract endpoint's response (ReceiptExtraction) never includes the
 // original filename/content type -- only GET /receipts/{id} does. These
@@ -138,6 +141,30 @@ function ReceiptUpload() {
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+
+  const batch = useBatchUpload()
+  const isBatchActive = batch.items.length > 0
+  const batchInFlight = batch.items.some((item) => item.status === 'uploading' || item.status === 'reading')
+  const batchWaitingOrInFlight = batch.items.some(
+    (item) => item.status === 'waiting' || item.status === 'uploading' || item.status === 'reading',
+  )
+  const isBatchFinished = isBatchActive && !batchWaitingOrInFlight
+  const batchDoneCount = batch.items.filter((item) => item.status === 'done').length
+  const batchFailedCount = batch.items.filter((item) => item.status === 'failed').length
+
+  // Warn before leaving the page while a batch upload/extract call is
+  // actually in flight -- closing the tab then would lose that receipt.
+  useEffect(() => {
+    if (!batchInFlight) {
+      return
+    }
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [batchInFlight])
 
   const [previewUrl, setPreviewUrlState] = useState<string | null>(null)
   const previewUrlRef = useRef<string | null>(null)
@@ -215,6 +242,9 @@ function ReceiptUpload() {
   }
 
   const processFile = async (selected: File) => {
+    if (isBatchActive) {
+      batch.reset()
+    }
     setSuccess(null)
     setResult(null)
     setIsEditing(false)
@@ -242,13 +272,35 @@ function ReceiptUpload() {
     setError(null)
   }
 
+  const handleBatchFilesSelected = async (files: File[]) => {
+    // Switching to batch mode replaces whatever single-file selection/result
+    // was showing -- the batch panel takes over below the dropzone.
+    setFile(null)
+    setPreviewUrl(null)
+    setError(null)
+    setSuccess(null)
+    setResult(null)
+    setIsEditing(false)
+    setExtractionError(null)
+    setReceiptId(null)
+    await batch.addFiles(files)
+  }
+
+  const handleBatchReset = () => {
+    batch.reset()
+  }
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0]
+    const selectedFiles = e.target.files ? Array.from(e.target.files) : []
     e.target.value = ''
-    if (!selected) {
+    if (selectedFiles.length === 0 || batch.running) {
       return
     }
-    await processFile(selected)
+    if (selectedFiles.length === 1) {
+      await processFile(selectedFiles[0])
+      return
+    }
+    await handleBatchFilesSelected(selectedFiles)
   }
 
   const handleRemoveFile = () => {
@@ -264,7 +316,7 @@ function ReceiptUpload() {
   }
 
   const openFilePicker = () => {
-    if (!(isUploading || isExtracting)) {
+    if (!(isUploading || isExtracting || batch.running)) {
       fileInputRef.current?.click()
     }
   }
@@ -289,23 +341,19 @@ function ReceiptUpload() {
     e.preventDefault()
     setIsDragOver(false)
 
-    const droppedFiles = e.dataTransfer.files
-    if (droppedFiles.length > 1) {
-      setSuccess(null)
-      setResult(null)
-      setIsEditing(false)
-      setExtractionError(null)
-      setReceiptId(null)
-      setFile(null)
-      setPreviewUrl(null)
-      setError('Please drop one receipt at a time.')
+    if (batch.running) {
       return
     }
 
-    const dropped = droppedFiles[0]
-    if (dropped) {
-      await processFile(dropped)
+    const droppedFiles = Array.from(e.dataTransfer.files)
+    if (droppedFiles.length === 0) {
+      return
     }
+    if (droppedFiles.length === 1) {
+      await processFile(droppedFiles[0])
+      return
+    }
+    await handleBatchFilesSelected(droppedFiles)
   }
 
   const handleSubmit = async () => {
@@ -617,6 +665,7 @@ function ReceiptUpload() {
   }
 
   const isBusy = isUploading || isExtracting
+  const isInputDisabled = isBusy || batch.running
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
@@ -644,13 +693,13 @@ function ReceiptUpload() {
               options={apartments.map((apartment) => ({ value: apartment.id, label: apartment.name }))}
               value={apartmentId}
               onChange={setApartmentId}
-              disabled={isBusy}
-              describedBy={file && !apartmentId ? APARTMENT_HELPER_ID : undefined}
+              disabled={isInputDisabled}
+              describedBy={(file || isBatchActive) && !apartmentId ? APARTMENT_HELPER_ID : undefined}
             />
           )
         )}
 
-        {apartments && file && !apartmentId && (
+        {apartments && (file || isBatchActive) && !apartmentId && (
           <p id={APARTMENT_HELPER_ID} className="text-sm text-ink-muted">
             Choose an apartment to continue.
           </p>
@@ -664,8 +713,9 @@ function ReceiptUpload() {
           id="receipt-file"
           type="file"
           accept=".jpg,.jpeg,.png,.pdf"
+          multiple
           onChange={handleFileChange}
-          disabled={isBusy}
+          disabled={isInputDisabled}
           className="sr-only"
         />
         <input
@@ -674,7 +724,7 @@ function ReceiptUpload() {
           accept="image/*"
           capture="environment"
           onChange={handleFileChange}
-          disabled={isBusy}
+          disabled={isInputDisabled}
           aria-hidden="true"
           tabIndex={-1}
           className="sr-only"
@@ -682,15 +732,15 @@ function ReceiptUpload() {
 
         <div
           role="button"
-          tabIndex={isBusy ? -1 : 0}
-          aria-disabled={isBusy}
+          tabIndex={isInputDisabled ? -1 : 0}
+          aria-disabled={isInputDisabled}
           onClick={openFilePicker}
           onKeyDown={handleZoneKeyDown}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-            isBusy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-soft'
+            isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-soft'
           } ${isDragOver ? 'border-brand bg-brand-soft' : 'border-border'}`}
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-brand" fill="none">
@@ -709,14 +759,74 @@ function ReceiptUpload() {
         <Button
           variant="secondary"
           size="sm"
-          disabled={isBusy}
+          disabled={isInputDisabled}
           onClick={() => cameraInputRef.current?.click()}
           className="w-full sm:hidden"
         >
           Take photo
         </Button>
 
-        {file && (
+        {isBatchActive ? (
+          <div className="flex flex-col gap-4">
+            <BatchQueue items={batch.items} rejected={batch.rejected} onRetry={batch.retry} onRemove={batch.remove} />
+
+            {isBatchFinished ? (
+              <>
+                <Alert variant="success">
+                  Done: {batchDoneCount} read, {batchFailedCount} failed.
+                </Alert>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => navigateTo(`?view=history&apartment=${apartmentId}&status=needs_review`)}
+                  >
+                    Review in History
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={handleBatchReset}>
+                    Read more receipts
+                  </Button>
+                </div>
+              </>
+            ) : batch.running ? (
+              batch.pausedReason ? (
+                <>
+                  <Alert variant={batch.pausedReason === 'stopped' ? 'warning' : 'error'}>
+                    {batch.pausedReason === 'unavailable'
+                      ? EXTRACTION_NOT_CONFIGURED_MESSAGE
+                      : batch.pausedReason === 'network'
+                        ? NETWORK_ERROR_MESSAGE
+                        : STOPPED_MESSAGE}
+                  </Alert>
+                  <Button size="sm" onClick={batch.resume}>
+                    Resume
+                  </Button>
+                </>
+              ) : (
+                <Button variant="secondary" size="sm" onClick={batch.stop}>
+                  Stop
+                </Button>
+              )
+            ) : (
+              <>
+                <Button
+                  onClick={() => apartmentId && batch.start(apartmentId)}
+                  disabled={!apartmentId || batch.items.length === 0}
+                >
+                  Read {batch.items.length} receipts
+                </Button>
+                <p className="flex items-start gap-1.5 text-sm text-ink-muted">
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none">
+                    <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M10 9v4.5M10 6.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  Each receipt is sent to OpenAI to read it ({batch.items.length} requests).
+                </p>
+              </>
+            )}
+          </div>
+        ) : (
+          <>
+            {file && (
           <div className="flex items-center gap-3 rounded-md border border-border bg-surface-page px-3 py-2">
             {previewUrl ? (
               <img
@@ -803,6 +913,8 @@ function ReceiptUpload() {
           </svg>
           The file is sent to OpenAI to read it. The extracted data is saved in this app.
         </p>
+          </>
+        )}
       </Card>
     </div>
   )

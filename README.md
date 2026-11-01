@@ -45,12 +45,25 @@ memory for the session: it survives "Remove", picking a different file, and
 apartment in one sitting only requires choosing it once.
 
 The upload screen is a dropzone: click it, press Enter/Space, or drag a
-receipt onto it to choose a file; dropping more than one file at once shows
-an error asking for one receipt at a time. On small screens, a "Take photo"
-button opens the device camera directly. The selected file is shown with its
-name and size and a "Remove" button. See
-[docs/design.md](docs/design.md) for the design system (tokens, shared
-components, accessibility rules) used throughout the UI.
+receipt onto it to choose a file. On small screens, a "Take photo" button
+opens the device camera directly. Choosing or dropping exactly one file
+shows it with its name and size and a "Remove" button; choosing or dropping
+two or more switches to **batch mode** instead (up to 20 files at once, 2
+uploaded/read at a time): each file gets a row with its status
+(Waiting/Uploading.../Reading.../Done/Failed), and the primary button reads
+"Read N receipts". A done row gets an "Open" link (opens the receipt in a
+new tab, since the queue lives only in this page's memory) and a
+"Check values (N)" badge when the AI flagged anything; a failed row shows
+its error and a "Retry" button. A network failure or a `503` (AI service
+unavailable) pauses the whole queue with an explanation and a "Resume"
+button; "Stop" pauses deliberately, letting anything already in flight
+finish. Once nothing is left waiting or in flight, a summary ("Done: X read,
+Y failed.") offers "Review in History" (jumps to that apartment's
+needs-review receipts) or "Read more receipts". The dropzone and apartment
+choice are disabled while a batch is running, and leaving the page mid-
+upload prompts a browser confirmation. See [docs/design.md](docs/design.md)
+for the design system (tokens, shared components, accessibility rules) used
+throughout the UI.
 
 After a receipt is uploaded and extracted, the address bar is updated to
 `?receipt=<id>` (via `history.replaceState`, no page reload). Reloading the

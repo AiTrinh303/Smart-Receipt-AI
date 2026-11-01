@@ -320,6 +320,63 @@ the full trail of evidence.
   at all (no network-free way to demo an `<img>`/`<iframe>` pointed at a
   real file).
 
+## Batch upload queue UI
+
+- **Switching modes.** The hidden file input gained `multiple`; picking or
+  dropping exactly 1 file keeps the single-file flow byte-for-byte
+  unchanged (same strings, same "Read receipt" button, same preview row).
+  Picking or dropping 2+ files replaces the current selection and renders
+  `src/batch/BatchQueue.tsx` instead of the single-file row — the dropzone,
+  apartment `RadioCardGroup` and "Take photo" button stay in place above
+  it. Both the dropzone and every file input are disabled while a batch is
+  running (`isInputDisabled = isBusy || batch.running` in
+  `ReceiptUpload.tsx`), so a batch can't be interrupted mid-flight by a new
+  selection; selecting a single file after a batch has finished calls
+  `batch.reset()` first so the two panels never show at once.
+- **`BatchQueue.tsx`** renders a `<ul>` of rows (file icon, truncated name
+  with a `title` for the full name, size via the shared `formatFileSize`,
+  and an icon+text status chip — never color alone — for
+  Waiting/Uploading…/Reading…/Done/Failed), a native `<progress>` with a
+  `<label>` plus a `role="status"` summary ("X of Y read, Z failed"), and
+  a warning `Alert` listing rejected files as `"<name>: <reason>"` (or
+  just the reason when there's no single file name, e.g. the
+  "first 20 files" cap). A done row with a `receiptId` gets a real `<a
+  href="/?receipt=<id>" target="_blank" rel="noopener noreferrer">Open</a>`
+  — a real anchor, not a `navigateTo()` call, since the in-memory queue
+  would otherwise be lost by navigating the current tab away — plus a
+  "Check values (N)" badge when `warningsCount > 0`. A failed row shows
+  Retry (re-dispatches through the existing `useBatchUpload` engine) and
+  its error text using the exact same shared messages as the single-file
+  flow; Remove is offered for waiting or failed rows, matching the
+  engine's own no-op rule for in-flight items.
+- **Start/stop/pause/finish, in `ReceiptUpload.tsx`.** Before `start()`:
+  primary button "Read N receipts" (disabled until an apartment is chosen
+  and N ≥ 1, same "Choose an apartment to continue." helper as the
+  single-file flow) plus a muted note, "Each receipt is sent to OpenAI to
+  read it (N requests)." While running and not paused: a secondary "Stop"
+  button. While paused (`pausedReason` from the engine — `'unavailable'`,
+  `'network'`, or `'stopped'` after clicking Stop): an error (or, for
+  `'stopped'`, warning-toned) `Alert` with the matching message — reusing
+  `EXTRACTION_NOT_CONFIGURED_MESSAGE`/`NETWORK_ERROR_MESSAGE` for the
+  first two, and a new `STOPPED_MESSAGE` ("Stopped. The remaining receipts
+  were not processed.") for the third — plus a "Resume" button. Once
+  nothing is waiting or in flight (checked by item status, not by the
+  engine's `running` flag, which the engine deliberately never resets):
+  a success `Alert` ("Done: X read, Y failed.") with "Review in History"
+  (`navigateTo('?view=history&apartment=<id>&status=needs_review')`) and
+  "Read more receipts" (`batch.reset()`, keeping the chosen apartment).
+  Failed rows stay listed with Retry even in the finished state.
+- **`beforeunload`.** A `useEffect` in `ReceiptUpload.tsx` adds a
+  `beforeunload` listener only while at least one batch item is actually
+  `uploading`/`reading` (not merely while `running`, since a stopped batch
+  lets its in-flight items keep going to completion) and removes it the
+  moment nothing is left in flight.
+- **Added to `?view=styleguide`:** a "Batch upload queue" section renders
+  `BatchQueue` with one static sample item per status plus two rejected
+  entries; a separate "Batch paused / finished" section toggles between
+  the three paused messages and the finished summary, reusing the same
+  shared error-message constants as the real flow.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

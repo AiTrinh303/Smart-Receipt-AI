@@ -380,6 +380,53 @@ the purchase info, and the result is displayed for review.
   boundary instead (the same pattern every other test file in this repo
   already uses), which exercises the real `uploadReceipt`/`extractReceipt`
   modules underneath.
+  **Batch upload UI (`batch/BatchQueue.tsx`, `ReceiptUpload.tsx`):** the
+  hidden file input gained `multiple`; picking or dropping exactly 1 file
+  keeps the single-file flow byte-for-byte unchanged (same strings,
+  button, preview row), picking or dropping 2+ replaces the current
+  selection and switches to batch mode, rendering `BatchQueue` in place of
+  the single-file row (the dropzone/apartment group/camera button stay).
+  Both are disabled while `isBusy || batch.running`
+  (`isInputDisabled`); selecting a single file while a finished/failed
+  batch is still shown calls `batch.reset()` first, so the two panels
+  never coexist. `BatchQueue` renders a `<ul>` (file icon, truncated name
+  with a `title`, size via the shared `formatFileSize`, an icon+text
+  status chip for Waiting/Uploading…/Reading…/Done/Failed — never color
+  alone), a native `<progress>` with a `<label>` and a `role="status"`
+  summary ("X of Y read, Z failed"), and rejected files in a warning
+  `Alert` as `"<name>: <reason>"` (or just the reason with no filename,
+  e.g. the MAX_BATCH overflow entry). A done row with a `receiptId` gets a
+  real `<a href="/?receipt=<id>" target="_blank"
+  rel="noopener noreferrer">Open</a>` — a real anchor rather than
+  `navigateTo()`, since the queue only lives in this page's memory and
+  navigating away would lose it — plus a "Check values (N)" badge when
+  `warningsCount > 0`; a failed row shows its error (same shared messages
+  as the single-file flow) and a "Retry" button; "Remove" is offered for
+  waiting/failed rows only, matching the engine's own no-op rule.
+  **Start/stop/pause/finish**, in `ReceiptUpload.tsx`: before `start()`, a
+  primary "Read N receipts" button (disabled until an apartment is chosen
+  and N ≥ 1, same "Choose an apartment to continue." helper, now shown for
+  `file || isBatchActive`) plus a muted "Each receipt is sent to OpenAI to
+  read it (N requests)." note; while running and not paused, a secondary
+  "Stop" button; while paused (`pausedReason`: `'unavailable'`/`'network'`
+  from the engine, or `'stopped'` after Stop), an `Alert` (`error` variant
+  for the first two, `warning` for `'stopped'`) with
+  `EXTRACTION_NOT_CONFIGURED_MESSAGE`/`NETWORK_ERROR_MESSAGE`/a new local
+  `STOPPED_MESSAGE` ("Stopped. The remaining receipts were not
+  processed.") plus a "Resume" button. Once nothing is waiting or in
+  flight (`batchWaitingOrInFlight`, derived from item statuses — the
+  engine's own `running` flag is deliberately never reset back to `false`
+  by `STOP`/finishing, so it can't be used for this check), a success
+  `Alert` ("Done: X read, Y failed.") offers "Review in History"
+  (`navigateTo('?view=history&apartment=<id>&status=needs_review')`,
+  reading the component's own `apartmentId` state, which can't drift from
+  what `start()` captured since the apartment group is disabled for the
+  whole run) and "Read more receipts" (`batch.reset()`, leaving
+  `apartmentId` untouched); failed rows stay listed with Retry even once
+  finished. A `useEffect` adds a `beforeunload` listener only while some
+  item is actually `uploading`/`reading` (`batchInFlight` — stricter than
+  `running`, since a stopped batch's in-flight items still finish on their
+  own) and removes it the moment nothing is left in flight.
   **Skeleton loading states (`components/ui/Skeleton.tsx`):** every
   loading area (the history list, the saved-receipt view, next to the
   extraction status) is a `role="status" aria-busy="true"` region that
@@ -391,8 +438,10 @@ the purchase info, and the result is displayed for review.
   dev-only page showing every `Button`/`Alert` variant, the nav tab's
   active/inactive states, the logo mark, the dropzone's
   idle/drag-over/file-selected states, a `Skeleton` sample, the
-  card-variant items list, and the warnings panel/Edited badge/reset
-  confirmation, with static sample data (no network
+  card-variant items list, the warnings panel/Edited badge/reset
+  confirmation, a `BatchQueue` sample (one row per status plus rejected
+  files) and the batch paused (unavailable/network/stopped)/finished
+  states, with static sample data (no network
   calls) — open it after any visual change, since jsdom cannot see
   colors or layout. Gated on `env.ts`'s `isDev` (`import.meta.env.DEV`,
   isolated into its own module specifically so tests can

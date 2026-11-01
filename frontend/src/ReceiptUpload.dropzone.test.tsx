@@ -89,7 +89,7 @@ test('dropping an invalid file shows the same error as choosing it', async () =>
   expect(getSubmitButton()).toBeDisabled()
 })
 
-test('dropping two files at once shows a one-at-a-time error', async () => {
+test('dropping two or more files at once switches to batch mode instead of the one-at-a-time error', async () => {
   // Given the upload form is rendered
   render(<ReceiptUpload />)
   const first = new File(['dummy'], 'receipt1.jpg', { type: 'image/jpeg' })
@@ -98,12 +98,18 @@ test('dropping two files at once shows a one-at-a-time error', async () => {
   // When two files are dropped on the zone
   fireEvent.drop(getDropzone(), makeDataTransfer([first, second]))
 
-  // Then an error asking for one receipt at a time is shown, and no file is selected
+  // Then both files are queued in the batch panel, and the single-file row never appears
   await waitFor(() => {
-    expect(screen.getByText('Please drop one receipt at a time.')).toBeInTheDocument()
+    expect(screen.getByText('receipt1.jpg')).toBeInTheDocument()
   })
-  expect(getSubmitButton()).toBeDisabled()
+  expect(screen.getByText('receipt2.jpg')).toBeInTheDocument()
   expect(screen.queryByText('Selected file: receipt1.jpg')).not.toBeInTheDocument()
+
+  // And the batch start button is disabled until an apartment is chosen
+  const startButton = screen.getByRole('button', { name: /read 2 receipts/i })
+  expect(startButton).toBeDisabled()
+  await chooseApartment()
+  expect(startButton).toBeEnabled()
 })
 
 test('Remove clears the selected file and any error', async () => {

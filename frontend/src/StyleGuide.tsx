@@ -6,6 +6,9 @@ import Card from './components/ui/Card'
 import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
+import BatchQueue from './batch/BatchQueue'
+import type { BatchItem, RejectedFile } from './batch/batchReducer'
+import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_ERROR_MESSAGE } from './errorMessages'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 const ALERT_VARIANTS = ['info', 'success', 'warning', 'error'] as const
@@ -41,6 +44,32 @@ function LogoMark() {
 type ReceiptApartmentState = 'selected' | 'none' | 'saving' | 'saved' | 'error'
 type ReceiptCategoryState = 'selected' | 'none' | 'saving' | 'saved' | 'error'
 type ReceiptStatusState = 'needs_review' | 'approved' | 'saving' | 'blocked'
+type BatchPauseState = 'unavailable' | 'network' | 'stopped' | 'finished'
+
+const SAMPLE_BATCH_ITEMS: BatchItem[] = [
+  { id: 'batch-sample-1', file: new File([], 'receipt-1.jpg'), status: 'waiting' },
+  { id: 'batch-sample-2', file: new File([], 'receipt-2.jpg'), status: 'uploading' },
+  { id: 'batch-sample-3', file: new File([], 'receipt-3.jpg'), status: 'reading' },
+  {
+    id: 'batch-sample-4',
+    file: new File([], 'receipt-4.jpg'),
+    status: 'done',
+    receiptId: 'sample-receipt-id',
+    warningsCount: 2,
+  },
+  {
+    id: 'batch-sample-5',
+    file: new File([], 'receipt-5.jpg'),
+    status: 'failed',
+    error: EXTRACTION_FAILED_MESSAGE,
+    errorKind: 'unreadable',
+  },
+]
+
+const SAMPLE_BATCH_REJECTED: RejectedFile[] = [
+  { fileName: 'notes.txt', reason: 'Invalid file type. Please select a JPG, PNG, or PDF file.' },
+  { fileName: '', reason: 'Only the first 20 files were added.' },
+]
 
 function StyleGuide() {
   const [dropzoneState, setDropzoneState] = useState<'idle' | 'drag-over' | 'file-selected'>('idle')
@@ -49,6 +78,7 @@ function StyleGuide() {
   const [receiptCategoryState, setReceiptCategoryState] = useState<ReceiptCategoryState>('selected')
   const [receiptStatusState, setReceiptStatusState] = useState<ReceiptStatusState>('needs_review')
   const [historyTab, setHistoryTab] = useState<'all' | 'oberaudorf'>('all')
+  const [batchPauseState, setBatchPauseState] = useState<BatchPauseState>('finished')
 
   return (
     <div className="flex flex-col gap-10 pb-16">
@@ -543,6 +573,61 @@ function StyleGuide() {
                 Remove
               </Button>
             </div>
+          )}
+        </Card>
+      </Section>
+
+      <Section title="Batch upload queue (BatchQueue -- waiting / in progress / done with warnings / failed / rejected files)">
+        <Card className="flex flex-col gap-4">
+          <BatchQueue
+            items={SAMPLE_BATCH_ITEMS}
+            rejected={SAMPLE_BATCH_REJECTED}
+            onRetry={() => {}}
+            onRemove={() => {}}
+          />
+        </Card>
+      </Section>
+
+      <Section title="Batch paused / finished (ReceiptUpload batch mode)">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setBatchPauseState('unavailable')}>
+            Show paused (unavailable)
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setBatchPauseState('network')}>
+            Show paused (network)
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setBatchPauseState('stopped')}>
+            Show paused (stopped)
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setBatchPauseState('finished')}>
+            Show finished
+          </Button>
+        </div>
+
+        <Card className="flex flex-col gap-3">
+          {batchPauseState === 'finished' ? (
+            <>
+              <Alert variant="success">Done: 3 read, 1 failed.</Alert>
+              <div className="flex gap-2">
+                <Button size="sm">Review in History</Button>
+                <Button variant="secondary" size="sm">
+                  Read more receipts
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Alert variant={batchPauseState === 'stopped' ? 'warning' : 'error'}>
+                {batchPauseState === 'unavailable'
+                  ? EXTRACTION_NOT_CONFIGURED_MESSAGE
+                  : batchPauseState === 'network'
+                    ? NETWORK_ERROR_MESSAGE
+                    : 'Stopped. The remaining receipts were not processed.'}
+              </Alert>
+              <Button size="sm" className="self-start">
+                Resume
+              </Button>
+            </>
           )}
         </Card>
       </Section>
