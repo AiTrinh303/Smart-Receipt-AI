@@ -17,7 +17,7 @@ import { useApartments } from './hooks/useApartments'
 import BatchQueue from './batch/BatchQueue'
 import { useBatchUpload } from './batch/useBatchUpload'
 import ReceiptApartment from './ReceiptApartment'
-import ReceiptClassification from './ReceiptClassification'
+import ReceiptReviewStatus from './ReceiptReviewStatus'
 import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
@@ -522,9 +522,8 @@ function ReceiptUpload() {
               apartmentId={result.apartment_id}
               onUpdated={(updated) => setResult(updated)}
             />
-            <ReceiptClassification
+            <ReceiptReviewStatus
               receiptId={result.receipt_id}
-              categoryId={result.category_id}
               status={result.status}
               onUpdated={(updated) => setResult(updated)}
             />

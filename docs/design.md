@@ -12,10 +12,10 @@ Open `?view=styleguide` in a local `npm run dev` session (e.g.
 inactive states, the logo mark, the `RadioCardGroup` apartment choice on the
 upload form (none chosen / chosen / loading / failure), the `ReceiptApartment`
 control on a saved receipt (selected / none selected / saving / saved /
-error), the category select and review-status controls on a saved receipt
-(selected / none / saving / saved / approved / approval blocked), the
-history row's apartment/category/status badges, the history view's
-apartment tab bar and year/status/category filter selects (all apartments
+error), the review-status controls on a saved receipt
+(needs review / approved / saving / approval blocked), the
+history row's apartment/status badges, the history view's
+apartment tab bar and year/status filter selects (all apartments
 selected / one apartment selected), the
 dropzone's idle/drag-over/file-selected states, and a `Card`, all at once,
 with static sample data and no network calls. It's dev-only (gated on `import.meta.env.DEV`, via the mockable
@@ -194,43 +194,34 @@ the full trail of evidence.
   muted "Not assigned" text instead of a badge -- never a broken pill. No
   filtering by apartment.
 
-## Category choice and review status on a saved receipt, and the history badges
+## Review status on a saved receipt, and the history badge
 
-- **`ReceiptClassification.tsx`**, rendered by the saved-receipt container
-  directly next to `ReceiptApartment` -- `ReceiptResult` itself is
-  untouched, and the whole control is hidden while the edit form is open.
-  Two independent controls:
-  - **Category**: a native `<select>` with a visible `<label>` ("Category"),
-    a `"Choose a category"` placeholder option, and the receipt's current
-    category selected (or the placeholder, when it's `null`). Choosing a
-    different option sends `PUT /receipts/{id}/category`
-    (`src/api/updateReceiptCategory.ts`, same `ApiError` pattern as the
-    other mutating calls): "Saving..." and the select disabled while
-    pending; success swaps in the response directly (no extra `GET`) and
-    shows "Saved" in a `role="status"`; failure shows an
-    `Alert variant="error"` and reverts the select to the previous value.
-  - **Status**: a `StatusBadge` (`src/components/ui/StatusBadge.tsx` --
-    shared with the history list below) shows "Needs review"
-    (`bg-warning-soft`/`text-warning`, a clock icon) or "Approved"
-    (`bg-success-soft`/`text-success`, a check icon) -- status is never
-    conveyed by color alone. A primary "Mark as approved" button shows
-    when `needs_review`; a secondary "Back to needs review" button shows
-    when `approved`. Both call `PUT /receipts/{id}/status`
-    (`src/api/updateReceiptStatus.ts`); while pending, "Saving..." shows
-    and the button is disabled (not hidden). If approving fails with a
-    `422` and a `missing` list (see `ApiError.missing`, which the response
-    parser keeps specifically for this), an `Alert variant="error"` shows
-    a plain-words message built from that list (e.g. "To approve this
-    receipt, also set: apartment, category."), the `date` code adds "You
-    can fix the date with Edit.", and the status stays unchanged. Never
-    calls extract or the plain `PUT /receipts/{id}`.
-- **History badges.** Each `ReceiptHistory.tsx` row now shows the category
-  name as a plain outlined pill (`border-border`/`text-ink`, deliberately
-  not `brand`-colored, so it reads as a distinct classification from the
-  apartment badge next to it) or muted "No category" text when `null`,
-  plus the same `StatusBadge` used on the saved-receipt view -- all three
-  badges (apartment, category, status) sit in one wrapped row. (Filtering
-  by category/status was added later -- see the next section.)
+- **`ReceiptReviewStatus.tsx`** (renamed from `ReceiptClassification.tsx`
+  when the expense-category feature was removed -- see
+  [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md)
+  -- it now holds only the status control, mechanically unchanged
+  otherwise), rendered by the saved-receipt container directly next to
+  `ReceiptApartment` -- `ReceiptResult` itself is untouched, and the whole
+  control is hidden while the edit form is open. A `StatusBadge`
+  (`src/components/ui/StatusBadge.tsx` -- shared with the history list
+  below) shows "Needs review" (`bg-warning-soft`/`text-warning`, a clock
+  icon) or "Approved" (`bg-success-soft`/`text-success`, a check icon) --
+  status is never conveyed by color alone. A primary "Mark as approved"
+  button shows when `needs_review`; a secondary "Back to needs review"
+  button shows when `approved`. Both call `PUT /receipts/{id}/status`
+  (`src/api/updateReceiptStatus.ts`); while pending, "Saving..." shows and
+  the button is disabled (not hidden). If approving fails with a `422` and
+  a `missing` list (see `ApiError.missing`, which the response parser
+  keeps specifically for this), an `Alert variant="error"` shows a
+  plain-words message built from that list (e.g. "To approve this
+  receipt, also set: apartment, a valid purchase date."), the `date` code
+  adds "You can fix the date with Edit.", and the status stays unchanged.
+  Any unrecognized code in `missing` (e.g. a stray `"category"` from an
+  older cached response) is silently dropped rather than shown raw or as
+  "undefined". Never calls extract or the plain `PUT /receipts/{id}`.
+- **History badge.** Each `ReceiptHistory.tsx` row shows the same
+  `StatusBadge` used on the saved-receipt view, next to the apartment
+  badge.
 
 ## Splitting the history by apartment, with filters
 
@@ -248,48 +239,50 @@ the full trail of evidence.
   -- without it, the arrow-key interaction would silently drop focus back
   to the document body every time. Each tab button has a 44px minimum
   touch target and the tab bar wraps on narrow screens.
-- **Filter selects.** Below the tabs, three native `<select>`s with visible
+- **Filter selects.** Below the tabs, two native `<select>`s with visible
   `<label>`s -- "Year" (All years, each year from the facets descending,
-  plus "No valid date" *only* when the facets say `has_undated`), "Status"
-  (All, Needs review, Approved) and "Category" (All, each category from
-  `useCategories`, then "No category"). They stack in a column below `sm`
-  and sit in a row from it.
+  plus "No valid date" *only* when the facets say `has_undated`) and
+  "Status" (All, Needs review, Approved). They stack in a column below
+  `sm` and sit in a row from it. (A third "Category" select existed here
+  before the expense-category feature was removed -- see
+  [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md).)
 - **State lives in the URL**, not component state:
-  `?view=history&apartment=<id>&year=<v>&status=<v>&category=<v>`.
-  Changing a tab or select calls the existing `navigateTo()` helper, which
-  `pushState`s the new URL and dispatches a synthetic `popstate` --
-  `App.tsx` already keys `<ReceiptHistory key={locationKey} />` on
-  `location.search`, so this **fully remounts** `ReceiptHistory` (same
-  mechanism `ReceiptUpload` already relies on), and the remount re-fetches
-  facets/categories/the list fresh from the new URL. Nothing here needed a
+  `?view=history&apartment=<id>&year=<v>&status=<v>`. An old link or
+  bookmark containing `&category=...` is simply ignored -- that param is
+  never read. Changing a tab or select calls the existing `navigateTo()`
+  helper, which `pushState`s the new URL and dispatches a synthetic
+  `popstate` -- `App.tsx` already keys `<ReceiptHistory key={locationKey}
+  />` on `location.search`, so this **fully remounts** `ReceiptHistory`
+  (same mechanism `ReceiptUpload` already relies on), and the remount
+  re-fetches facets/the list fresh from the new URL. Nothing here needed a
   new effect-driven "re-fetch when filters change" path -- the existing
   remount-on-navigate architecture already provides it.
 - **Validating URL values ("ignored" vs. "applied with zero results"):** a
   structurally invalid value (`year` not matching `/^\d{4}$/` and not
   `"none"`, or `status` outside the two allowed values) is dropped
   entirely with no network round trip. A referentially invalid value
-  (`apartment`/`category` not among the ids the facets/categories calls
-  actually returned) is also dropped, but only after that lookup -- this
-  distinguishes "the id doesn't exist" (ignored) from "the id exists but
-  matches nothing" (a legitimate filter that correctly shows zero
-  results). `GET /receipts/facets` is called unscoped first (always
-  needed for the tab bar), which doubles as the apartment-id validation
-  source; a second, scoped call (`?apartment_id=...`) only fires when that
-  apartment turns out to be valid, to get the Year select's options
-  correctly limited to that apartment.
+  (`apartment` not among the ids the facets call actually returned) is
+  also dropped, but only after that lookup -- this distinguishes "the id
+  doesn't exist" (ignored) from "the id exists but matches nothing" (a
+  legitimate filter that correctly shows zero results). `GET
+  /receipts/facets` is called unscoped first (always needed for the tab
+  bar), which doubles as the apartment-id validation source; a second,
+  scoped call (`?apartment_id=...`) only fires when that apartment turns
+  out to be valid, to get the Year select's options correctly limited to
+  that apartment.
 - **Row count and Clear filters.** `role="status"` shows "N receipts" (the
   list response's own `count`). A "Clear filters" button appears only
-  when a year/status/category select is actually active (not just an
-  apartment tab) and clears those three while leaving the apartment tab
-  untouched, per spec. The plain "No receipts yet..." empty state is
-  reserved for the truly unfiltered case (All apartments tab, nothing
-  else active); any other empty result shows "No receipts match these
-  filters." instead, using the same "Clear filters" button above it
-  rather than a duplicate.
+  when a year/status select is actually active (not just an apartment
+  tab) and clears those two while leaving the apartment tab untouched,
+  per spec. The plain "No receipts yet..." empty state is reserved for
+  the truly unfiltered case (All apartments tab, nothing else active);
+  any other empty result shows "No receipts match these filters."
+  instead, using the same "Clear filters" button above it rather than a
+  duplicate.
 - **Apartment badge visibility.** Inside a specific apartment's tab, that
   row's own apartment badge is hidden (it would just repeat the tab
-  already selected); in "All apartments" it shows as before. Category and
-  status badges always show.
+  already selected); in "All apartments" it shows as before. The status
+  badge always shows.
 - **Returning from a filtered list.** Opening a receipt from a tab/filter
   other than the plain unfiltered view attaches `&from=<encoded search>`
   to the `?receipt=<id>` URL (never for the plain case, so that URL shape

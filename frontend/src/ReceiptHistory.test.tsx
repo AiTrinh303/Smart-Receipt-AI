@@ -2,11 +2,9 @@ import { useEffect, useState } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptHistory from './ReceiptHistory'
-import { clearCategoriesCache } from './hooks/useCategories'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
-  clearCategoriesCache()
 })
 
 afterEach(() => {
@@ -31,11 +29,6 @@ function createDeferred<T>() {
 
 const OBERAUDORF = { id: 'oberaudorf-bergblick', name: 'Oberaudorf Bergblick' }
 const WALDGLUECK = { id: 'sankt-englmar-waldglueck', name: 'Sankt Englmar Waldglück' }
-
-const SAMPLE_CATEGORIES = [
-  { id: 'cleaning', name: 'Cleaning and supplies' },
-  { id: 'repairs', name: 'Repairs and maintenance' },
-]
 
 const DEFAULT_FACETS = {
   apartments: [
@@ -78,7 +71,6 @@ const THREE_ITEMS = [
 ]
 
 interface Routes {
-  categories?: () => Promise<unknown>
   facets?: (urlString: string) => Promise<unknown>
   list?: (urlString: string) => Promise<unknown>
 }
@@ -86,11 +78,6 @@ interface Routes {
 function routeFetch(routes: Routes = {}) {
   return (url: unknown) => {
     const urlString = String(url)
-    if (urlString.includes('/categories')) {
-      return routes.categories
-        ? routes.categories()
-        : Promise.resolve(jsonResponse(200, { items: SAMPLE_CATEGORIES, count: SAMPLE_CATEGORIES.length }))
-    }
     if (urlString.includes('/receipts/facets')) {
       return routes.facets
         ? routes.facets(urlString)
@@ -384,7 +371,7 @@ describe('ReceiptHistory', () => {
     })
   })
 
-  test('a row with a category and status shows both as badges', async () => {
+  test('a row shows its status as a badge', async () => {
     fetchSpy.mockImplementation(
       routeFetch({
         list: () =>
@@ -399,8 +386,6 @@ describe('ReceiptHistory', () => {
                   currency: 'USD',
                   total: 10,
                   created_at: '2026-01-15T00:00:00+00:00',
-                  category_id: 'cleaning',
-                  category_name: 'Cleaning and supplies',
                   status: 'approved',
                 },
               ],
@@ -413,51 +398,7 @@ describe('ReceiptHistory', () => {
     render(<ReceiptHistory />)
 
     await waitFor(() => {
-      expect(screen.getByRole('list')).toHaveTextContent('Cleaning and supplies')
-    })
-    expect(within(screen.getByRole('list')).getByText('Cleaning and supplies')).toBeInTheDocument()
-    expect(within(screen.getByRole('list')).getByText('Approved')).toBeInTheDocument()
-  })
-
-  test('a row with no category shows plain muted "No category", and a missing field renders without crashing', async () => {
-    fetchSpy.mockImplementation(
-      routeFetch({
-        list: () =>
-          Promise.resolve(
-            jsonResponse(200, {
-              items: [
-                {
-                  receipt_id: '11111111-1111-1111-1111-111111111111',
-                  original_filename: 'a.jpg',
-                  store_name: 'Store A',
-                  purchase_date: '2026-01-15',
-                  currency: 'USD',
-                  total: 10,
-                  created_at: '2026-01-15T00:00:00+00:00',
-                  category_id: null,
-                  category_name: null,
-                  status: 'needs_review',
-                },
-                {
-                  receipt_id: '22222222-2222-2222-2222-222222222222',
-                  original_filename: 'b.jpg',
-                  store_name: 'Store B',
-                  purchase_date: '2026-01-16',
-                  currency: 'USD',
-                  total: 20,
-                  created_at: '2026-01-16T00:00:00+00:00',
-                },
-              ],
-              count: 2,
-            }),
-          ),
-      }),
-    )
-
-    render(<ReceiptHistory />)
-
-    await waitFor(() => {
-      expect(within(screen.getByRole('list')).getAllByText('No category')).toHaveLength(2)
+      expect(within(screen.getByRole('list')).getByText('Approved')).toBeInTheDocument()
     })
   })
 
@@ -598,13 +539,9 @@ describe('ReceiptHistory', () => {
     await user.selectOptions(screen.getByLabelText('Status'), 'Approved')
     await waitFor(() => expect(window.location.search).toContain('status=approved'))
 
-    await user.selectOptions(screen.getByLabelText('Category'), SAMPLE_CATEGORIES[0].name)
-    await waitFor(() => expect(window.location.search).toContain(`category=${SAMPLE_CATEGORIES[0].id}`))
-
     const lastCall = calls[calls.length - 1]
     expect(lastCall).toContain('year=2026')
     expect(lastCall).toContain('status=approved')
-    expect(lastCall).toContain(`category_id=${SAMPLE_CATEGORIES[0].id}`)
   })
 
   test('"No valid date" option only appears when has_undated is true', async () => {
@@ -656,7 +593,7 @@ describe('ReceiptHistory', () => {
   })
 
   test('invalid URL values are ignored, showing the unfiltered result for that value', async () => {
-    window.history.replaceState({}, '', '/?view=history&apartment=does-not-exist&year=25&status=archived&category=nope')
+    window.history.replaceState({}, '', '/?view=history&apartment=does-not-exist&year=25&status=archived')
     let capturedUrl = ''
     fetchSpy.mockImplementation(
       routeFetch({
@@ -675,16 +612,11 @@ describe('ReceiptHistory', () => {
     expect(capturedUrl).not.toContain('apartment_id=')
     expect(capturedUrl).not.toContain('year=')
     expect(capturedUrl).not.toContain('status=')
-    expect(capturedUrl).not.toContain('category_id=')
     expect(screen.getByRole('tab', { name: 'All apartments (3)' })).toHaveAttribute('aria-selected', 'true')
   })
 
-  test('filters combine in one request', async () => {
-    window.history.replaceState(
-      {},
-      '',
-      `/?view=history&apartment=${OBERAUDORF.id}&year=2026&status=needs_review&category=${SAMPLE_CATEGORIES[1].id}`,
-    )
+  test('an old URL containing &category=... is ignored without error, loading normally', async () => {
+    window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}&year=2026&status=needs_review&category=cleaning`)
     let capturedUrl = ''
     fetchSpy.mockImplementation(
       routeFetch({
@@ -702,7 +634,7 @@ describe('ReceiptHistory', () => {
     })
     expect(capturedUrl).toContain('year=2026')
     expect(capturedUrl).toContain('status=needs_review')
-    expect(capturedUrl).toContain(`category_id=${SAMPLE_CATEGORIES[1].id}`)
+    expect(capturedUrl).not.toContain('category')
   })
 
   test('"Clear filters" appears when a select is active and keeps the apartment tab', async () => {

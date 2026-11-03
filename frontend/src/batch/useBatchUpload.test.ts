@@ -71,8 +71,6 @@ function extractionBody(receiptId: string, overrides: Record<string, unknown> = 
     edited_at: null,
     apartment_id: null,
     apartment_name: null,
-    category_id: null,
-    category_name: null,
     status: 'needs_review',
     ...overrides,
   }

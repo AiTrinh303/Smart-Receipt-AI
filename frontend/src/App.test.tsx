@@ -1,11 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
-import { clearCategoriesCache } from './hooks/useCategories'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
-  clearCategoriesCache()
 })
 
 afterEach(() => {
@@ -133,7 +131,6 @@ const SAVED_RECEIPT = {
 }
 
 const DEFAULT_FACETS = { apartments: [], total: 0, years: [], has_undated: false }
-const DEFAULT_CATEGORIES_RESPONSE = { items: [], count: 0 }
 
 function routeFetch(
   fetchSpy: jest.Mock,
@@ -146,13 +143,10 @@ function routeFetch(
     if (urlString.includes('/extract')) {
       return Promise.reject(new Error(`Unexpected extract call to ${urlString}`))
     }
-    // ReceiptHistory always fetches these two for the tab bar/category select;
-    // answered with an empty-but-valid shape unless a test overrides `list`.
+    // ReceiptHistory always fetches this for the tab bar's counts; answered
+    // with an empty-but-valid shape unless a test overrides `list`.
     if (urlString.includes('/receipts/facets')) {
       return Promise.resolve(jsonResponse(200, DEFAULT_FACETS))
-    }
-    if (urlString.includes('/categories')) {
-      return Promise.resolve(jsonResponse(200, DEFAULT_CATEGORIES_RESPONSE))
     }
     if (urlString.includes('/receipts?')) {
       return routes.list

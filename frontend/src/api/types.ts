@@ -38,17 +38,10 @@ export interface ReceiptExtraction {
   edited_at: string | null
   apartment_id: string | null
   apartment_name: string | null
-  category_id: string | null
-  category_name: string | null
   status: ReceiptStatus
 }
 
 export interface Apartment {
-  id: string
-  name: string
-}
-
-export interface Category {
   id: string
   name: string
 }
@@ -63,8 +56,6 @@ export interface ReceiptSummary {
   created_at: string
   apartment_id: string | null
   apartment_name: string | null
-  category_id: string | null
-  category_name: string | null
   status: ReceiptStatus
 }
 

@@ -4,7 +4,6 @@ import { ApiError } from './api/ApiError'
 import { getReceiptFacets } from './api/getReceiptFacets'
 import { listReceipts } from './api/listReceipts'
 import type { ApartmentFacet, ReceiptStatus, ReceiptSummary } from './api/types'
-import { useCategories } from './hooks/useCategories'
 import Button from './components/ui/Button'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
@@ -14,7 +13,6 @@ const LOADING_ROW_COUNT = 4
 
 const NOT_DETECTED = 'Not detected'
 const NOT_ASSIGNED = 'Not assigned'
-const NO_CATEGORY = 'No category'
 
 const YEAR_PATTERN = /^\d{4}$/
 const NONE_FILTER_VALUE = 'none'
@@ -50,18 +48,6 @@ function ApartmentBadge({ apartmentName }: { apartmentName: string | null | unde
     <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">
       <ApartmentIcon />
       {apartmentName}
-    </span>
-  )
-}
-
-function CategoryBadge({ categoryName }: { categoryName: string | null | undefined }) {
-  if (!categoryName) {
-    return <span className="text-ink-muted">{NO_CATEGORY}</span>
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-ink">
-      {categoryName}
     </span>
   )
 }
@@ -106,7 +92,6 @@ interface HistoryUrlParams {
   apartment: string | null
   year: string | null
   status: string | null
-  category: string | null
 }
 
 function readUrlParams(): HistoryUrlParams {
@@ -115,7 +100,6 @@ function readUrlParams(): HistoryUrlParams {
     apartment: params.get('apartment'),
     year: params.get('year'),
     status: params.get('status'),
-    category: params.get('category'),
   }
 }
 
@@ -125,7 +109,6 @@ function buildHistorySearch(params: HistoryUrlParams): string {
   if (params.apartment) usp.set('apartment', params.apartment)
   if (params.year) usp.set('year', params.year)
   if (params.status) usp.set('status', params.status)
-  if (params.category) usp.set('category', params.category)
   return `?${usp.toString()}`
 }
 
@@ -145,8 +128,6 @@ function effectiveStatus(rawStatus: string | null): ReceiptStatus | null {
 function ReceiptHistory() {
   const [notice] = useState(getAndClearNotice)
   const [urlParams] = useState(readUrlParams)
-  const { categories, isLoading: categoriesLoading, error: categoriesError, retry: retryCategories } =
-    useCategories(true)
 
   const [apartments, setApartments] = useState<ApartmentFacet[] | null>(null)
   const [totalCount, setTotalCount] = useState(0)
@@ -162,14 +143,7 @@ function ReceiptHistory() {
 
   const tabListRef = useRef<HTMLDivElement>(null)
 
-  // Categories must finish loading (success or failure) before the first
-  // list request, so the `category` URL param can be validated against the
-  // real list instead of being trusted blindly.
   useEffect(() => {
-    if (categoriesLoading) {
-      return
-    }
-
     let cancelled = false
     setIsLoading(true)
     setError(null)
@@ -206,20 +180,11 @@ function ReceiptHistory() {
 
         const year = effectiveYear(urlParams.year)
         const status = effectiveStatus(urlParams.status)
-        const category =
-          urlParams.category === NONE_FILTER_VALUE
-            ? NONE_FILTER_VALUE
-            : urlParams.category && !categoriesError && categories
-              ? categories.some((c) => c.id === urlParams.category)
-                ? urlParams.category
-                : null
-              : urlParams.category // categories failed to load -- best effort, pass through
 
         const response = await listReceipts({
           apartmentId: apartmentId ?? undefined,
           year: year ?? undefined,
           status: status ?? undefined,
-          categoryId: category ?? undefined,
         })
         if (cancelled) return
         setItems(response.items)
@@ -237,9 +202,9 @@ function ReceiptHistory() {
       cancelled = true
     }
     // urlParams is captured once per mount (the whole page remounts on any
-    // navigation), categories/categoriesError only need to gate the first run.
+    // navigation).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriesLoading, reloadToken])
+  }, [reloadToken])
 
   // Restore focus to the tab the user just moved to with the arrow keys,
   // across the full remount that navigating triggers. The tab bar only
@@ -256,7 +221,6 @@ function ReceiptHistory() {
   }, [isLoading])
 
   const retry = () => {
-    retryCategories()
     setReloadToken((n) => n + 1)
   }
 
@@ -286,12 +250,8 @@ function ReceiptHistory() {
     navigateTo(buildHistorySearch({ ...urlParams, status: e.target.value || null }))
   }
 
-  const handleCategoryChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    navigateTo(buildHistorySearch({ ...urlParams, category: e.target.value || null }))
-  }
-
   const handleClearFilters = () => {
-    navigateTo(buildHistorySearch({ apartment: urlParams.apartment, year: null, status: null, category: null }))
+    navigateTo(buildHistorySearch({ apartment: urlParams.apartment, year: null, status: null }))
   }
 
   const tabs: { id: string | null; label: string }[] = [
@@ -316,14 +276,8 @@ function ReceiptHistory() {
 
   const yearValue = effectiveYear(urlParams.year)
   const statusValue = effectiveStatus(urlParams.status)
-  const categoryValue =
-    urlParams.category === NONE_FILTER_VALUE
-      ? NONE_FILTER_VALUE
-      : urlParams.category && categories && categories.some((c) => c.id === urlParams.category)
-        ? urlParams.category
-        : null
 
-  const anyFilterActive = yearValue !== null || statusValue !== null || categoryValue !== null
+  const anyFilterActive = yearValue !== null || statusValue !== null
   const noticeBanner = notice ? <p className="text-sm text-green-600">{notice}</p> : null
 
   if (isLoading) {
@@ -430,31 +384,6 @@ function ReceiptHistory() {
             ))}
           </select>
         </div>
-
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor="history-category-select" className="text-sm font-medium text-ink">
-            Category
-          </label>
-          {categoriesError ? (
-            <p className="text-sm text-danger">{categoriesError}</p>
-          ) : (
-            <select
-              id="history-category-select"
-              value={categoryValue ?? ''}
-              onChange={handleCategoryChange}
-              disabled={categoriesLoading || !categories}
-              className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-            >
-              <option value="">All</option>
-              {(categories ?? []).map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-              <option value={NONE_FILTER_VALUE}>No category</option>
-            </select>
-          )}
-        </div>
       </div>
 
       <div className="flex items-center justify-between gap-2">
@@ -499,7 +428,6 @@ function ReceiptHistory() {
                   <span className="block text-ink-muted">{displayText(item.purchase_date)}</span>
                   <span className="mt-1 flex flex-wrap items-center gap-1.5">
                     {effectiveApartmentId === null && <ApartmentBadge apartmentName={item.apartment_name} />}
-                    <CategoryBadge categoryName={item.category_name} />
                     <StatusBadge status={item.status} />
                   </span>
                 </span>

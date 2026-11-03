@@ -18,11 +18,6 @@ const SAMPLE_APARTMENT_OPTIONS = [
   { value: 'sankt-englmar-waldglueck', label: 'Sankt Englmar Waldglück' },
 ]
 
-const SAMPLE_CATEGORY_OPTIONS = [
-  { value: 'cleaning', label: 'Cleaning and supplies' },
-  { value: 'repairs', label: 'Repairs and maintenance' },
-]
-
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
@@ -42,7 +37,6 @@ function LogoMark() {
 }
 
 type ReceiptApartmentState = 'selected' | 'none' | 'saving' | 'saved' | 'error'
-type ReceiptCategoryState = 'selected' | 'none' | 'saving' | 'saved' | 'error'
 type ReceiptStatusState = 'needs_review' | 'approved' | 'saving' | 'blocked'
 type BatchPauseState = 'unavailable' | 'network' | 'stopped' | 'finished'
 
@@ -75,7 +69,6 @@ function StyleGuide() {
   const [dropzoneState, setDropzoneState] = useState<'idle' | 'drag-over' | 'file-selected'>('idle')
   const [apartmentChoice, setApartmentChoice] = useState<string | null>(null)
   const [receiptApartmentState, setReceiptApartmentState] = useState<ReceiptApartmentState>('selected')
-  const [receiptCategoryState, setReceiptCategoryState] = useState<ReceiptCategoryState>('selected')
   const [receiptStatusState, setReceiptStatusState] = useState<ReceiptStatusState>('needs_review')
   const [historyTab, setHistoryTab] = useState<'all' | 'oberaudorf'>('all')
   const [batchPauseState, setBatchPauseState] = useState<BatchPauseState>('finished')
@@ -305,56 +298,7 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Category select on a saved receipt (ReceiptClassification -- selected / none / saving / saved / failure)">
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setReceiptCategoryState('selected')}>
-            Show selected
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setReceiptCategoryState('none')}>
-            Show none selected
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setReceiptCategoryState('saving')}>
-            Show saving
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setReceiptCategoryState('saved')}>
-            Show saved
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setReceiptCategoryState('error')}>
-            Show error
-          </Button>
-        </div>
-
-        <Card className="flex flex-col gap-2">
-          <label htmlFor="styleguide-category-select" className="text-sm font-medium text-ink">
-            Category
-          </label>
-          <select
-            id="styleguide-category-select"
-            value={receiptCategoryState === 'none' ? '' : SAMPLE_CATEGORY_OPTIONS[0].value}
-            onChange={() => {}}
-            disabled={receiptCategoryState === 'saving'}
-            className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-          >
-            <option value="">Choose a category</option>
-            {SAMPLE_CATEGORY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          {receiptCategoryState === 'saving' && <p className="text-sm text-ink-muted">Saving...</p>}
-          {receiptCategoryState === 'saved' && (
-            <p role="status" className="text-sm text-success">
-              Saved
-            </p>
-          )}
-          {receiptCategoryState === 'error' && (
-            <Alert variant="error">Could not update the category. Please try again.</Alert>
-          )}
-        </Card>
-      </Section>
-
-      <Section title="Review status (ReceiptClassification -- needs review / approved / saving / approval blocked)">
+      <Section title="Review status (ReceiptReviewStatus -- needs review / approved / saving / approval blocked)">
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => setReceiptStatusState('needs_review')}>
             Show needs review
@@ -390,13 +334,14 @@ function StyleGuide() {
           {receiptStatusState === 'saving' && <p className="text-sm text-ink-muted">Saving...</p>}
           {receiptStatusState === 'blocked' && (
             <Alert variant="error">
-              To approve this receipt, also set: apartment, category. You can fix the date with Edit.
+              To approve this receipt, also set: apartment, a valid purchase date. You can fix the date
+              with Edit.
             </Alert>
           )}
         </Card>
       </Section>
 
-      <Section title="History row badges (apartment / category / status)">
+      <Section title="History row badges (apartment / status)">
         <ul className="flex max-w-xs flex-col gap-2">
           <li className="rounded border border-gray-200 px-3 py-2 text-sm">
             <span className="block font-medium text-gray-900">Corner Store</span>
@@ -414,9 +359,6 @@ function StyleGuide() {
                 </svg>
                 Oberaudorf Bergblick
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-ink">
-                Cleaning and supplies
-              </span>
               <StatusBadge status="approved" />
             </span>
           </li>
@@ -424,7 +366,6 @@ function StyleGuide() {
             <span className="block font-medium text-gray-900">Other Store</span>
             <span className="mt-1 flex flex-wrap items-center gap-1.5">
               <span className="text-ink-muted">Not assigned</span>
-              <span className="text-ink-muted">No category</span>
               <StatusBadge status="needs_review" />
             </span>
           </li>
@@ -499,24 +440,6 @@ function StyleGuide() {
                 <option value="">All</option>
                 <option value="needs_review">Needs review</option>
                 <option value="approved">Approved</option>
-              </select>
-            </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="styleguide-history-category" className="text-sm font-medium text-ink">
-                Category
-              </label>
-              <select
-                id="styleguide-history-category"
-                onChange={() => {}}
-                className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-              >
-                <option value="">All</option>
-                {SAMPLE_CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-                <option value="none">No category</option>
               </select>
             </div>
           </div>

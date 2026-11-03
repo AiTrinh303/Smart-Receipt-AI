@@ -76,16 +76,16 @@ Navigation is URL-based, with no router library:
 - `?view=history` — the receipt history list (newest first), split by
   apartment with filters. A tab bar shows "All apartments (N)" plus one
   tab per apartment with its own count; arrow keys/Home/End move between
-  tabs. Below it, three dropdowns filter by Year (plus "No valid date"
-  when some receipt has no usable date), Status (Needs review/Approved),
-  and Category (plus "No category"); a "Clear filters" button appears
-  once any of those three is set and resets them without changing the
+  tabs. Below it, two dropdowns filter by Year (plus "No valid date"
+  when some receipt has no usable date) and Status (Needs review/Approved);
+  a "Clear filters" button appears
+  once either of those is set and resets them without changing the
   selected apartment tab. All of this lives in the URL
-  (`?view=history&apartment=<id>&year=<v>&status=<v>&category=<v>`), so
+  (`?view=history&apartment=<id>&year=<v>&status=<v>`), so
   Back/Forward and reload all work, and an unrecognized value in the URL
   is simply ignored rather than breaking the page. Inside one apartment's
   tab, that row's own apartment badge is hidden (redundant with the tab);
-  in "All apartments" it's shown, same as the category and status badges.
+  in "All apartments" it's shown, same as the status badge.
   A filtered search with no matches shows "No receipts match these
   filters." instead of the plain empty state, which only appears with no
   filters at all. Clicking a row navigates to `?receipt=<id>` and shows
@@ -103,17 +103,15 @@ the previous selection back so you can try again. Hidden while the edit form
 is open; this never touches the receipt's data itself (no extract call, no
 plain `PUT /receipts/{id}`).
 
-Next to it, a "Category" dropdown (placeholder "Choose a category") works
-the same way, saving immediately via `PUT /receipts/{id}/category`. A
-"Status" badge shows "Needs review" or "Approved"; a "Mark as approved"
-button (or, once approved, "Back to needs review") sends
-`PUT /receipts/{id}/status`. Approving requires an apartment, a category, a
+Next to it, a "Status" badge shows "Needs review" or "Approved"; a "Mark as
+approved" button (or, once approved, "Back to needs review") sends
+`PUT /receipts/{id}/status`. Approving requires an apartment, a
 valid purchase date and a total — if any are missing, an error explains
 exactly what's left in plain words (e.g. "To approve this receipt, also
-set: apartment, category.") and the status doesn't change; a missing date
-also points you to the Edit button. Data-quality warnings never block
-approval — that decision is yours. Both controls are hidden while the edit
-form is open and never touch the extract endpoint or the plain
+set: apartment, a valid purchase date.") and the status doesn't change.
+Data-quality warnings never block
+approval — that decision is yours. This control is hidden while the edit
+form is open and never touches the extract endpoint or the plain
 `PUT /receipts/{id}`.
 
 On any saved-receipt view, an "Edit" button opens a form (prefilled from the

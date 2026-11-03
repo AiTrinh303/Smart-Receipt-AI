@@ -1,7 +1,7 @@
 export class ApiError extends Error {
   status?: number
   /** Only set for a 422 from PUT /receipts/{id}/status that names which
-   * fields are missing -- e.g. ["apartment", "category"]. */
+   * fields are missing -- e.g. ["apartment", "date"]. */
   missing?: string[]
 
   constructor(message: string, status?: number, missing?: string[]) {
