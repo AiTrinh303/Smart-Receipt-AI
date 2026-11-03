@@ -41,15 +41,23 @@ the purchase info, and the result is displayed for review.
   `getApartments.ts`,
   `updateReceiptApartment.ts`,
   `updateReceiptStatus.ts`, `getReceiptFacets.ts` (`GET /receipts/facets`,
-  optional `apartmentId`), shared `ApiError` (carries an optional `missing:
+  optional `apartmentId`), `listItems.ts` (`GET /items`, accepts
+  `{apartmentId?, year?, status?, q?, limit?, offset?}`, same
+  query-string-building pattern as `listReceipts.ts`), shared `ApiError`
+  (carries an optional `missing:
   string[]`, set only for a `422` from `updateReceiptStatus` whose body is
   `{detail: {message, missing}}` — every other error, including a
   malformed body, falls back to a plain message with no `missing`), shared
   response types in
   `types.ts` — including `ReceiptSummary`, the list-row shape,
   `Apartment` (`id`/`name`), `ReceiptStatus`
-  (`'needs_review' | 'approved'`), `ApartmentFacet` (`id`/`name`/`count`)
-  and `ReceiptFacets` (`apartments`/`total`/`years`/`has_undated`);
+  (`'needs_review' | 'approved'`), `ApartmentFacet` (`id`/`name`/`count`),
+  `ReceiptFacets` (`apartments`/`total`/`years`/`has_undated`), `ItemRow`
+  (one `GET /items` row — `receipt_id`/`line_index`/`name`/`quantity`/
+  `unit_price`/`line_total`/`currency`/`purchase_date`/`store_name`/
+  `apartment_id`/`apartment_name`/`status`, matching the backend's
+  `LineItemRow` field-for-field) and `ItemsPage`
+  (`items`/`count`/`total`);
   `ReceiptExtraction` and `ReceiptSummary`
   both carry flat `apartment_id`/`apartment_name` (`string | null`) plus
   `status`
@@ -81,7 +89,8 @@ the purchase info, and the result is displayed for review.
   `uploadReceipt(file, apartmentId)` sends `apartment_id` as a second
   `FormData` field.
   Dependency direction: UI components (`App.tsx`, `ReceiptUpload.tsx`,
-  `ReceiptResult.tsx`, `ReceiptHistory.tsx`) -> `src/api/` ->
+  `ReceiptResult.tsx`, `ReceiptHistory.tsx`, `ReceiptItems.tsx`,
+  `ReceiptFilters.tsx`) -> `src/api/` ->
   `src/api/types.ts`. `src/api/` must never import a UI component —
   enforced by dependency-cruiser.
   **Reopening a saved receipt:** after a successful extraction,
@@ -99,10 +108,15 @@ the purchase info, and the result is displayed for review.
   synthetic `popstate` event (since `pushState`/`replaceState` never fire
   one themselves); `App.tsx` listens for `popstate` (real browser
   back/forward and the synthetic ones) to decide, from the URL, which of
-  `ReceiptHistory.tsx` (`?view=history`) or `ReceiptUpload.tsx` (otherwise —
+  `ReceiptHistory.tsx` (`?view=history`), `ReceiptItems.tsx`
+  (`?view=items`), or `ReceiptUpload.tsx` (otherwise —
   including `?receipt=<id>`) to render, keying each on the current
   `location.search` so external navigation remounts cleanly without
-  disturbing `ReceiptUpload`'s own internal `replaceState` calls.
+  disturbing `ReceiptUpload`'s own internal `replaceState` calls. The
+  header nav has three links (Upload/History/Items); `getActiveNav()`/
+  `getPageName()` (-> `document.title`, e.g. "Items · Smart Receipt AI")
+  both switch on the same three-way `View` type, same `aria-current`
+  treatment for all three.
   `ReceiptHistory.tsx` lists saved receipts (store, date, total; "Not
   detected" for anything missing, each row's `apartment_name` as a small
   icon+text badge or plain muted "Not assigned" when it's `null`/missing
@@ -136,17 +150,27 @@ the purchase info, and the result is displayed for review.
   structurally, each invalid value simply dropped (never sent) rather
   than erroring — this is "ignored," distinct from a well-formed value
   that legitimately matches zero receipts; (4) calls `listReceipts(...)`
-  with whatever survived. The tab bar follows the WAI-ARIA tabs pattern:
+  with whatever survived. The tab bar and the Year/Status selects are
+  rendered by the shared `ReceiptFilters.tsx` component (see "Items view"
+  below) following the WAI-ARIA tabs pattern:
   `role="tablist"` (`aria-label="Apartment"`), one `role="tab"` per
-  apartment plus a leading "All apartments (N)", roving `tabIndex`
+  apartment plus a leading "All apartments (N)" (the count suffix is
+  built by `ReceiptHistory` itself, before handing the `tabs` prop to
+  `ReceiptFilters` — Items builds the same shape without it), roving
+  `tabIndex`
   (selected = `0`, else `-1`), `aria-selected`, and selected = bold text +
   white background/shadow against the tab bar's `slate-100`, never color
   alone. Arrow keys/Home/End navigate immediately (automatic activation);
-  since that navigation remounts the whole component, a one-shot
-  `sessionStorage` key (`receiptHistoryFocusTabIndex`, read/cleared in an
-  effect gated on `!isLoading` — the tab bar doesn't exist in the DOM
-  until loading finishes) restores keyboard focus to the newly selected
-  tab across that remount. "N receipts" is a `role="status"`; "Clear
+  since that navigation remounts the whole page, a one-shot
+  `sessionStorage` key (`receiptHistoryFocusTabIndex` for History,
+  `receiptItemsFocusTabIndex` for Items — each page passes its own via
+  `ReceiptFilters`' `focusSessionKey` prop so they never collide) is
+  read/cleared by a mount-only effect **inside `ReceiptFilters`
+  itself** (it only ever mounts once its page has already left its own
+  loading state, so "the tab bar exists in the DOM" and "`ReceiptFilters`
+  just mounted" are the same moment) to restore keyboard focus to the
+  newly selected tab across that remount. "N receipts" is a `role="status"`;
+  "Clear
   filters" shows only when a year/status select (not just an
   apartment tab) is active, and resets both, leaving the
   apartment tab alone, per spec. The plain "No receipts yet..." empty
@@ -157,9 +181,59 @@ the purchase info, and the result is displayed for review.
   `?receipt=<id>` **only** when a tab/filter is actually active (so the
   unfiltered case's URL shape is byte-for-byte unchanged, keeping an
   existing test's exact-URL assertion intact); `ReceiptUpload.tsx`'s
-  "Back to history" link reads that `from` param (`getHistoryReturnSearch()`,
-  only trusting a value starting with `?view=history`) to return to the
-  same tab/filters, falling back to the plain `?view=history`.
+  back link reads that `from` param (`getBackNavigation()`, renamed from
+  `getHistoryReturnSearch()` when the Items view was added — only trusting
+  a value starting with `?view=history` or `?view=items`) to return to the
+  same tab/filters (and, for items, the same search), showing "Back to
+  history" or "Back to items" accordingly, falling back to the plain
+  `?view=history`.
+  **Items view (`ReceiptItems.tsx`, `ReceiptFilters.tsx`,
+  `src/api/listItems.ts`):** `?view=items` lists every *purchased line
+  item* (not receipt) via `GET /items`, reusing `ReceiptFilters` for the
+  identical apartment-tab/Year/Status UI — its tabs are built as plain
+  `{id, label: a.name}`, deliberately with **no count suffix**, since
+  `GET /receipts/facets`'s counts are receipt counts, not item counts,
+  and would misrepresent how many rows that tab actually has. State:
+  `?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>`. A search box
+  ("Search items or stores", `maxLength={100}`, a `<form>` so Enter
+  submits, a "Clear" button shown only once `searchInput` is non-empty)
+  commits to the URL on submit, not as-you-type; `effectiveQuery()`
+  (local to this file) trims and drops a `q` over 100 chars, same
+  "ignored, never sent" spirit as `effectiveYear`/`effectiveStatus`.
+  Table (`sm` and up) vs. a card list below it, via `useMediaQuery`, same
+  pattern as `ReceiptResult.tsx` — never both mounted. Columns: Date,
+  Item, Qty, Unit price, Line total, Store, and Apartment (the last only
+  in the "All apartments" tab, via `showApartmentColumn =
+  effectiveApartmentId === null`). Amounts use `formatMoney` **with**
+  `includeCurrency` (its default) rather than `false`, since — unlike
+  `ReceiptResult.tsx`'s one-currency-per-receipt table — rows here can
+  carry different currencies, so each amount must say which one (e.g.
+  "EUR 4.99"). The item name renders via a shared `ItemNameLink`
+  component as a real `<a>` to `/?receipt=<id>`
+  (`e.preventDefault()` + `navigateTo`), attaching the same `&from=`
+  mechanism as History's rows. Pagination is "Show more", not infinite
+  scroll: `GET /items` is called with `limit`/`offset`, "`count` of
+  `total` items" is a `role="status"`, and the button (shown while
+  `count < total`, disabled/`loading` while a page is in flight) requests
+  `offset: count` and **appends** the response's rows via
+  `setItems((prev) => [...(prev ?? []), ...response.items])` — never
+  replacing what's already shown. A failed "Show more" leaves the
+  existing rows alone and shows its own `Alert variant="error"` + "Retry"
+  (`loadMoreError`, separate state from the main `error`). **Race
+  safety:** a single `requestIdRef`, shared by the main load effect and
+  `handleShowMore`, is incremented at the start of every fetch; each
+  `setState` call after an `await` first checks
+  `requestIdRef.current !== requestId` and bails if so, so a reply to a
+  request that's no longer the latest one issued can never overwrite
+  state a newer request already set — layered on top of the same
+  per-mount `cancelled`-closure pattern `ReceiptHistory` already uses
+  (a filter/search change is a full remount, whose cleanup already
+  discards a stale in-flight response), with the request id specifically
+  covering "Show more", the one fetch not driven by that per-mount
+  effect. Loading/error/empty states otherwise mirror `ReceiptHistory`'s
+  shape exactly (`role="status" aria-busy="true"` + "Loading items...",
+  `Alert variant="error"` + Retry, "No items yet. Upload a receipt." vs.
+  "No items match these filters." + "Clear filters").
   **Changing the apartment on a saved receipt (`ReceiptApartment.tsx`,
   `src/api/updateReceiptApartment.ts`):** rendered by the saved-receipt
   container (the same `if (result)` branch used right after extraction and
@@ -442,8 +516,9 @@ the purchase info, and the result is displayed for review.
   idle/drag-over/file-selected states, a `Skeleton` sample, the
   card-variant items list, the warnings panel/Edited badge/reset
   confirmation, a `BatchQueue` sample (one row per status plus rejected
-  files) and the batch paused (unavailable/network/stopped)/finished
-  states, with static sample data (no network
+  files), the batch paused (unavailable/network/stopped)/finished
+  states, and the Items view's loading/table-with-nulls/cards/both empty
+  states/error/"Show more" states, with static sample data (no network
   calls) — open it after any visual change, since jsdom cannot see
   colors or layout. Gated on `env.ts`'s `isDev` (`import.meta.env.DEV`,
   isolated into its own module specifically so tests can

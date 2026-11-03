@@ -71,3 +71,24 @@ export interface ReceiptFacets {
   years: number[]
   has_undated: boolean
 }
+
+export interface ItemRow {
+  receipt_id: string
+  line_index: number
+  name: string | null
+  quantity: number | null
+  unit_price: number | null
+  line_total: number | null
+  currency: string | null
+  purchase_date: string | null
+  store_name: string | null
+  apartment_id: string | null
+  apartment_name: string | null
+  status: ReceiptStatus
+}
+
+export interface ItemsPage {
+  items: ItemRow[]
+  count: number
+  total: number
+}

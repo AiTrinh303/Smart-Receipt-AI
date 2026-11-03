@@ -15,16 +15,19 @@ test('renders the Smart Receipt AI heading', () => {
   expect(screen.getByRole('heading', { name: 'Smart Receipt AI' })).toBeInTheDocument()
 })
 
-test('both nav items are present, with aria-current="page" on the active one', () => {
+test('all nav items are present, with aria-current="page" on the active one', () => {
   render(<App />)
 
   const uploadLink = screen.getByRole('link', { name: /^upload$/i })
-  const historyLink = screen.getByRole('link', { name: /history/i })
+  const historyLink = screen.getByRole('link', { name: /^history$/i })
+  const itemsLink = screen.getByRole('link', { name: /^items$/i })
 
   expect(uploadLink).toBeInTheDocument()
   expect(historyLink).toBeInTheDocument()
+  expect(itemsLink).toBeInTheDocument()
   expect(uploadLink).toHaveAttribute('aria-current', 'page')
   expect(historyLink).not.toHaveAttribute('aria-current')
+  expect(itemsLink).not.toHaveAttribute('aria-current')
 })
 
 test('neither nav tab is marked current when viewing a saved receipt', async () => {
@@ -60,9 +63,10 @@ test('neither nav tab is marked current when viewing a saved receipt', async () 
     expect(screen.getByText('Corner Store')).toBeInTheDocument()
   })
 
-  // Then neither "Upload" nor "History" is marked as the current tab
+  // Then none of "Upload", "History" or "Items" is marked as the current tab
   expect(screen.getByRole('link', { name: /^upload$/i })).not.toHaveAttribute('aria-current')
   expect(screen.getByRole('link', { name: /^history$/i })).not.toHaveAttribute('aria-current')
+  expect(screen.getByRole('link', { name: /^items$/i })).not.toHaveAttribute('aria-current')
 
   // @ts-expect-error cleaning up the test-only global fetch stub
   delete global.fetch
@@ -75,16 +79,26 @@ test('document.title reflects the current view', async () => {
 
   // When the user navigates to history
   const user = userEvent.setup()
-  const fetchSpy = jest.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: () => Promise.resolve({ items: [], count: 0 }),
+  const fetchSpy = jest.fn().mockImplementation((url: unknown) => {
+    const urlString = String(url)
+    if (urlString.includes('/receipts/facets')) {
+      return Promise.resolve(jsonResponse(200, { apartments: [], total: 0, years: [], has_undated: false }))
+    }
+    return Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 }))
   })
   global.fetch = fetchSpy as unknown as typeof fetch
-  await user.click(screen.getByRole('link', { name: /history/i }))
+  await user.click(screen.getByRole('link', { name: /^history$/i }))
 
   // Then the title updates
   expect(document.title).toBe('History · Smart Receipt AI')
+
+  // When the user navigates to items
+  await user.click(screen.getByRole('link', { name: /^items$/i }))
+
+  // Then the title updates again
+  await waitFor(() => {
+    expect(document.title).toBe('Items · Smart Receipt AI')
+  })
 
   // @ts-expect-error cleaning up the test-only global fetch stub
   delete global.fetch

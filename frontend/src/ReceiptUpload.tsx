@@ -63,14 +63,21 @@ function removeReceiptIdFromUrl() {
   window.history.replaceState({}, '', newUrl)
 }
 
-/** Reads the `from` param a filtered history list attaches when opening a
- * receipt, so "Back to history" can return to the same apartment tab and
- * filters instead of always resetting to the unfiltered list. Only ever
- * trusts a value that actually points back at the history view. */
-function getHistoryReturnSearch(): string {
+/** Reads the `from` param a filtered history or items list attaches when
+ * opening a receipt, so the back link can return to the same tab/filters
+ * (and, for items, the same search) instead of always resetting to the
+ * unfiltered history list. Only ever trusts a value that actually points
+ * back at one of those two views. */
+function getBackNavigation(): { search: string; label: string } {
   const params = new URLSearchParams(window.location.search)
   const from = params.get(HISTORY_RETURN_PARAM)
-  return from && from.startsWith('?view=history') ? from : '?view=history'
+  if (from && from.startsWith('?view=items')) {
+    return { search: from, label: 'Back to items' }
+  }
+  if (from && from.startsWith('?view=history')) {
+    return { search: from, label: 'Back to history' }
+  }
+  return { search: '?view=history', label: 'Back to history' }
 }
 
 interface UploadSuccess {
@@ -490,15 +497,15 @@ function ReceiptUpload() {
   }
 
   if (result) {
-    const historyReturnSearch = getHistoryReturnSearch()
+    const backNavigation = getBackNavigation()
     return (
       <div className="flex flex-col gap-4">
         {!isConfirmingDelete && (
           <a
-            href={`/${historyReturnSearch}`}
+            href={`/${backNavigation.search}`}
             onClick={(e) => {
               e.preventDefault()
-              navigateTo(historyReturnSearch)
+              navigateTo(backNavigation.search)
             }}
             className="inline-flex w-fit items-center gap-1.5 rounded-md px-1 py-2 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
@@ -511,7 +518,7 @@ function ReceiptUpload() {
                 strokeLinejoin="round"
               />
             </svg>
-            Back to history
+            {backNavigation.label}
           </a>
         )}
 

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import type { ChangeEvent, KeyboardEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { ApiError } from './api/ApiError'
 import { getReceiptFacets } from './api/getReceiptFacets'
 import { listReceipts } from './api/listReceipts'
-import type { ApartmentFacet, ReceiptStatus, ReceiptSummary } from './api/types'
+import type { ApartmentFacet, ReceiptSummary } from './api/types'
+import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
 import Button from './components/ui/Button'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
@@ -13,14 +13,6 @@ const LOADING_ROW_COUNT = 4
 
 const NOT_DETECTED = 'Not detected'
 const NOT_ASSIGNED = 'Not assigned'
-
-const YEAR_PATTERN = /^\d{4}$/
-const NONE_FILTER_VALUE = 'none'
-const STATUS_OPTIONS: { value: ReceiptStatus; label: string }[] = [
-  { value: 'needs_review', label: 'Needs review' },
-  { value: 'approved', label: 'Approved' },
-]
-const ALLOWED_STATUS_VALUES = STATUS_OPTIONS.map((option) => option.value)
 
 const FOCUS_TAB_INDEX_SESSION_KEY = 'receiptHistoryFocusTabIndex'
 
@@ -112,19 +104,6 @@ function buildHistorySearch(params: HistoryUrlParams): string {
   return `?${usp.toString()}`
 }
 
-/** A valid year is exactly 4 digits, or the "none" sentinel -- anything
- * else is treated as if it weren't in the URL at all. */
-function effectiveYear(rawYear: string | null): string | null {
-  if (rawYear === null) return null
-  if (rawYear === NONE_FILTER_VALUE) return NONE_FILTER_VALUE
-  return YEAR_PATTERN.test(rawYear) ? rawYear : null
-}
-
-function effectiveStatus(rawStatus: string | null): ReceiptStatus | null {
-  if (rawStatus === null) return null
-  return (ALLOWED_STATUS_VALUES as string[]).includes(rawStatus) ? (rawStatus as ReceiptStatus) : null
-}
-
 function ReceiptHistory() {
   const [notice] = useState(getAndClearNotice)
   const [urlParams] = useState(readUrlParams)
@@ -140,8 +119,6 @@ function ReceiptHistory() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [reloadToken, setReloadToken] = useState(0)
-
-  const tabListRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -206,20 +183,6 @@ function ReceiptHistory() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadToken])
 
-  // Restore focus to the tab the user just moved to with the arrow keys,
-  // across the full remount that navigating triggers. The tab bar only
-  // exists in the DOM once loading finishes, so this must re-run then --
-  // not just once on mount, when the loading skeleton is still showing.
-  useEffect(() => {
-    if (isLoading) return
-    const stored = window.sessionStorage.getItem(FOCUS_TAB_INDEX_SESSION_KEY)
-    if (stored === null) return
-    window.sessionStorage.removeItem(FOCUS_TAB_INDEX_SESSION_KEY)
-    const index = Number(stored)
-    const buttons = tabListRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-    buttons?.[index]?.focus()
-  }, [isLoading])
-
   const retry = () => {
     setReloadToken((n) => n + 1)
   }
@@ -242,12 +205,12 @@ function ReceiptHistory() {
     navigateTo(buildHistorySearch({ ...urlParams, apartment: apartmentId }))
   }
 
-  const handleYearChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    navigateTo(buildHistorySearch({ ...urlParams, year: e.target.value || null }))
+  const handleYearChange = (value: string) => {
+    navigateTo(buildHistorySearch({ ...urlParams, year: value || null }))
   }
 
-  const handleStatusChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    navigateTo(buildHistorySearch({ ...urlParams, status: e.target.value || null }))
+  const handleStatusChange = (value: string) => {
+    navigateTo(buildHistorySearch({ ...urlParams, status: value || null }))
   }
 
   const handleClearFilters = () => {
@@ -258,21 +221,6 @@ function ReceiptHistory() {
     { id: null, label: `All apartments (${totalCount})` },
     ...(apartments ?? []).map((a) => ({ id: a.id, label: `${a.name} (${a.count})` })),
   ]
-  const selectedTabIndex = tabs.findIndex((tab) => tab.id === effectiveApartmentId)
-
-  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let nextIndex: number | null = null
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length
-    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length
-    else if (event.key === 'Home') nextIndex = 0
-    else if (event.key === 'End') nextIndex = tabs.length - 1
-
-    if (nextIndex !== null) {
-      event.preventDefault()
-      window.sessionStorage.setItem(FOCUS_TAB_INDEX_SESSION_KEY, String(nextIndex))
-      goToTab(tabs[nextIndex].id)
-    }
-  }
 
   const yearValue = effectiveYear(urlParams.year)
   const statusValue = effectiveStatus(urlParams.status)
@@ -318,73 +266,20 @@ function ReceiptHistory() {
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       {noticeBanner}
 
-      <div
-        ref={tabListRef}
-        role="tablist"
-        aria-label="Apartment"
-        className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1"
-      >
-        {tabs.map((tab, index) => {
-          const selected = index === selectedTabIndex
-          return (
-            <button
-              key={tab.id ?? 'all'}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => goToTab(tab.id)}
-              onKeyDown={(e) => handleTabKeyDown(e, index)}
-              className={`min-h-[44px] flex-1 rounded-md px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-                selected ? 'bg-white font-semibold text-brand shadow-sm' : 'font-medium text-ink-muted'
-              }`}
-            >
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor="history-year-select" className="text-sm font-medium text-ink">
-            Year
-          </label>
-          <select
-            id="history-year-select"
-            value={yearValue ?? ''}
-            onChange={handleYearChange}
-            className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            <option value="">All years</option>
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-            {hasUndated && <option value={NONE_FILTER_VALUE}>No valid date</option>}
-          </select>
-        </div>
-
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor="history-status-select" className="text-sm font-medium text-ink">
-            Status
-          </label>
-          <select
-            id="history-status-select"
-            value={statusValue ?? ''}
-            onChange={handleStatusChange}
-            className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            <option value="">All</option>
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <ReceiptFilters
+        tabs={tabs}
+        selectedApartmentId={effectiveApartmentId}
+        onSelectApartment={goToTab}
+        focusSessionKey={FOCUS_TAB_INDEX_SESSION_KEY}
+        years={years}
+        hasUndated={hasUndated}
+        yearValue={yearValue}
+        onYearChange={handleYearChange}
+        yearSelectId="history-year-select"
+        statusValue={statusValue}
+        onStatusChange={handleStatusChange}
+        statusSelectId="history-status-select"
+      />
 
       <div className="flex items-center justify-between gap-2">
         <p role="status" className="text-sm text-ink-muted">

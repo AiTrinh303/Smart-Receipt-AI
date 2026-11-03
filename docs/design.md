@@ -16,7 +16,8 @@ error), the review-status controls on a saved receipt
 (needs review / approved / saving / approval blocked), the
 history row's apartment/status badges, the history view's
 apartment tab bar and year/status filter selects (all apartments
-selected / one apartment selected), the
+selected / one apartment selected), the Items view's table/card/empty/
+error/loading/"Show more" states, the
 dropzone's idle/drag-over/file-selected states, and a `Card`, all at once,
 with static sample data and no network calls. It's dev-only (gated on `import.meta.env.DEV`, via the mockable
 `src/env.ts`), not linked from the header, and excluded from production
@@ -291,6 +292,102 @@ the full trail of evidence.
   returns to the same tab and filters instead of always resetting to the
   unfiltered list. The real browser Back button needs no special
   handling, since every tab/filter change is a real `pushState` entry.
+
+## Items view: a flat, searchable table of purchased line items
+
+- **`ReceiptFilters.tsx`** -- the apartment tab bar and the Year/Status
+  selects were extracted out of `ReceiptHistory.tsx` into this shared,
+  presentational component (props in, `onSelectApartment`/`onYearChange`/
+  `onStatusChange` callbacks out -- no fetching, no URL-building of its
+  own) specifically so the new Items view could reuse the exact same
+  markup/keyboard behavior without duplicating it, while every existing
+  `ReceiptHistory` test keeps passing unchanged (confirmed by running them
+  after the extraction, byte-for-byte the same assertions). It also owns
+  the tab bar's keyboard navigation (arrow keys/Home/End) and the
+  focus-restore-after-remount behavior (a `sessionStorage` key, passed in
+  as `focusSessionKey` so History and Items each use their own key and
+  don't fight over the same slot), plus the shared `effectiveYear`/
+  `effectiveStatus` URL-value validators both pages import from here. The
+  two pages still each build their own tab *labels* (History's include a
+  receipt count per apartment; Items' deliberately don't -- see below) and
+  still each own their URL-reading/building and data-loading.
+- **`ReceiptItems.tsx`** (`?view=items`, a third header nav link
+  "Items", same `aria-current`/`document.title` ("Items · Smart Receipt
+  AI") treatment as the other two tabs) lists every purchased line item
+  (not receipts) via `GET /items`, reusing `ReceiptFilters` for the
+  apartment tabs and Year/Status selects exactly as `ReceiptHistory` does,
+  plus its own search box ("Search items or stores", `maxLength={100}`,
+  Enter or a "Search" button submits, a "Clear" button appears once text
+  is typed). All of it lives in the URL --
+  `?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>` -- so Back/
+  Forward and reload all work, and an invalid/unknown value (malformed
+  year, unrecognized status, or a `q` over 100 chars) is dropped rather
+  than erroring, the same "ignored" spirit as History's own filters.
+  Changing any filter or the search always requests from `offset=0` (a
+  fresh page), since the URL param change fully remounts the component --
+  there's no separate "reset paging" state to get out of sync.
+- **Tab labels carry no counts.** `GET /receipts/facets`'s counts are
+  *receipt* counts, not *item* counts, so showing them on the Items tabs
+  would silently lie about how many rows that tab actually has; Items
+  builds its tabs as plain `{id, label: a.name}` (no `(N)` suffix) from
+  the same facets response History uses for `{id, label: `${a.name} (${a.count})`}`.
+- **Table (from `sm` up) vs. cards (below it), via `useMediaQuery`** --
+  same pattern as `ReceiptResult.tsx`'s items table, never both variants
+  mounted at once. Columns: Date, Item, Qty, Unit price, Line total,
+  Store, and Apartment -- the last shown **only** in the "All apartments"
+  tab (a specific apartment tab already tells you the apartment, so
+  repeating it in every row would be redundant, mirroring History's own
+  apartment-badge-hidden-in-one-tab rule). Numbers are right-aligned,
+  `tabular-nums`, `whitespace-nowrap`. Amounts use the existing
+  `formatMoney` helper **with each row's own currency included** (e.g.
+  "EUR 4.99", not just "4.99") -- unlike `ReceiptResult.tsx`'s per-receipt
+  table (one currency, shown once in the column header), rows here can
+  come from receipts in different currencies, so the currency has to
+  travel with every amount. A null value in any column (including a null
+  item name) shows "Not detected", never a raw `null`/`undefined`/`NaN`.
+- **The item name is a real link** to `?receipt=<receipt_id>` (not a
+  button, so it's keyboard- and screen-reader-navigable like any other
+  link), reusing the exact same `from`-param mechanism History's rows
+  use. `ReceiptUpload.tsx`'s back-link logic (`getBackNavigation()`,
+  renamed from `getHistoryReturnSearch()`) now branches on whether `from`
+  starts with `?view=items` or `?view=history`, showing "Back to items"
+  or "Back to history" accordingly -- History's own back-link behavior
+  and label are completely unchanged for its own case.
+- **Pagination: "Show more", not infinite scroll or page numbers.**
+  `GET /items` is called with `limit`/`offset`; the view shows "`N` of
+  `TOTAL` items" (`role="status"`) and, while `count < total`, a "Show
+  more" button that requests the next page (`offset = count`) and
+  **appends** the new rows to the ones already shown (never replaces
+  them) -- the button disables itself while that request is in flight. A
+  failed "Show more" leaves every already-shown row in place and surfaces
+  an `Alert variant="error"` plus its own "Retry" button, scoped to just
+  that failure (the already-rendered table/cards are never torn down over
+  a pagination failure).
+- **Race safety.** Every list-affecting fetch (the main load's facets +
+  items calls, and "Show more") is tagged with a shared, monotonically
+  increasing request id (`requestIdRef`); a response is only applied if
+  its id still matches the latest one issued, so a reply to a request
+  that's no longer the newest one in flight is silently dropped instead
+  of overwriting state a newer request already set. In practice this
+  mostly layers on top of the same per-mount `cancelled`-closure pattern
+  `ReceiptHistory` already relies on (a filter/search change is a full
+  remount, whose cleanup already discards an in-flight response from the
+  component instance being replaced) -- the explicit request id is what
+  additionally protects "Show more", the one fetch that isn't driven by
+  that per-mount effect. Covered by a dedicated test that starts an older
+  request, lets a newer one (from a later mount) resolve first, and then
+  resolves the older one -- proving its result never clobbers the newer,
+  already-displayed one.
+- **Loading/error/empty states** follow the same shape as `ReceiptHistory`:
+  a `role="status" aria-busy="true"` region with "Loading items..." (kept
+  in the DOM, with `Skeleton` rows) while the first page loads; an
+  `Alert variant="error"` + "Retry" on failure; "No items yet. Upload a
+  receipt." when truly unfiltered, or "No items match these filters." +
+  a "Clear filters" button (resets year/status/search, keeps the selected
+  apartment tab, same spirit as History's own `Clear filters`) otherwise.
+- **Out of scope, per the ticket:** no sums/totals, no grouping or merging
+  of similar item names, no reports or CSV export, no sort options, no
+  new dependencies, no backend changes.
 
 ## Download PDF on the original file viewer
 

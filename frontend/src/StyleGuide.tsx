@@ -9,6 +9,7 @@ import StatusBadge from './components/ui/StatusBadge'
 import BatchQueue from './batch/BatchQueue'
 import type { BatchItem, RejectedFile } from './batch/batchReducer'
 import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_ERROR_MESSAGE } from './errorMessages'
+import { formatMoney } from './components/ui/formatMoney'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 const ALERT_VARIANTS = ['info', 'success', 'warning', 'error'] as const
@@ -60,6 +61,33 @@ const SAMPLE_BATCH_ITEMS: BatchItem[] = [
   },
 ]
 
+const SAMPLE_ITEM_ROWS = [
+  {
+    receipt_id: 'sample-1',
+    line_index: 0,
+    name: 'Milk',
+    quantity: 2,
+    unit_price: 1.5,
+    line_total: 3.0,
+    currency: 'EUR',
+    purchase_date: '2026-01-15',
+    store_name: 'Corner Store',
+    apartment_name: 'Oberaudorf Bergblick',
+  },
+  {
+    receipt_id: 'sample-2',
+    line_index: 0,
+    name: null,
+    quantity: null,
+    unit_price: null,
+    line_total: null,
+    currency: null,
+    purchase_date: null,
+    store_name: null,
+    apartment_name: null,
+  },
+]
+
 const SAMPLE_BATCH_REJECTED: RejectedFile[] = [
   { fileName: 'notes.txt', reason: 'Invalid file type. Please select a JPG, PNG, or PDF file.' },
   { fileName: '', reason: 'Only the first 20 files were added.' },
@@ -72,6 +100,9 @@ function StyleGuide() {
   const [receiptStatusState, setReceiptStatusState] = useState<ReceiptStatusState>('needs_review')
   const [historyTab, setHistoryTab] = useState<'all' | 'oberaudorf'>('all')
   const [batchPauseState, setBatchPauseState] = useState<BatchPauseState>('finished')
+  const [itemsViewState, setItemsViewState] = useState<
+    'loading' | 'table' | 'cards' | 'empty-unfiltered' | 'empty-filtered' | 'error'
+  >('table')
 
   return (
     <div className="flex flex-col gap-10 pb-16">
@@ -551,6 +582,146 @@ function StyleGuide() {
                 Resume
               </Button>
             </>
+          )}
+        </Card>
+      </Section>
+
+      <Section title="Items view (ReceiptItems -- loading / table with nulls / cards / empty / error / Show more)">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setItemsViewState('loading')}>
+            Show loading
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setItemsViewState('table')}>
+            Show table (All apartments, one row with nulls)
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setItemsViewState('cards')}>
+            Show cards (below sm)
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setItemsViewState('empty-unfiltered')}>
+            Show empty (unfiltered)
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setItemsViewState('empty-filtered')}>
+            Show empty (filtered)
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setItemsViewState('error')}>
+            Show error
+          </Button>
+        </div>
+
+        <Card className="flex flex-col gap-4">
+          {itemsViewState === 'loading' && (
+            <div role="status" aria-busy="true" className="flex flex-col gap-3">
+              <span className="sr-only">Loading items...</span>
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          )}
+
+          {itemsViewState === 'error' && (
+            <>
+              <Alert variant="error">Could not load items. Please try again.</Alert>
+              <Button variant="secondary" size="sm" className="self-start">
+                Retry
+              </Button>
+            </>
+          )}
+
+          {itemsViewState === 'empty-unfiltered' && (
+            <p className="text-sm text-ink-muted">No items yet. Upload a receipt.</p>
+          )}
+
+          {itemsViewState === 'empty-filtered' && (
+            <>
+              <p className="text-sm text-ink-muted">No items match these filters.</p>
+              <Button variant="secondary" size="sm" className="self-start">
+                Clear filters
+              </Button>
+            </>
+          )}
+
+          {itemsViewState === 'table' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <caption className="sr-only">Purchased items</caption>
+                <thead>
+                  <tr className="border-b border-border text-ink-muted">
+                    <th scope="col" className="whitespace-nowrap py-1 pr-2 font-medium">
+                      Date
+                    </th>
+                    <th scope="col" className="py-1 pr-2 font-medium">
+                      Item
+                    </th>
+                    <th scope="col" className="py-1 pr-2 text-right font-medium">
+                      Qty
+                    </th>
+                    <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
+                      Unit price
+                    </th>
+                    <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
+                      Line total
+                    </th>
+                    <th scope="col" className="py-1 pr-2 font-medium">
+                      Store
+                    </th>
+                    <th scope="col" className="py-1 font-medium">
+                      Apartment
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {SAMPLE_ITEM_ROWS.map((row) => (
+                    <tr key={row.receipt_id} className="border-b border-border/40">
+                      <td className="whitespace-nowrap py-1 pr-2">{row.purchase_date ?? 'Not detected'}</td>
+                      <td className="py-1 pr-2">
+                        <span className="font-medium text-brand underline">{row.name ?? 'Not detected'}</span>
+                      </td>
+                      <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
+                        {row.quantity ?? 'Not detected'}
+                      </td>
+                      <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
+                        {formatMoney(row.unit_price, row.currency)}
+                      </td>
+                      <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
+                        {formatMoney(row.line_total, row.currency)}
+                      </td>
+                      <td className="py-1 pr-2">{row.store_name ?? 'Not detected'}</td>
+                      <td className="py-1">{row.apartment_name ?? 'Not detected'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p role="status" className="mt-3 text-sm text-ink-muted">
+                2 of 5 items
+              </p>
+              <Button variant="secondary" size="sm" className="mt-1 self-start">
+                Show more
+              </Button>
+            </div>
+          )}
+
+          {itemsViewState === 'cards' && (
+            <ul className="flex flex-col gap-2">
+              {SAMPLE_ITEM_ROWS.map((row) => (
+                <li key={row.receipt_id} className="rounded-md border border-border p-3">
+                  <span className="font-medium text-brand underline">{row.name ?? 'Not detected'}</span>
+                  <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    <dt className="text-ink-muted">Date</dt>
+                    <dd className="text-right">{row.purchase_date ?? 'Not detected'}</dd>
+                    <dt className="text-ink-muted">Qty</dt>
+                    <dd className="text-right tabular-nums">{row.quantity ?? 'Not detected'}</dd>
+                    <dt className="text-ink-muted">Unit price</dt>
+                    <dd className="text-right tabular-nums">{formatMoney(row.unit_price, row.currency)}</dd>
+                    <dt className="text-ink-muted">Line total</dt>
+                    <dd className="text-right tabular-nums">{formatMoney(row.line_total, row.currency)}</dd>
+                    <dt className="text-ink-muted">Store</dt>
+                    <dd className="text-right">{row.store_name ?? 'Not detected'}</dd>
+                    <dt className="text-ink-muted">Apartment</dt>
+                    <dd className="text-right">{row.apartment_name ?? 'Not detected'}</dd>
+                  </dl>
+                </li>
+              ))}
+            </ul>
           )}
         </Card>
       </Section>

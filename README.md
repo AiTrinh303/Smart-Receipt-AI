@@ -92,6 +92,27 @@ Navigation is URL-based, with no router library:
   the same detail view as above (also without calling the AI); a "Back to
   history" link returns to the same tab and filters you came from.
   Browser back/forward works for all of these.
+- `?view=items` — a flat, searchable table of every purchased line item
+  (not receipts) across all your uploads: date, item name, quantity, unit
+  price, line total, store, and — only in the "All apartments" tab —
+  apartment. It shares the exact same apartment tab bar and Year/Status
+  dropdowns as History (its tab labels show no counts — the counts
+  History uses come from receipts, not items, so they'd be misleading
+  here), plus a "Search items or stores" box (type and press Enter, or
+  click "Search"; a "Clear" button appears once you've typed something).
+  Everything lives in the URL
+  (`?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>`); changing any
+  filter or the search always starts over from the first page. Below
+  the `sm` breakpoint the table becomes a list of cards instead. Amounts
+  show their own row's currency (e.g. "EUR 4.99"), since items can come
+  from receipts in different currencies. The item name is a link that
+  opens the same receipt detail view as History's rows do, with a "Back
+  to items" link that returns you to the same tab, filters and search.
+  Below the list, "N of TOTAL items" plus a "Show more" button loads
+  further pages and appends them to what's already shown, rather than
+  replacing it; a failed "Show more" leaves what's already loaded in
+  place and offers its own Retry. No sums/totals, grouping, reports, CSV
+  export, or sort options — just a flat, filterable, searchable list.
 
 On any saved-receipt view (both right after extraction and when reopening
 `?receipt=<id>`), an "Apartment" card above the receipt data shows the same
