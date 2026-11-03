@@ -92,8 +92,6 @@ EXTRACTED_FIELD_NAMES = [
     "warnings",
     "edited",
     "edited_at",
-    "category_id",
-    "category_name",
     "status",
 ]
 

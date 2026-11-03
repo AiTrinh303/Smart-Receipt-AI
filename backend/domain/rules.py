@@ -256,7 +256,6 @@ def flatten_line_items(saved_receipt: SavedReceipt) -> list[LineItemRow]:
             store_name=saved_receipt.store_name,
             apartment_id=saved_receipt.apartment_id,
             apartment_name=saved_receipt.apartment_name,
-            category_name=saved_receipt.category_name,
             status=saved_receipt.status,
         )
         for index, item in enumerate(saved_receipt.items)

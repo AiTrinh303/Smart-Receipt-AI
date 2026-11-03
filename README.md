@@ -328,47 +328,39 @@ Changing it is a classification change, not a data edit: it never sets
 `created_at`. `PUT /receipts/{id}` and the reset endpoint never change it;
 it is changed only via `PUT /receipts/{receipt_id}/apartment` — see below.
 
-#### Categories and review status
+#### Review status
 
-- `GET /categories` — the ten seeded expense categories, as
-  `{"items": [{"id", "name"}], "count": n}`, only the active ones, in
-  `sort_order`. The seeded names are **placeholders** and must be
-  confirmed with a tax advisor before being relied on for an actual
-  filing.
+> An expense-category feature (`GET /categories`,
+> `PUT /receipts/{id}/category`, `category_id`/`category_name` on every
+> response) used to live here; it was removed — see
+> [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md)
+> for why, and how any old data from it is kept (dormant, never migrated).
 
-Every receipt-shaped response also carries flat **`category_id`**,
-**`category_name`** (both `string` or `null`) and **`status`**
+Every receipt-shaped response carries flat **`status`**
 (`"needs_review"` or `"approved"`, default `"needs_review"`), with the
-same key set and JSON types everywhere. A receipt belongs to at most one
-category. Changing the category or the status is a classification
+same key and JSON type everywhere. Changing the status is a classification
 change, not a data edit: it never sets `edited_at` and never touches
 `extracted_json`, `ai_result_json`, or `created_at`. `PUT /receipts/{id}`
-and the reset endpoint never change category, status or apartment.
-Re-extracting a receipt (Retry) keeps its category and apartment, but
-resets `status` back to `"needs_review"`, since the underlying data was
-just replaced.
+and the reset endpoint never change status or apartment. Re-extracting a
+receipt (Retry) keeps its apartment, but resets `status` back to
+`"needs_review"`, since the underlying data was just replaced.
 
-The category and status are changed through their own endpoints, never
-through `PUT /receipts/{id}` (the data-correction endpoint) or the reset
-endpoint:
+The status is changed through its own endpoint, never through
+`PUT /receipts/{id}` (the data-correction endpoint) or the reset endpoint:
 
-- `PUT /receipts/{receipt_id}/category`, body `{"category_id": "<id>"}`
-  (strict — any other field is rejected). `400` for a non-UUID id, `404`
-  if the receipt doesn't exist or was never extracted, `422` for a
-  missing, null, unknown, or inactive category.
 - `PUT /receipts/{receipt_id}/status`, body `{"status": "needs_review"
-  | "approved"}` (strict). Same `400`/`404` rules for the id; `422` for a
-  missing or invalid status value. Setting `"needs_review"` is always
-  allowed. Setting `"approved"` requires **all** of: an apartment, a
-  category, a valid ISO purchase date, and a total — if any are missing,
-  the response is `422` with
+  | "approved"}` (strict). `400` for a non-UUID id, `404` if the receipt
+  doesn't exist or was never extracted; `422` for a missing or invalid
+  status value. Setting `"needs_review"` is always allowed. Setting
+  `"approved"` requires **all** of: an apartment, a valid ISO purchase
+  date, and a total — if any are missing, the response is `422` with
   `{"detail": {"message": "...", "missing": [...]}}`, listing only what's
-  actually missing (in the fixed order `apartment`, `category`, `date`,
+  actually missing (in the fixed order `apartment`, `date`,
   `total`). **Data-quality warnings never block approval** — the user
   decides whether to approve despite them.
 
-Both endpoints return the same shape as `GET`, and a `500` with a generic
-message if the database update itself fails. Editing a receipt's data
+Returns the same shape as `GET`, and a `500` with a generic message if the
+database update itself fails. Editing a receipt's data
 (`PUT /receipts/{id}`) never changes its status — an already-approved
 receipt stays approved even after a correction, silently; there is no
 extra confirmation step for this in the API.
@@ -439,8 +431,8 @@ All amount math uses `Decimal(str(value))`, never raw floats.
   the conversion happens in FastAPI's threadpool, not on the event loop.
 - `GET /receipts?limit=N` — lists saved receipts newest first, as
   `{"items": [{receipt_id, original_filename, store_name, purchase_date,
-  currency, total, created_at, apartment_id, apartment_name, category_id,
-  category_name, status}, ...],
+  currency, total, created_at, apartment_id, apartment_name,
+  status}, ...],
   "count": <number>}` (no items,
   discounts or taxes — use `GET /receipts/{id}` for the full detail).
   `limit` defaults to 50 (1–200); an out-of-range or non-integer value
@@ -454,8 +446,9 @@ All amount math uses `Decimal(str(value))`, never raw floats.
     unparseable date like `"26/06/2025"` never matches `year=2025` — it
     only matches `year=none`); anything else is `422`.
   - `status` — `"needs_review"` or `"approved"`, else `422`.
-  - `category_id` — a known category id, or `"none"` for receipts with no
-    category, else `422`.
+
+  An unrecognized query parameter (e.g. an old client still sending
+  `category_id`) is simply ignored, not `422`.
 - `GET /receipts/facets?apartment_id=<optional>` — the counts behind the
   history view's apartment tabs and filter dropdowns:
   `{"apartments": [{"id", "name", "count"}, ...], "total": <number>,
@@ -470,13 +463,14 @@ All amount math uses `Decimal(str(value))`, never raw floats.
   for seeing what was bought and opening the original receipt:
   `{"items": [{receipt_id, line_index, name, quantity, unit_price,
   line_total, currency, purchase_date, store_name, apartment_id,
-  apartment_name, category_name, status}, ...], "count": <returned>,
+  apartment_name, status}, ...], "count": <returned>,
   "total": <all matching rows>}`. `purchase_date` is normalized for
   display exactly like `GET /receipts/{id}`. Ordered by the receipt's
   `created_at` (newest first), then by the item's original position in
   the receipt (`line_index`, stable). Accepts the exact same
-  `apartment_id`/`year`/`status`/`category_id` filters as `GET /receipts`
-  (same validation and `422` rules), plus:
+  `apartment_id`/`year`/`status` filters as `GET /receipts`
+  (same validation and `422` rules, and the same "unrecognized parameter
+  is simply ignored" rule), plus:
   - `q` — a search trimmed of surrounding whitespace, at most 100
     characters (longer is `422`); a blank query (after trimming) is
     ignored, not an error. Split into words; **every** word must appear,
@@ -487,7 +481,7 @@ All amount math uses `Decimal(str(value))`, never raw floats.
   An empty result is `200` with `items: []`, `count: 0`, `total: 0`, never
   `404`. A receipt that was only uploaded, never extracted, contributes no
   rows, same as `GET /receipts`. **Implementation note:** filtering by
-  apartment/year/status/category happens the same way `GET /receipts`
+  apartment/year/status happens the same way `GET /receipts`
   does; flattening each matching receipt's items, the `q` search, and the
   `limit`/`offset` slice all then happen in Python, after fetching every
   matching receipt — fine at this app's scale (thousands of rows, not

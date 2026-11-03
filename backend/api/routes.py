@@ -15,7 +15,6 @@ from adapters.pdf_archive import ArchiveError, make_archive_pdf
 from adapters.sqlite_repository import SqliteReceiptRepository
 from domain.models import (
     ApartmentAssignment,
-    CategoryAssignment,
     ReceiptStatus,
     ReceiptUpdate,
     StatusAssignment,
@@ -88,8 +87,6 @@ def _missing_approval_fields(saved) -> list[str]:
     missing: list[str] = []
     if saved.apartment_id is None:
         missing.append("apartment")
-    if saved.category_id is None:
-        missing.append("category")
     if normalize_purchase_date(saved.purchase_date) is None:
         missing.append("date")
     if saved.total is None:
@@ -157,20 +154,13 @@ def list_apartments(repository: ReceiptRepository = Depends(get_repository)):
     return {"items": [{"id": a.id, "name": a.name} for a in items], "count": len(items)}
 
 
-@router.get("/categories")
-def list_categories(repository: ReceiptRepository = Depends(get_repository)):
-    items = repository.list_categories()
-    return {"items": [{"id": c.id, "name": c.name} for c in items], "count": len(items)}
-
-
 def _validate_receipt_filters(
     repository: ReceiptRepository,
     apartment_id: str | None,
     year: str | None,
     status: str | None,
-    category_id: str | None,
 ) -> dict:
-    """Shared by GET /receipts and GET /items: validates the four filters
+    """Shared by GET /receipts and GET /items: validates the filters
     they both accept and returns them ready to pass straight to
     repository.list_receipts()/list_matching_receipts() as keyword args."""
     if apartment_id is not None and repository.get_apartment(apartment_id) is None:
@@ -181,20 +171,11 @@ def _validate_receipt_filters(
     if status is not None and status not in (ReceiptStatus.NEEDS_REVIEW, ReceiptStatus.APPROVED):
         raise HTTPException(status_code=422, detail="status must be 'needs_review' or 'approved'.")
 
-    no_category = category_id == NONE_FILTER_VALUE
-    category_id_value: str | None = None
-    if category_id is not None and not no_category:
-        if repository.get_category(category_id) is None:
-            raise HTTPException(status_code=422, detail="Unknown category.")
-        category_id_value = category_id
-
     return {
         "apartment_id": apartment_id,
         "year": year_value,
         "undated": undated,
         "status": status,
-        "category_id": category_id_value,
-        "no_category": no_category,
     }
 
 
@@ -204,10 +185,9 @@ def list_receipts(
     apartment_id: str | None = Query(default=None),
     year: str | None = Query(default=None),
     status: str | None = Query(default=None),
-    category_id: str | None = Query(default=None),
     repository: ReceiptRepository = Depends(get_repository),
 ):
-    filters = _validate_receipt_filters(repository, apartment_id, year, status, category_id)
+    filters = _validate_receipt_filters(repository, apartment_id, year, status)
     items = repository.list_receipts(limit, **filters)
     return {"items": [item.model_dump() for item in items], "count": len(items)}
 
@@ -220,13 +200,12 @@ def list_items(
     apartment_id: str | None = Query(default=None),
     year: str | None = Query(default=None),
     status: str | None = Query(default=None),
-    category_id: str | None = Query(default=None),
     q: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     repository: ReceiptRepository = Depends(get_repository),
 ):
-    filters = _validate_receipt_filters(repository, apartment_id, year, status, category_id)
+    filters = _validate_receipt_filters(repository, apartment_id, year, status)
 
     q_value: str | None = None
     if q is not None:
@@ -241,7 +220,7 @@ def list_items(
 
     # Flattening, the q filter, and the limit/offset slice all happen here
     # in Python, after the adapter has already applied the apartment/year/
-    # status/category filters in SQL (and the date filter in Python) and
+    # status filters in SQL (and the date filter in Python) and
     # returned the matching receipts. This is fine at this app's scale --
     # thousands of rows, not millions -- but would need a dedicated
     # line_items table (with its own indexed search column) if that ever
@@ -360,8 +339,6 @@ def extract_receipt(
         "edited_at": None,
         "apartment_id": saved.apartment_id if saved else None,
         "apartment_name": saved.apartment_name if saved else None,
-        "category_id": saved.category_id if saved else None,
-        "category_name": saved.category_name if saved else None,
         "status": saved.status if saved else ReceiptStatus.NEEDS_REVIEW,
     }
 
@@ -556,44 +533,6 @@ def update_receipt_apartment(
         raise HTTPException(
             status_code=500,
             detail="Could not update the apartment. Please try again.",
-        )
-
-    if saved is None:
-        raise HTTPException(status_code=404, detail="Receipt not found.")
-
-    return {**saved.model_dump(), "warnings": _warnings_payload(saved)}
-
-
-@router.put("/receipts/{receipt_id}/category")
-def update_receipt_category(
-    receipt_id: str,
-    assignment: CategoryAssignment,
-    repository: ReceiptRepository = Depends(get_repository),
-):
-    try:
-        validated_id = uuid.UUID(receipt_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="receipt_id must be a valid UUID.")
-
-    existing = repository.get_receipt(str(validated_id))
-    if existing is None:
-        raise HTTPException(status_code=404, detail="Receipt not found.")
-
-    category = repository.get_category(assignment.category_id)
-    if category is None:
-        raise HTTPException(status_code=422, detail="Unknown category.")
-    if not category.active:
-        raise HTTPException(status_code=422, detail="This category is no longer active.")
-
-    try:
-        saved = repository.set_receipt_category(str(validated_id), assignment.category_id)
-    except Exception:
-        # Never tell the client the category changed when it did not; the
-        # real cause is logged for developers only.
-        logger.exception("Failed to update receipt category: receipt_id=%s", receipt_id)
-        raise HTTPException(
-            status_code=500,
-            detail="Could not update the category. Please try again.",
         )
 
     if saved is None:

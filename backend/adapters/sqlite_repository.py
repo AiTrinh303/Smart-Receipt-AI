@@ -8,9 +8,7 @@ from pathlib import Path
 from domain.models import (
     Apartment,
     ApartmentFacet,
-    Category,
     DEFAULT_APARTMENTS,
-    DEFAULT_CATEGORIES,
     Discount,
     LineItem,
     ReceiptData,
@@ -94,17 +92,6 @@ class SqliteReceiptRepository:
                 )
                 """
             )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS categories (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    sort_order INTEGER NOT NULL,
-                    active INTEGER NOT NULL DEFAULT 1
-                )
-                """
-            )
-
             # Safe, additive migration for databases created before these
             # columns existed: never drops or recreates a table, so existing
             # rows are always kept. No migration framework -- just a
@@ -115,8 +102,6 @@ class SqliteReceiptRepository:
                 conn.execute("ALTER TABLE receipts ADD COLUMN edited_at TEXT NULL")
             if "apartment_id" not in receipts_columns:
                 conn.execute("ALTER TABLE receipts ADD COLUMN apartment_id TEXT NULL")
-            if "category_id" not in receipts_columns:
-                conn.execute("ALTER TABLE receipts ADD COLUMN category_id TEXT NULL")
             if "status" not in receipts_columns:
                 # The NOT NULL DEFAULT applies to existing rows too, so every
                 # receipt that predates this column still gets 'needs_review'.
@@ -135,11 +120,6 @@ class SqliteReceiptRepository:
                 conn.execute(
                     "INSERT OR IGNORE INTO apartments (id, name, sort_order, active) VALUES (?, ?, ?, ?)",
                     (apartment.id, apartment.name, apartment.sort_order, int(apartment.active)),
-                )
-            for category in DEFAULT_CATEGORIES:
-                conn.execute(
-                    "INSERT OR IGNORE INTO categories (id, name, sort_order, active) VALUES (?, ?, ?, ?)",
-                    (category.id, category.name, category.sort_order, int(category.active)),
                 )
 
     def save_upload(
@@ -221,22 +201,22 @@ class SqliteReceiptRepository:
             ).fetchone()
             created_at = existing[0] if existing is not None else now
 
-            # apartment_id and category_id are deliberately absent from the
-            # ON CONFLICT SET clause: a first save (INSERT) stores the
-            # upload's apartment and a null category, but a re-extract (the
-            # ON CONFLICT branch) leaves whatever is already there untouched
-            # -- never overwritten, never nulled. status, however, IS reset
-            # to 'needs_review' on every save (first save relies on the
-            # column default; a re-extract explicitly resets it) since the
-            # underlying data was just replaced.
+            # apartment_id is deliberately absent from the ON CONFLICT SET
+            # clause: a first save (INSERT) stores the upload's apartment,
+            # but a re-extract (the ON CONFLICT branch) leaves whatever is
+            # already there untouched -- never overwritten, never nulled.
+            # status, however, IS reset to 'needs_review' on every save
+            # (first save relies on the column default; a re-extract
+            # explicitly resets it) since the underlying data was just
+            # replaced.
             conn.execute(
                 f"""
                 INSERT INTO receipts (
                     receipt_id, store_name, purchase_date, currency, total,
                     extracted_json, ai_result_json, created_at, updated_at, edited_at,
-                    apartment_id, category_id, status
+                    apartment_id, status
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL, '{ReceiptStatus.NEEDS_REVIEW}')
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, '{ReceiptStatus.NEEDS_REVIEW}')
                 ON CONFLICT(receipt_id) DO UPDATE SET
                     store_name = excluded.store_name,
                     purchase_date = excluded.purchase_date,
@@ -268,11 +248,10 @@ class SqliteReceiptRepository:
                 """
                 SELECT r.receipt_id, r.extracted_json, r.created_at, r.updated_at,
                        u.original_filename, u.content_type, r.edited_at,
-                       r.apartment_id, ap.name, r.category_id, cat.name, r.status
+                       r.apartment_id, ap.name, r.status
                 FROM receipts r
                 LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
                 LEFT JOIN apartments ap ON ap.id = r.apartment_id
-                LEFT JOIN categories cat ON cat.id = r.category_id
                 WHERE r.receipt_id = ?
                 """,
                 (receipt_id,),
@@ -314,9 +293,7 @@ class SqliteReceiptRepository:
             edited_at=edited_at,
             apartment_id=row[7],
             apartment_name=row[8],
-            category_id=row[9],
-            category_name=row[10],
-            status=row[11],
+            status=row[9],
         )
 
     def _filtered_receipt_rows(
@@ -326,16 +303,14 @@ class SqliteReceiptRepository:
         year: int | None = None,
         undated: bool = False,
         status: str | None = None,
-        category_id: str | None = None,
-        no_category: bool = False,
     ) -> list[tuple]:
         """Shared by list_receipts() and list_matching_receipts(): every
         receipt matching the given filters, each as a tuple of
         (receipt_id, parsed ReceiptData, created_at, updated_at,
         original_filename, content_type, edited_at, apartment_id,
-        apartment_name, category_id, category_name, status), ordered
+        apartment_name, status), ordered
         `created_at DESC, receipt_id ASC`, with NO limit applied -- callers
-        slice as needed. apartment_id/status/category_id are plain column
+        slice as needed. apartment_id/status are plain column
         equality, so they are filtered in SQL (parameterized); year/undated
         need normalize_purchase_date -- the same shared domain rule used
         everywhere else, never duplicated as a SQL date regex -- so those
@@ -348,11 +323,6 @@ class SqliteReceiptRepository:
         if status is not None:
             where_clauses.append("r.status = ?")
             params.append(status)
-        if no_category:
-            where_clauses.append("r.category_id IS NULL")
-        elif category_id is not None:
-            where_clauses.append("r.category_id = ?")
-            params.append(category_id)
 
         where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
@@ -360,11 +330,10 @@ class SqliteReceiptRepository:
             f"""
             SELECT r.receipt_id, r.extracted_json, r.created_at, r.updated_at,
                    u.original_filename, u.content_type, r.edited_at,
-                   r.apartment_id, ap.name, r.category_id, cat.name, r.status
+                   r.apartment_id, ap.name, r.status
             FROM receipts r
             LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
             LEFT JOIN apartments ap ON ap.id = r.apartment_id
-            LEFT JOIN categories cat ON cat.id = r.category_id
             {where_sql}
             ORDER BY r.created_at DESC, r.receipt_id ASC
             """,
@@ -382,8 +351,6 @@ class SqliteReceiptRepository:
             edited_at,
             apartment_id_value,
             apartment_name,
-            category_id_value,
-            category_name,
             status_value,
         ) in rows:
             try:
@@ -417,8 +384,6 @@ class SqliteReceiptRepository:
                     edited_at,
                     apartment_id_value,
                     apartment_name,
-                    category_id_value,
-                    category_name,
                     status_value,
                 )
             )
@@ -432,13 +397,9 @@ class SqliteReceiptRepository:
         year: int | None = None,
         undated: bool = False,
         status: str | None = None,
-        category_id: str | None = None,
-        no_category: bool = False,
     ) -> list[ReceiptSummary]:
         with self._connect() as conn:
-            rows = self._filtered_receipt_rows(
-                conn, apartment_id, year, undated, status, category_id, no_category
-            )
+            rows = self._filtered_receipt_rows(conn, apartment_id, year, undated, status)
 
         summaries: list[ReceiptSummary] = []
         for (
@@ -451,8 +412,6 @@ class SqliteReceiptRepository:
             _edited_at,
             apartment_id_value,
             apartment_name,
-            category_id_value,
-            category_name,
             status_value,
         ) in rows:
             if len(summaries) >= limit:
@@ -469,8 +428,6 @@ class SqliteReceiptRepository:
                     created_at=created_at,
                     apartment_id=apartment_id_value,
                     apartment_name=apartment_name,
-                    category_id=category_id_value,
-                    category_name=category_name,
                     status=status_value,
                 )
             )
@@ -483,8 +440,6 @@ class SqliteReceiptRepository:
         year: int | None = None,
         undated: bool = False,
         status: str | None = None,
-        category_id: str | None = None,
-        no_category: bool = False,
     ) -> list[SavedReceipt]:
         """Every receipt matching the same filters list_receipts() accepts,
         with its full parsed data (items included) -- used by GET /items to
@@ -494,9 +449,7 @@ class SqliteReceiptRepository:
         extracted_json; domain.rules.flatten_line_items normalizes it for
         display, the same way get_receipt() does."""
         with self._connect() as conn:
-            rows = self._filtered_receipt_rows(
-                conn, apartment_id, year, undated, status, category_id, no_category
-            )
+            rows = self._filtered_receipt_rows(conn, apartment_id, year, undated, status)
 
         receipts: list[SavedReceipt] = []
         for (
@@ -509,8 +462,6 @@ class SqliteReceiptRepository:
             edited_at,
             apartment_id_value,
             apartment_name,
-            category_id_value,
-            category_name,
             status_value,
         ) in rows:
             receipts.append(
@@ -531,8 +482,6 @@ class SqliteReceiptRepository:
                     edited_at=edited_at,
                     apartment_id=apartment_id_value,
                     apartment_name=apartment_name,
-                    category_id=category_id_value,
-                    category_name=category_name,
                     status=status_value,
                 )
             )
@@ -689,26 +638,6 @@ class SqliteReceiptRepository:
             return None
         return Apartment(id=row[0], name=row[1], sort_order=row[2], active=bool(row[3]))
 
-    def list_categories(self) -> list[Category]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT id, name, sort_order, active FROM categories WHERE active = 1 ORDER BY sort_order"
-            ).fetchall()
-        return [Category(id=row[0], name=row[1], sort_order=row[2], active=bool(row[3])) for row in rows]
-
-    def get_category(self, category_id: str) -> Category | None:
-        # Regardless of active -- same reasoning as get_apartment: a
-        # receipt's own category_name must still resolve even if that
-        # category is deactivated later, and the route distinguishes
-        # "unknown" from "inactive" itself.
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT id, name, sort_order, active FROM categories WHERE id = ?", (category_id,)
-            ).fetchone()
-        if row is None:
-            return None
-        return Category(id=row[0], name=row[1], sort_order=row[2], active=bool(row[3]))
-
     def set_receipt_apartment(self, receipt_id: str, apartment_id: str) -> SavedReceipt | None:
         now = _utc_now_iso()
         with self._connect() as conn:
@@ -733,26 +662,6 @@ class SqliteReceiptRepository:
 
         return self.get_receipt(receipt_id)
 
-    def set_receipt_category(self, receipt_id: str, category_id: str) -> SavedReceipt | None:
-        now = _utc_now_iso()
-        with self._connect() as conn:
-            existing = conn.execute(
-                "SELECT 1 FROM receipts WHERE receipt_id = ?", (receipt_id,)
-            ).fetchone()
-            if existing is None:
-                return None
-
-            # Classification change, like set_receipt_apartment: only
-            # category_id and updated_at change here -- edited_at,
-            # extracted_json, ai_result_json, created_at and status are all
-            # left untouched.
-            conn.execute(
-                "UPDATE receipts SET category_id = ?, updated_at = ? WHERE receipt_id = ?",
-                (category_id, now, receipt_id),
-            )
-
-        return self.get_receipt(receipt_id)
-
     def set_receipt_status(self, receipt_id: str, status: str) -> SavedReceipt | None:
         now = _utc_now_iso()
         with self._connect() as conn:
@@ -763,8 +672,8 @@ class SqliteReceiptRepository:
                 return None
 
             # Classification change: only status and updated_at change here
-            # -- edited_at, extracted_json, ai_result_json, created_at,
-            # apartment_id and category_id are all left untouched.
+            # -- edited_at, extracted_json, ai_result_json, created_at and
+            # apartment_id are all left untouched.
             conn.execute(
                 "UPDATE receipts SET status = ?, updated_at = ? WHERE receipt_id = ?",
                 (status, now, receipt_id),

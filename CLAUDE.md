@@ -475,20 +475,25 @@ the purchase info, and the result is displayed for review.
     `apartment_id`/`apartment_name` (`str | None`) — same key set and JSON
     types across upload/extract/GET/PUT/reset/list-item, see
     [docs/adr/0002-apartments-and-expense-ledger.md](docs/adr/0002-apartments-and-expense-ledger.md).
-    `Category` (id/name/sort_order/active) and `DEFAULT_CATEGORIES` — the
-    ten seeded, PLACEHOLDER expense categories (to be confirmed with a tax
-    advisor), seeded the same way as `DEFAULT_APARTMENTS`; `ReceiptStatus`
+    `ReceiptStatus`
     — plain string constants `NEEDS_REVIEW`/`APPROVED` (not an Enum, so
     they serialize as plain strings) and `ALLOWED_RECEIPT_STATUSES`.
     `SavedReceipt` and `ReceiptSummary` additionally carry flat
-    `category_id`/`category_name` (`str | None`) and `status` (`str`,
-    `"needs_review"` or `"approved"`) — same key set and JSON types across
+    `status` (`str`,
+    `"needs_review"` or `"approved"`) — same key and JSON type across
     extract/GET/PUT/reset/apartment-PUT/list-item, see
-    [docs/adr/0003-category-and-review-status.md](docs/adr/0003-category-and-review-status.md).
+    [docs/adr/0003-category-and-review-status.md](docs/adr/0003-category-and-review-status.md)
+    (an expense-category classification also lived here —
+    `Category`/`DEFAULT_CATEGORIES`, `category_id`/`category_name` on
+    `SavedReceipt`/`ReceiptSummary`/`LineItemRow` — until it was removed;
+    see
+    [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md)
+    for why, and how any old category data left in a database is kept
+    dormant, never migrated).
     `LineItemRow` — one flattened `GET /items` row (`receipt_id`,
     `line_index`, `name`, `quantity`, `unit_price`, `line_total`,
     `currency`, `purchase_date`, `store_name`, `apartment_id`,
-    `apartment_name`, `category_name`, `status`); never stored, built
+    `apartment_name`, `status`); never stored, built
     fresh per request by `rules.flatten_line_items()`.
     `rules.py` (allowed file
     types, size limit, `media_type_for_extension()` — a pure
@@ -520,15 +525,12 @@ the purchase info, and the result is displayed for review.
     `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
     `list_receipts`/`update_receipt`/`reset_receipt`/`delete_receipt`/
     `list_apartments`/`get_apartment`/`set_receipt_apartment`/
-    `list_categories`/`get_category`/`set_receipt_category`/
     `set_receipt_status`/`get_receipt_facets`/`list_matching_receipts`,
     plus the
     strict, separate `ReceiptUpdate`/`LineItemUpdate`/`DiscountUpdate`/
     `TaxUpdate` models in `models.py` for user-submitted corrections, and
     `ApartmentAssignment` (`apartment_id: str`, `extra="forbid"`) for
-    `PUT /receipts/{id}/apartment`'s body, `CategoryAssignment`
-    (`category_id: str`, `extra="forbid"`) for
-    `PUT /receipts/{id}/category`'s body, and `StatusAssignment`
+    `PUT /receipts/{id}/apartment`'s body, and `StatusAssignment`
     (`status: str`, `extra="forbid"`, a `field_validator` rejecting
     anything outside `ALLOWED_RECEIPT_STATUSES`) for
     `PUT /receipts/{id}/status`'s body — each its own model, deliberately
@@ -560,42 +562,47 @@ the purchase info, and the result is displayed for review.
     parallel upload+extract requests) by `tests/test_concurrency.py`,
     without needing WAL mode or any other change.
     `SqliteReceiptRepository`: stdlib `sqlite3`, no ORM; `uploads`,
-    `receipts`, `apartments` and `categories` tables; schema created via
+    `receipts` and `apartments` tables; schema created via
     `CREATE TABLE IF NOT EXISTS`, plus a small additive migration on
     construction — `PRAGMA table_info` then
     `ALTER TABLE ... ADD COLUMN` only for a column that's missing, never
     dropping/recreating a table, so existing rows always survive an
     upgrade; this is how `edited_at`, the nullable `apartment_id` columns
-    on `uploads`/`receipts`, the nullable `category_id` column, and the
+    on `uploads`/`receipts`, and the
     `status TEXT NOT NULL DEFAULT 'needs_review'` column on `receipts`
     were all added — the `NOT NULL DEFAULT` applies to existing rows too,
     so every receipt that predates the column still gets `needs_review`.
-    `apartments` and `categories` are both new tables (no migration
-    needed there) seeded with `DEFAULT_APARTMENTS`/`DEFAULT_CATEGORIES`
-    via `INSERT OR IGNORE` every time, so it's idempotent).
-    `list_apartments`/`list_categories` return only `active = 1` rows
-    ordered by `sort_order`; `get_apartment`/`get_category` return a row
+    `apartments` is a new table (no migration
+    needed there) seeded with `DEFAULT_APARTMENTS`
+    via `INSERT OR IGNORE` every time, so it's idempotent). (A `categories`
+    table and a `category_id` column/migration on `receipts` existed here
+    too, until the expense-category feature was removed — see
+    [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md).
+    A database that already has them keeps them, untouched and unread; a
+    new database never gets them.)
+    `list_apartments` returns only `active = 1` rows
+    ordered by `sort_order`; `get_apartment` returns a row
     regardless of `active` (the route distinguishes "unknown" from
-    "inactive" itself, and a receipt's `apartment_name`/`category_name`
+    "inactive" itself, and a receipt's `apartment_name`
     must still resolve even if deactivated later).
     `save_receipt`'s `INSERT`/`ON CONFLICT` deliberately omits
-    `category_id` from the `ON CONFLICT` `SET` clause (same reasoning as
-    `apartment_id`: a first save inserts `NULL`, a re-extract leaves
-    whatever is already there untouched) but always resets `status` to
+    `apartment_id` from the `ON CONFLICT` `SET` clause: a first save inserts
+    it, a re-extract leaves whatever is already there untouched; it also
+    always resets `status` to
     `'needs_review'` on every save, first or re-extract alike, since the
     underlying data was just replaced.
-    `set_receipt_category`/`set_receipt_status` mirror
-    `set_receipt_apartment`: one transaction, updates only `category_id`/
+    `set_receipt_status` mirrors
+    `set_receipt_apartment`: one transaction, updates only
     `status` plus `updated_at`, returns `None` if no `receipts` row exists
     (so the route 404s), never touches `edited_at`, `extracted_json`,
-    `ai_result_json`, `created_at`, or each other's column.
+    `ai_result_json`, `created_at`, or `apartment_id`.
     `list_receipts` orders by `created_at DESC, receipt_id ASC` (stable
     tie-break) and builds each row from `extracted_json` (same source as
     `get_receipt`, so `total`'s JSON type matches); a row with unparseable
     `extracted_json` is logged (receipt_id only) and skipped rather than
     failing the whole list.
-    **Filtering (`apartment_id`/`year`/`undated`/`status`/`category_id`/
-    `no_category` params):** `apartment_id`, `status` and `category_id`
+    **Filtering (`apartment_id`/`year`/`undated`/`status` params):**
+    `apartment_id` and `status`
     (plain column equality) are filtered in a parameterized SQL `WHERE`
     clause built from a list of clauses/params — never string-formatted
     user input. `year`/`undated` can't be done that way without duplicating
@@ -677,8 +684,11 @@ the purchase info, and the result is displayed for review.
     handler that creates the repository — and therefore the SQLite schema
     — at startup, not the deprecated `on_event`),
     `routes.py` (`/health`, `GET /apartments` — active apartments only,
-    `sort_order`, `{"id", "name"}` per item, `GET /categories` — same
-    shape, active categories only, ordered by `sort_order`,
+    `sort_order`, `{"id", "name"}` per item (a `GET /categories` endpoint
+    existed here too, until the expense-category feature was removed —
+    see
+    [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md);
+    the path now simply 404s, like any other undefined route),
     `POST /receipts/upload` —
     `apartment_id` is a **required** form field, validated via
     `repository.get_apartment()` *before* the existing file-type/size
@@ -692,19 +702,21 @@ the purchase info, and the result is displayed for review.
     (1–200, else `422`), `{"items": [...], "count": N}`, empty DB ->
     `{"items": [], "count": 0}` never `404`. Optional filters, AND-combined,
     no params unchanged from before, validated by the shared
-    `_validate_receipt_filters(repository, apartment_id, year, status,
-    category_id)` helper (also used by `GET /items`, below, so the two
+    `_validate_receipt_filters(repository, apartment_id, year, status)`
+    helper (also used by `GET /items`, below, so the two
     endpoints' filter rules can never drift apart): `apartment_id` (422 via
     `repository.get_apartment()` if unknown — same check and message as the
     apartment PUT), `year` (`_parse_year_filter()`: a 4-digit `\d{4}`
     2000–2100 or the literal string `"none"` for null/non-ISO dates; the
     `\d{4}` regex check happens *before* `int()` + range, so `"2025x"`/
     `"25"`/`"20255"` are rejected the same way a too-small/too-large year
-    is, all `422`), `status` (`"needs_review"`/`"approved"` else `422`),
-    `category_id` (a known id via `repository.get_category()`, or the
-    literal string `"none"` for a null category, else `422` — `"none"` is
-    checked *before* calling `get_category()`, so it's never treated as an
-    unknown id). `GET /receipts/facets?apartment_id=<optional>` —
+    is, all `422`), `status` (`"needs_review"`/`"approved"` else `422`).
+    (A `category_id` filter existed here too; it was removed along with the
+    rest of the expense-category feature — see
+    [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md)
+    — so a client still sending it now gets it silently ignored, like any
+    other undeclared query parameter, rather than a `422`.)
+    `GET /receipts/facets?apartment_id=<optional>` —
     registered *before* `GET /receipts/{receipt_id}` in `routes.py` (source
     order is what FastAPI matches on) so the literal path `/receipts/facets`
     is never captured by that route's `{receipt_id}` segment; 422 for an
@@ -712,14 +724,16 @@ the purchase info, and the result is displayed for review.
     .model_dump()` directly.
     `GET /items` — a flat list of purchased line items across receipts:
     `{"items": [...], "count": <returned>, "total": <all matching rows>}`.
-    Accepts the identical `apartment_id`/`year`/`status`/`category_id`
-    (same `_validate_receipt_filters()` call, same `422` rules) plus `q`
+    Accepts the identical `apartment_id`/`year`/`status`
+    (same `_validate_receipt_filters()` call, same `422` rules, same
+    "unrecognized parameter is ignored" behavior for a stray `category_id`)
+    plus `q`
     (stripped; `422` if longer than `MAX_ITEM_SEARCH_LENGTH` = 100 *after*
     stripping; a blank result is treated as "no search," not an error) and
     `limit`/`offset` (`Query(default=100, ge=1, le=500)`/
     `Query(default=0, ge=0)`, else `422`). Calls
     `repository.list_matching_receipts(**filters)` (unlimited, already
-    apartment/year/status/category-filtered), then — entirely in Python,
+    apartment/year/status-filtered), then — entirely in Python,
     documented in a code comment as fine at this app's scale but not
     forever — flattens every matching receipt via
     `domain.rules.flatten_line_items`, filters by `q` via
@@ -753,34 +767,38 @@ the purchase info, and the result is displayed for review.
     `update_receipt`/`reset_receipt` — so `edited_at`, `extracted_json`,
     `ai_result_json` and `created_at` are always left untouched. A later
     re-extract keeps this apartment, since `extract_receipt`'s own
-    `ON CONFLICT` branch never overwrites `apartment_id`.
-    `PUT /receipts/{receipt_id}/category` — same shape of rules as the
-    apartment PUT above, against `CategoryAssignment` and
-    `repository.get_category()`/`set_receipt_category()`.
+    `ON CONFLICT` branch never overwrites `apartment_id`. (A
+    `PUT /receipts/{receipt_id}/category` endpoint existed here too, until
+    the expense-category feature was removed — see
+    [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md);
+    the path now simply 404s.)
     `PUT /receipts/{receipt_id}/status` — body validated against
     `StatusAssignment` (FastAPI's own `422` for a missing/invalid/extra
     field); 400 non-UUID id; 404 if no `receipts` row exists. Setting
     `ReceiptStatus.NEEDS_REVIEW` is always allowed; setting
     `ReceiptStatus.APPROVED` first calls `_missing_approval_fields(saved)`
     — a pure helper checking, in this fixed order, `apartment_id is None`,
-    `category_id is None`, `normalize_purchase_date(purchase_date) is
+    `normalize_purchase_date(purchase_date) is
     None` (the same shared date rule `domain.rules` uses elsewhere — never
     a bare `date.fromisoformat`, so a stray-but-recoverable date like
     `"2025-06-26 11"` still counts as valid), and `total is None` — and if
     that list is non-empty, `422`s with
     `{"detail": {"message": "...", "missing": [...]}}` listing only the
-    actually-missing ones, never all four unconditionally. Data-quality
+    actually-missing ones, never all three unconditionally (a category
+    check used to be part of this list too — see
+    [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md)).
+    Data-quality
     `warnings` are deliberately never checked here — approval is a human
     decision, not a data-quality gate. 500 generic on a repository
     failure; 200 with the same shape as GET either way. Calls
     `repository.set_receipt_status(...)`, never `update_receipt`/
-    `reset_receipt`/`set_receipt_apartment`/`set_receipt_category` — so
-    `edited_at`, `extracted_json`, `ai_result_json`, `created_at`,
-    `apartment_id` and `category_id` are always left untouched.
+    `reset_receipt`/`set_receipt_apartment` — so
+    `edited_at`, `extracted_json`, `ai_result_json`, `created_at` and
+    `apartment_id` are always left untouched.
     **Editing an approved receipt:** `PUT /receipts/{id}` (the
     data-correction endpoint) never reads or changes `status` — an
     already-approved receipt silently stays `approved` after a
-    correction; `tests/test_category_status_endpoints.py`'s
+    correction; `tests/test_status_endpoints.py`'s
     `test_editing_an_approved_receipt_keeps_it_approved` documents this
     rather than adding a gate, per the ticket that introduced it.
     `DELETE /receipts/{receipt_id}` — 204 (empty body) on success, 400 for
@@ -795,11 +813,11 @@ the purchase info, and the result is displayed for review.
     `_warnings_payload()` helper — computed fresh on every request, never
     stored, never blocking any action. The extract/GET/PUT contract test
     (`tests/test_get_receipt.py`'s `EXTRACTED_FIELD_NAMES`) includes
-    `"warnings"`, `"category_id"`, `"category_name"` and `"status"`.
-    `extract_receipt`'s response includes `category_id`/`category_name`/
+    `"warnings"` and `"status"`.
+    `extract_receipt`'s response includes
     `status` the same way it does `apartment_id`/`apartment_name` — read
     from the `get_receipt()` re-fetch right after saving, falling back to
-    `None`/`ReceiptStatus.NEEDS_REVIEW` if that re-fetch somehow returns
+    `ReceiptStatus.NEEDS_REVIEW` if that re-fetch somehow returns
     nothing.
     `GET /receipts/{receipt_id}/file` — serves the original upload via
     `FileResponse` for a saved receipt (same existence check as GET); 400

@@ -1,5 +1,5 @@
 # ADR 0003: Expense category and review status
-Status: Accepted · Date: 2026-10-30
+Status: Superseded by 0004 · Date: 2026-10-30
 ## Context
 For year-end tax reports every receipt needs an expense category, and
 the user needs to see what is still to check versus what can be

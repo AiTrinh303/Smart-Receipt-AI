@@ -46,7 +46,6 @@ def make_receipt_data(**overrides) -> ReceiptData:
 def seed(
     repository,
     apartment_id: str | None = None,
-    category_id: str | None = None,
     status: str = ReceiptStatus.NEEDS_REVIEW,
     **data_overrides,
 ) -> str:
@@ -54,8 +53,8 @@ def seed(
     repository.save_receipt(receipt_id, make_receipt_data(**data_overrides), apartment_id=apartment_id)
     with repository._connect() as conn:
         conn.execute(
-            "UPDATE receipts SET category_id = ?, status = ? WHERE receipt_id = ?",
-            (category_id, status, receipt_id),
+            "UPDATE receipts SET status = ? WHERE receipt_id = ?",
+            (status, receipt_id),
         )
         conn.commit()
     return receipt_id
@@ -139,7 +138,6 @@ def filtered_seed(temp_repository):
     ids["r1"] = seed(
         temp_repository,
         apartment_id=OBERAUDORF,
-        category_id="cleaning",
         status=ReceiptStatus.NEEDS_REVIEW,
         purchase_date="2026-01-15",
         store_name="Hardware Store",
@@ -148,7 +146,6 @@ def filtered_seed(temp_repository):
     ids["r2"] = seed(
         temp_repository,
         apartment_id=OBERAUDORF,
-        category_id="repairs",
         status=ReceiptStatus.APPROVED,
         purchase_date="2025-06-01",
         store_name="Plumber",
@@ -157,7 +154,6 @@ def filtered_seed(temp_repository):
     ids["r3"] = seed(
         temp_repository,
         apartment_id=WALDGLUECK,
-        category_id=None,
         status=ReceiptStatus.NEEDS_REVIEW,
         purchase_date=None,
         store_name="Garden Center",
@@ -190,16 +186,13 @@ def test_filter_by_status_alone(filtered_seed):
     assert receipt_ids(response) == [filtered_seed["r2"]]
 
 
-def test_filter_by_category_alone(filtered_seed):
+def test_an_unknown_query_parameter_like_category_id_is_simply_ignored(filtered_seed):
+    # category_id was a real filter before the expense-category feature was
+    # removed (see docs/adr/0004-remove-categories.md) -- an old client or
+    # bookmark still sending it must not 422, and must not filter anything.
     response = client.get("/items?category_id=cleaning")
     assert response.status_code == 200
-    assert receipt_ids(response) == [filtered_seed["r1"]]
-
-
-def test_filter_by_category_none(filtered_seed):
-    response = client.get("/items?category_id=none")
-    assert response.status_code == 200
-    assert receipt_ids(response) == [filtered_seed["r3"]]
+    assert set(receipt_ids(response)) == {filtered_seed["r1"], filtered_seed["r2"], filtered_seed["r3"]}
 
 
 def test_combined_filters(filtered_seed):
@@ -215,11 +208,6 @@ def test_unknown_apartment_returns_422(filtered_seed):
 
 def test_bad_status_returns_422(filtered_seed):
     response = client.get("/items?status=archived")
-    assert response.status_code == 422
-
-
-def test_unknown_category_returns_422(filtered_seed):
-    response = client.get("/items?category_id=does-not-exist")
     assert response.status_code == 422
 
 

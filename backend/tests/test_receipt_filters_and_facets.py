@@ -44,20 +44,19 @@ def make_receipt_data(**overrides) -> ReceiptData:
 def seed(
     repository,
     apartment_id: str | None = None,
-    category_id: str | None = None,
     status: str = ReceiptStatus.NEEDS_REVIEW,
     **data_overrides,
 ) -> str:
     """Saves one receipt directly via the repository, then sets its
-    category/status directly via SQL (PUT /receipts/{id}/category and
-    /status are tested elsewhere; this file is only about GET /receipts
-    and GET /receipts/facets)."""
+    status directly via SQL (PUT /receipts/{id}/status is tested
+    elsewhere; this file is only about GET /receipts and
+    GET /receipts/facets)."""
     receipt_id = str(uuid.uuid4())
     repository.save_receipt(receipt_id, make_receipt_data(**data_overrides), apartment_id=apartment_id)
     with repository._connect() as conn:
         conn.execute(
-            "UPDATE receipts SET category_id = ?, status = ? WHERE receipt_id = ?",
-            (category_id, status, receipt_id),
+            "UPDATE receipts SET status = ? WHERE receipt_id = ?",
+            (status, receipt_id),
         )
         conn.commit()
     return receipt_id
@@ -68,35 +67,30 @@ def seeded(temp_repository):
     r1 = seed(
         temp_repository,
         apartment_id=OBERAUDORF,
-        category_id="cleaning",
         status=ReceiptStatus.NEEDS_REVIEW,
         purchase_date="2026-01-15",
     )
     r2 = seed(
         temp_repository,
         apartment_id=OBERAUDORF,
-        category_id="repairs",
         status=ReceiptStatus.APPROVED,
         purchase_date="2025-06-01",
     )
     r3 = seed(
         temp_repository,
         apartment_id=WALDGLUECK,
-        category_id=None,
         status=ReceiptStatus.NEEDS_REVIEW,
         purchase_date="2026-03-01",
     )
     r4 = seed(
         temp_repository,
         apartment_id=WALDGLUECK,
-        category_id="cleaning",
         status=ReceiptStatus.APPROVED,
         purchase_date=None,
     )
     r5 = seed(
         temp_repository,
         apartment_id=None,
-        category_id=None,
         status=ReceiptStatus.NEEDS_REVIEW,
         purchase_date="26/06/2025",
     )
@@ -135,16 +129,13 @@ def test_filter_by_status_alone(seeded):
     assert ids(response) == {seeded["r2"], seeded["r4"]}
 
 
-def test_filter_by_category_alone(seeded):
+def test_an_unknown_query_parameter_like_category_id_is_simply_ignored(seeded):
+    # category_id was a real filter before the expense-category feature was
+    # removed (see docs/adr/0004-remove-categories.md) -- an old client or
+    # bookmark still sending it must not 422, and must not filter anything.
     response = client.get("/receipts?category_id=cleaning")
     assert response.status_code == 200
-    assert ids(response) == {seeded["r1"], seeded["r4"]}
-
-
-def test_filter_by_category_none_matches_only_null_category(seeded):
-    response = client.get("/receipts?category_id=none")
-    assert response.status_code == 200
-    assert ids(response) == {seeded["r3"], seeded["r5"]}
+    assert ids(response) == set(seeded.values())
 
 
 def test_year_none_matches_null_and_non_iso_dates_only(seeded):
@@ -165,16 +156,14 @@ def test_a_26_06_2025_date_never_matches_year_2025(seeded):
 
 
 def test_combined_filters_apply_with_and(seeded):
-    # apartment=Oberaudorf AND status=approved AND category=repairs -> only r2
-    response = client.get(
-        f"/receipts?apartment_id={OBERAUDORF}&status={ReceiptStatus.APPROVED}&category_id=repairs"
-    )
+    # apartment=Oberaudorf AND status=approved -> only r2
+    response = client.get(f"/receipts?apartment_id={OBERAUDORF}&status={ReceiptStatus.APPROVED}")
     assert response.status_code == 200
     assert ids(response) == {seeded["r2"]}
 
 
 def test_combined_filters_with_no_match_returns_empty_items_and_zero_count(seeded):
-    response = client.get(f"/receipts?apartment_id={WALDGLUECK}&category_id=repairs")
+    response = client.get(f"/receipts?apartment_id={WALDGLUECK}&status={ReceiptStatus.NEEDS_REVIEW}&year=2099")
     assert response.status_code == 200
     assert response.json() == {"items": [], "count": 0}
 
@@ -192,11 +181,6 @@ def test_bad_year_values_return_422(seeded, bad_year):
 
 def test_bad_status_returns_422(seeded):
     response = client.get("/receipts?status=archived")
-    assert response.status_code == 422
-
-
-def test_unknown_category_returns_422(seeded):
-    response = client.get("/receipts?category_id=does-not-exist")
     assert response.status_code == 422
 
 
