@@ -234,6 +234,33 @@ the purchase info, and the result is displayed for review.
   shape exactly (`role="status" aria-busy="true"` + "Loading items...",
   `Alert variant="error"` + Retry, "No items yet. Upload a receipt." vs.
   "No items match these filters." + "Clear filters").
+  **Display helpers (`src/format/formatDisplayDate.ts`,
+  `src/format/apartmentShortName.ts`, `ui/MissingValue.tsx`,
+  `ui/ClampedText.tsx`):** added for the Items table redesign (see
+  [docs/design.md](docs/design.md)) but usable anywhere. **Rule: display a
+  stored `purchase_date` in a fixed, non-raw format only through
+  `formatDisplayDate()`** — never `Date`/`Intl`/`toLocaleDateString()`,
+  which introduce time-zone/locale drift the server's stored value was
+  never subject to. It returns `{kind: "date", text: "DD.MM.YYYY"}` for a
+  real, valid `YYYY-MM-DD` date (leap years handled by hand, no `Date`
+  object ever constructed), `{kind: "raw", text}` for any other non-blank
+  value (trimmed, shown as-is — a date the AI read wrong stays visible,
+  never hidden), or `{kind: "missing"}` for `null`/blank.
+  `ReceiptHistory.tsx` and `ReceiptResult.tsx` still show `purchase_date`
+  via the older, plain `displayText()` (raw string or "Not detected") —
+  deliberately untouched by this rule's introduction; only new/redesigned
+  display code is expected to adopt `formatDisplayDate()`.
+  `apartmentShortName(name)` returns the apartment's full name's last
+  `" - "`-separated segment (e.g. `"Fewo JoJo - Sankt Englmar -
+  Waldglück"` -> `"Waldglück"`), falling back to the whole trimmed name
+  when there's no separator or the last segment is empty — a display-only
+  convenience; a `short_name` column would be the cleaner long-term fix.
+  `MissingValue` renders a decorative `aria-hidden` dash plus `sr-only`
+  "Not detected" (quieter than the plain visible words, same findable
+  text). `ClampedText` wraps text in Tailwind's native `line-clamp-1`/
+  `line-clamp-2` (built into Tailwind v3.3+, no plugin) with a `title`
+  carrying the full text (omitted when empty) so a 100+ character product
+  title can't blow out a row's height.
   **Changing the apartment on a saved receipt (`ReceiptApartment.tsx`,
   `src/api/updateReceiptApartment.ts`):** rendered by the saved-receipt
   container (the same `if (result)` branch used right after extraction and

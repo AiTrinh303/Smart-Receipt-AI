@@ -389,6 +389,62 @@ the full trail of evidence.
   of similar item names, no reports or CSV export, no sort options, no
   new dependencies, no backend changes.
 
+## Display helpers: dates, short apartment names, clamped text, missing values
+
+Added for the Items table redesign (readability/auditing pass), but
+deliberately generic -- any screen displaying the same kind of value should
+reach for these rather than re-deriving its own formatting.
+
+- **`src/format/formatDisplayDate.ts`** -- `formatDisplayDate(value: string
+  | null)` turns a stored `purchase_date` into exactly one of
+  `{kind: "date", text: "DD.MM.YYYY"}` (a real, valid calendar date in
+  `YYYY-MM-DD`), `{kind: "raw", text}` (anything else non-blank, trimmed --
+  a date the AI couldn't read cleanly, kept visible rather than hidden),
+  or `{kind: "missing"}` (`null` or blank). **Deliberately never uses
+  `Date` or `Intl`:** `new Date("2026-06-02")` parses as UTC midnight,
+  which renders as "01 June" in a timezone behind UTC, and
+  `toLocaleDateString()` picks its month names and field order from the
+  runtime's locale -- neither has anything to do with what the server
+  actually stored, and both would make the exact same stored value render
+  differently on different machines. Instead, the `YYYY-MM-DD` string is
+  parsed with a plain regex, split into integers, and validated by hand
+  (including a real leap-year check: `2024-02-29` is valid, `2025-02-29`
+  is not) -- the whole function is pure arithmetic, so its output can
+  never depend on `TZ` or the runtime locale (a dedicated test proves this
+  by swapping `process.env.TZ` mid-test and checking the result doesn't
+  move). This is the **only** place in the app that formats a date for
+  display in a fixed, non-raw way; every other screen
+  (`ReceiptHistory.tsx`, `ReceiptResult.tsx`) still shows `purchase_date`
+  as the server's raw string via the older `displayText()` helper and was
+  deliberately left alone by this ticket (out of scope) -- see
+  `CLAUDE.md` for the one new rule this introduces.
+- **`src/format/apartmentShortName.ts`** -- `apartmentShortName(name:
+  string | null)` returns everything after the **last** `" - "` in an
+  apartment's full name (e.g. `"Fewo JoJo - Sankt Englmar - Waldglück"` ->
+  `"Waldglück"`), trimmed. Falls back to the whole trimmed name when
+  there's no `" - "` at all, or when the segment after the last one is
+  empty (e.g. a name ending in `" - "` with nothing after it) -- never
+  silently drops to an empty string. A plain string-parsing convenience,
+  not a data model change; a dedicated `short_name` column on the
+  apartment itself would be a cleaner long-term fix, noted in the code
+  rather than built now (out of scope for this ticket).
+- **`ui/MissingValue.tsx`** -- a quieter stand-in for the plain words "Not
+  detected", which (per user feedback) draws the eye more than real data
+  in a dense table. Renders a visible `aria-hidden="true"` dash (so it's
+  never announced twice) plus `sr-only` text reading exactly "Not
+  detected", so every existing test and screen reader still finds that
+  text, just not sighted users scanning the table.
+- **`ui/ClampedText.tsx`** -- `<ClampedText text lines={1 | 2}
+  className?>` renders `text` inside a `break-words` span using Tailwind's
+  built-in `line-clamp-1`/`line-clamp-2` utilities (native since Tailwind
+  v3.3 -- no plugin, no new dependency), so a 100+ character product title
+  or a long store name is capped at a fixed number of lines instead of
+  pushing every row's height out indefinitely. The full, untruncated text
+  is always given a `title` attribute (shown on hover; omitted entirely
+  when `text` is empty, so there's never an empty tooltip) and stays in
+  the DOM for text queries and screen readers -- only the *visual*
+  rendering is clamped.
+
 ## Download PDF on the original file viewer
 
 - **`ReceiptFileViewer.tsx`** gets a second link-button, "Download PDF",
