@@ -334,17 +334,19 @@ the full trail of evidence.
 - **Table (from `sm` up) vs. cards (below it), via `useMediaQuery`** --
   same pattern as `ReceiptResult.tsx`'s items table, never both variants
   mounted at once. Columns: Date, Item, Qty, Unit price, Line total,
-  Store, and Apartment -- the last shown **only** in the "All apartments"
-  tab (a specific apartment tab already tells you the apartment, so
-  repeating it in every row would be redundant, mirroring History's own
-  apartment-badge-hidden-in-one-tab rule). Numbers are right-aligned,
-  `tabular-nums`, `whitespace-nowrap`. Amounts use the existing
-  `formatMoney` helper **with each row's own currency included** (e.g.
-  "EUR 4.99", not just "4.99") -- unlike `ReceiptResult.tsx`'s per-receipt
-  table (one currency, shown once in the column header), rows here can
-  come from receipts in different currencies, so the currency has to
-  travel with every amount. A null value in any column (including a null
-  item name) shows "Not detected", never a raw `null`/`undefined`/`NaN`.
+  Store, Apartment -- shown **only** in the "All apartments" tab (a
+  specific apartment tab already tells you the apartment, so repeating it
+  in every row would be redundant, mirroring History's own
+  apartment-badge-hidden-in-one-tab rule) -- and Status. Numbers are
+  right-aligned, `tabular-nums`, `whitespace-nowrap`. Amounts use the
+  existing `formatMoney` helper **with each row's own currency included**
+  (e.g. "EUR 4.99", not just "4.99") -- unlike `ReceiptResult.tsx`'s
+  per-receipt table (one currency, shown once in the column header), rows
+  here can come from receipts in different currencies, so the currency
+  has to travel with every amount. A missing value in any column shows
+  `MissingValue` (a dash plus hidden "Not detected") rather than the
+  plain visible words -- see the "Redesign for scanning and auditing"
+  section below for the full readability pass over this table.
 - **The item name is a real link** to `?receipt=<receipt_id>` (not a
   button, so it's keyboard- and screen-reader-navigable like any other
   link), reusing the exact same `from`-param mechanism History's rows
@@ -388,6 +390,104 @@ the full trail of evidence.
 - **Out of scope, per the ticket:** no sums/totals, no grouping or merging
   of similar item names, no reports or CSV export, no sort options, no
   new dependencies, no backend changes.
+
+## Redesigning the Items table for scanning and auditing
+
+A follow-up pass after real use (managing receipts for two holiday
+apartments, preparing a tax declaration) surfaced several readability
+problems with the first Items table: mixed/localized date formats, long
+titles wrapping to 4-5 lines, the full apartment name repeating on 3 lines
+per row, no visible review status, every item name a noisy underlined
+blue link, "Not detected" drawing more attention than real data, and
+~260px of filter UI before the first row. This section documents the
+fixes; the display helpers it leans on (`formatDisplayDate`,
+`apartmentShortName`, `MissingValue`, `ClampedText`) are documented above.
+
+- **Dates: `formatDisplayDate` only, never a raw string.** The Date
+  column (and the cards' combined "date · store" line) calls
+  `formatDisplayDate(row.purchase_date)` and renders one of three ways:
+  a valid date shows its fixed `DD.MM.YYYY` text; an unrecognized,
+  non-blank value shows the **raw stored text** next to a small warning
+  icon, with `title="This date could not be read as a valid date. Open
+  the receipt and fix it with Edit."` and a visually hidden "Date not
+  recognized" (so the problem is both seen and announced, never silently
+  swallowed -- the user still needs to *see* the odd value to recognize
+  and fix it); `null`/blank renders `MissingValue`. This replaces the
+  previous behavior of printing `purchase_date` completely raw (no
+  validation, no visual distinction for an unparseable value).
+- **Short apartment names, as a badge.** The Apartment column (and the
+  card badge row) renders `apartmentShortName(row.apartment_name)` inside
+  a small outlined pill (`border-border`, `text-ink`, `truncate`), with
+  the **full** name in its `title` (recoverable on hover) -- replacing
+  three lines of wrapped full name (e.g. "Fewo JoJo - Sankt Englmar -
+  Waldglück") with one short word ("Waldglück") per row. A `null` name
+  shows `MissingValue`.
+- **Review status, now visible.** A new Status column (table) / badge
+  (cards) renders the existing `StatusBadge` (icon + text, "Needs
+  review"/"Approved" -- never color alone, same component History and
+  the saved-receipt view already use) for every row, since review status
+  decides what goes into the tax report and was previously not shown
+  here at all. A `null`/unrecognized status value shows `MissingValue`
+  rather than guessing.
+- **Quieter item names.** The link to `?receipt=<id>` changed from
+  brand-colored + underlined (visually noisy at table scale, one in
+  every row) to **dark text with an always-visible underline**, turning
+  brand-colored only on hover/`focus-visible` -- still unambiguously a
+  link (the underline never disappears), just not shouting over the
+  data next to it. Long titles (100+ characters) are wrapped in
+  `ClampedText` (2 lines) instead of wrapping freely down the row; the
+  full title stays in `title` and in the DOM. A `null` name renders
+  `MissingValue` as the link's own content instead of empty/placeholder
+  text. The Store cell uses the same `ClampedText` treatment at 1 line.
+- **Quieter missing values.** Qty, Unit price, Line total, Store,
+  Apartment, Date and Status each render `MissingValue` instead of the
+  plain visible words "Not detected" when the value is absent --
+  `MissingValue`'s dash reads as "nothing here" at a glance instead of
+  drawing the eye like a sentence would, while the exact "Not detected"
+  text is still present (visually hidden) for anything that queries for
+  it.
+- **Fixed column widths, no wrapping on the key columns.** The table is
+  `table-fixed` with an explicit width on every column except Item
+  (`w-24` Date, `w-16` Qty, `w-24` Unit price, `w-24` Line total, `w-40`
+  Store, `w-28` Apartment, `w-28` Status), so Date and every numeric
+  column stay `whitespace-nowrap` and never wrap; Item absorbs whatever
+  width is left over. The `overflow-x-auto` wrapper from the first
+  version stays, as a safety net for narrower viewports, but the explicit
+  widths mean it shouldn't be needed at 1024px and up. Rows use `py-2`
+  (a touch more breathing room than the original `py-1`), a light
+  `border-border/40` divider, and `hover:bg-slate-50` -- no zebra
+  striping; header text is `text-ink-muted font-medium`, not bold black.
+- **A summary bar above the table**, not just the plain "N of TOTAL
+  items" status line below it (which stays, unchanged, on the left of
+  this same bar). On the right: a plain-text summary of whichever
+  filters/search are actually active, built as an ordered list of parts
+  (apartment short name, year or "No valid date", the Status option's
+  label, and `"query"` in quotes) joined with ` · `, omitting any part
+  that isn't set -- e.g. `Waldglück · 2026 · Approved · "milch"` -- plus
+  the existing "Clear filters" button, shown under the same rule as
+  before (anything besides the apartment tab is active). This reuses the
+  exact same `effectiveYear`/`effectiveStatus`/`STATUS_OPTIONS` values
+  already computed for the selects, so the summary can never drift from
+  what's actually filtering the list.
+- **Filters on one row from `md` up.** `ReceiptFilters.tsx` gained an
+  optional `extraFilter` slot (a `ReactNode`, rendered after Year/Status
+  in the same flex row) specifically so Items' search box could join
+  Year and Status on one line instead of sitting in its own row below
+  them. The row's own responsive class only switches to `md:flex-row`
+  (and the two selects only get a fixed `md:w-48`) **when `extraFilter`
+  is provided** -- `ReceiptHistory` never passes it, so its markup/classes
+  are byte-for-byte identical to before (`sm:flex-row`, `flex-1` selects),
+  confirmed by every existing `ReceiptHistory` test passing unchanged
+  after this change. Below `md`, both pages still stack their controls
+  exactly as before.
+- **Cards (below `sm`)** show the same name link (2 lines), a muted
+  "`date` · `store`" line (each side using the same `DateCell`/missing
+  handling as the table), an amount line that keeps the words "Qty",
+  "Unit price" and "Line total" as plain text next to each value (cards
+  have no column headers to label them), and a row of badges (the
+  apartment short-name pill, shown only in "All apartments", and the
+  status badge) -- still only one of table/cards ever mounted at once,
+  via the same `useMediaQuery` check as before.
 
 ## Display helpers: dates, short apartment names, clamped text, missing values
 

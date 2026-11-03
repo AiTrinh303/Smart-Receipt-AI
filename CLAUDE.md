@@ -190,7 +190,7 @@ the purchase info, and the result is displayed for review.
   **Items view (`ReceiptItems.tsx`, `ReceiptFilters.tsx`,
   `src/api/listItems.ts`):** `?view=items` lists every *purchased line
   item* (not receipt) via `GET /items`, reusing `ReceiptFilters` for the
-  identical apartment-tab/Year/Status UI — its tabs are built as plain
+  identical apartment-tab UI — its tabs are built as plain
   `{id, label: a.name}`, deliberately with **no count suffix**, since
   `GET /receipts/facets`'s counts are receipt counts, not item counts,
   and would misrepresent how many rows that tab actually has. State:
@@ -199,21 +199,64 @@ the purchase info, and the result is displayed for review.
   submits, a "Clear" button shown only once `searchInput` is non-empty)
   commits to the URL on submit, not as-you-type; `effectiveQuery()`
   (local to this file) trims and drops a `q` over 100 chars, same
-  "ignored, never sent" spirit as `effectiveYear`/`effectiveStatus`.
-  Table (`sm` and up) vs. a card list below it, via `useMediaQuery`, same
-  pattern as `ReceiptResult.tsx` — never both mounted. Columns: Date,
-  Item, Qty, Unit price, Line total, Store, and Apartment (the last only
-  in the "All apartments" tab, via `showApartmentColumn =
-  effectiveApartmentId === null`). Amounts use `formatMoney` **with**
-  `includeCurrency` (its default) rather than `false`, since — unlike
-  `ReceiptResult.tsx`'s one-currency-per-receipt table — rows here can
-  carry different currencies, so each amount must say which one (e.g.
-  "EUR 4.99"). The item name renders via a shared `ItemNameLink`
-  component as a real `<a>` to `/?receipt=<id>`
-  (`e.preventDefault()` + `navigateTo`), attaching the same `&from=`
-  mechanism as History's rows. Pagination is "Show more", not infinite
-  scroll: `GET /items` is called with `limit`/`offset`, "`count` of
-  `total` items" is a `role="status"`, and the button (shown while
+  "ignored, never sent" spirit as `effectiveYear`/`effectiveStatus`. This
+  search box is passed to `ReceiptFilters` as its `extraFilter` prop, so
+  from `md` up it sits on the same row as Year/Status (which then get a
+  fixed `md:w-48`); `ReceiptHistory` never passes `extraFilter`, so its
+  own layout (`sm:flex-row`, `flex-1` selects) is completely unchanged —
+  confirmed by every `ReceiptHistory` test passing unchanged after this
+  was added.
+  **Table (`sm` and up) vs. a card list below it**, via `useMediaQuery`,
+  same pattern as `ReceiptResult.tsx` — never both mounted. The table is
+  `table-fixed` with an explicit width on every column except Item
+  (`w-24` Date, `w-16` Qty, `w-24` Unit price, `w-24` Line total, `w-40`
+  Store, `w-28` Apartment, `w-28` Status — Item absorbs whatever's left),
+  so Date and the numeric columns stay `whitespace-nowrap` and never
+  wrap; rows are `py-2` with a light `border-border/40` divider and
+  `hover:bg-slate-50`, no zebra striping. Columns: Date, Item, Qty, Unit
+  price, Line total, Store, Apartment (only in the "All apartments" tab,
+  via `showApartmentColumn = effectiveApartmentId === null`), and
+  Status. Each cell is its own small exported component (`DateCell`,
+  `ApartmentCell`, `QuantityCell`, `MoneyCell`, `StoreCell`, `StatusCell`
+  — exported specifically so `StyleGuide.tsx` can reuse the exact same
+  rendering instead of re-deriving it) that renders `MissingValue`
+  (dash + hidden "Not detected") for a missing value instead of the
+  plain visible words. `DateCell` calls `formatDisplayDate()`: a `"date"`
+  result shows its `DD.MM.YYYY` text; a `"raw"` result shows the raw text
+  next to a small warning icon, `title="This date could not be read as a
+  valid date. Open the receipt and fix it with Edit."`, and a visually
+  hidden "Date not recognized"; `"missing"` renders `MissingValue`.
+  `ApartmentCell` renders `apartmentShortName(name)` inside a small
+  outlined pill with the full name in `title`. `StoreCell` wraps its text
+  in `ClampedText` (1 line); the item name (via `ItemNameLink`, still not
+  exported) wraps in `ClampedText` (2 lines) when non-null, else renders
+  `MissingValue` as the link's own content — the link itself is
+  **dark `text-ink` with an always-visible underline**, turning
+  `hover:text-brand`/`focus-visible:text-brand` only on
+  hover/focus (changed from the original brand-colored-always-underlined
+  style, which read as noisy at table scale). `StatusCell` renders the
+  existing `StatusBadge` for a recognized status, else `MissingValue`.
+  Amounts use `formatMoney` **with** `includeCurrency` (its default)
+  rather than `false`, since — unlike `ReceiptResult.tsx`'s
+  one-currency-per-receipt table — rows here can carry different
+  currencies, so each amount must say which one (e.g. "EUR 4.99"). The
+  item link attaches the same `&from=`
+  mechanism as History's rows (`e.preventDefault()` + `navigateTo`).
+  **Cards** (below `sm`) show the same name link (2 lines), a muted
+  "`DateCell` · store" line, an amount line that keeps "Qty"/"Unit
+  price"/"Line total" as plain text next to each value, and a badge row
+  (`ApartmentCell` in "All apartments", `StatusCell` always).
+  **A summary bar above the table**: the existing "`count` of `total`
+  items" `role="status"` stays on the left; on the right, `filterSummaryText`
+  joins whichever of apartment short name / year (or "No valid date") /
+  the `STATUS_OPTIONS` label / `"query"` are actually active with ` · `
+  (e.g. `Waldglück · 2026 · Approved · "milch"`, omitting any inactive
+  part), next to the existing "Clear filters" button (shown under the
+  same `anyFilterActive` rule as before — the apartment tab alone never
+  shows it).
+  Pagination is "Show more", not infinite
+  scroll: `GET /items` is called with `limit`/`offset`, and the button
+  (shown below the table while
   `count < total`, disabled/`loading` while a page is in flight) requests
   `offset: count` and **appends** the response's rows via
   `setItems((prev) => [...(prev ?? []), ...response.items])` — never
@@ -544,8 +587,9 @@ the purchase info, and the result is displayed for review.
   card-variant items list, the warnings panel/Edited badge/reset
   confirmation, a `BatchQueue` sample (one row per status plus rejected
   files), the batch paused (unavailable/network/stopped)/finished
-  states, and the Items view's loading/table-with-nulls/cards/both empty
-  states/error/"Show more" states, with static sample data (no network
+  states, and the Items view's loading/table (normal, unrecognized-date,
+  missing-values, long-title and long-store rows)/matching cards/both
+  empty states/error/"Show more" states, with static sample data (no network
   calls) — open it after any visual change, since jsdom cannot see
   colors or layout. Gated on `env.ts`'s `isDev` (`import.meta.env.DEV`,
   isolated into its own module specifically so tests can

@@ -3,13 +3,22 @@ import type { ReactNode } from 'react'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
+import ClampedText from './components/ui/ClampedText'
+import MissingValue from './components/ui/MissingValue'
 import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
 import BatchQueue from './batch/BatchQueue'
 import type { BatchItem, RejectedFile } from './batch/batchReducer'
 import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_ERROR_MESSAGE } from './errorMessages'
-import { formatMoney } from './components/ui/formatMoney'
+import {
+  ApartmentCell,
+  DateCell,
+  MoneyCell,
+  QuantityCell,
+  StatusCell,
+  StoreCell,
+} from './ReceiptItems'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 const ALERT_VARIANTS = ['info', 'success', 'warning', 'error'] as const
@@ -63,7 +72,7 @@ const SAMPLE_BATCH_ITEMS: BatchItem[] = [
 
 const SAMPLE_ITEM_ROWS = [
   {
-    receipt_id: 'sample-1',
+    receipt_id: 'sample-normal',
     line_index: 0,
     name: 'Milk',
     quantity: 2,
@@ -72,10 +81,24 @@ const SAMPLE_ITEM_ROWS = [
     currency: 'EUR',
     purchase_date: '2026-01-15',
     store_name: 'Corner Store',
-    apartment_name: 'Oberaudorf Bergblick',
+    apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
+    status: 'needs_review' as const,
   },
   {
-    receipt_id: 'sample-2',
+    receipt_id: 'sample-unrecognized-date',
+    line_index: 0,
+    name: 'Bread',
+    quantity: 1,
+    unit_price: 2.5,
+    line_total: 2.5,
+    currency: 'EUR',
+    purchase_date: '02.06.2026',
+    store_name: 'Bakery',
+    apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück',
+    status: 'approved' as const,
+  },
+  {
+    receipt_id: 'sample-missing',
     line_index: 0,
     name: null,
     quantity: null,
@@ -85,6 +108,33 @@ const SAMPLE_ITEM_ROWS = [
     purchase_date: null,
     store_name: null,
     apartment_name: null,
+    status: null,
+  },
+  {
+    receipt_id: 'sample-long-title',
+    line_index: 0,
+    name: 'Organic Fair-Trade Single-Origin Ethiopian Yirgacheffe Whole Bean Coffee, Medium Roast, Resealable Bag, 1kg',
+    quantity: 1,
+    unit_price: 18.9,
+    line_total: 18.9,
+    currency: 'EUR',
+    purchase_date: '2026-02-01',
+    store_name: 'Amazon EU S.a r.l., Niederlassung Deutschland',
+    apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
+    status: 'needs_review' as const,
+  },
+  {
+    receipt_id: 'sample-long-store',
+    line_index: 0,
+    name: 'Light bulbs',
+    quantity: 4,
+    unit_price: 3.2,
+    line_total: 12.8,
+    currency: 'EUR',
+    purchase_date: '2026-02-03',
+    store_name: 'Amazon EU S.a r.l., Niederlassung Deutschland',
+    apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück',
+    status: 'approved' as const,
   },
 ]
 
@@ -642,51 +692,65 @@ function StyleGuide() {
 
           {itemsViewState === 'table' && (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="w-full table-fixed text-left text-sm">
                 <caption className="sr-only">Purchased items</caption>
                 <thead>
                   <tr className="border-b border-border text-ink-muted">
-                    <th scope="col" className="whitespace-nowrap py-1 pr-2 font-medium">
+                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 font-medium">
                       Date
                     </th>
-                    <th scope="col" className="py-1 pr-2 font-medium">
+                    <th scope="col" className="py-2 pr-2 font-medium">
                       Item
                     </th>
-                    <th scope="col" className="py-1 pr-2 text-right font-medium">
+                    <th scope="col" className="w-16 py-2 pr-2 text-right font-medium">
                       Qty
                     </th>
-                    <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
+                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
                       Unit price
                     </th>
-                    <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
+                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
                       Line total
                     </th>
-                    <th scope="col" className="py-1 pr-2 font-medium">
+                    <th scope="col" className="w-40 py-2 pr-2 font-medium">
                       Store
                     </th>
-                    <th scope="col" className="py-1 font-medium">
+                    <th scope="col" className="w-28 py-2 pr-2 font-medium">
                       Apartment
+                    </th>
+                    <th scope="col" className="w-28 py-2 font-medium">
+                      Status
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {SAMPLE_ITEM_ROWS.map((row) => (
-                    <tr key={row.receipt_id} className="border-b border-border/40">
-                      <td className="whitespace-nowrap py-1 pr-2">{row.purchase_date ?? 'Not detected'}</td>
-                      <td className="py-1 pr-2">
-                        <span className="font-medium text-brand underline">{row.name ?? 'Not detected'}</span>
+                    <tr key={row.receipt_id} className="border-b border-border/40 hover:bg-slate-50">
+                      <td className="whitespace-nowrap py-2 pr-2">
+                        <DateCell value={row.purchase_date} />
                       </td>
-                      <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
-                        {row.quantity ?? 'Not detected'}
+                      <td className="py-2 pr-2">
+                        <a href="#" onClick={(e) => e.preventDefault()} className="inline-block font-medium text-ink underline hover:text-brand">
+                          {row.name ? <ClampedText text={row.name} lines={2} /> : <MissingValue />}
+                        </a>
                       </td>
-                      <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
-                        {formatMoney(row.unit_price, row.currency)}
+                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
+                        <QuantityCell value={row.quantity} />
                       </td>
-                      <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
-                        {formatMoney(row.line_total, row.currency)}
+                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
+                        <MoneyCell value={row.unit_price} currency={row.currency} />
                       </td>
-                      <td className="py-1 pr-2">{row.store_name ?? 'Not detected'}</td>
-                      <td className="py-1">{row.apartment_name ?? 'Not detected'}</td>
+                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
+                        <MoneyCell value={row.line_total} currency={row.currency} />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <StoreCell value={row.store_name} />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <ApartmentCell name={row.apartment_name} />
+                      </td>
+                      <td className="py-2">
+                        <StatusCell status={row.status} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -704,21 +768,34 @@ function StyleGuide() {
             <ul className="flex flex-col gap-2">
               {SAMPLE_ITEM_ROWS.map((row) => (
                 <li key={row.receipt_id} className="rounded-md border border-border p-3">
-                  <span className="font-medium text-brand underline">{row.name ?? 'Not detected'}</span>
-                  <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                    <dt className="text-ink-muted">Date</dt>
-                    <dd className="text-right">{row.purchase_date ?? 'Not detected'}</dd>
-                    <dt className="text-ink-muted">Qty</dt>
-                    <dd className="text-right tabular-nums">{row.quantity ?? 'Not detected'}</dd>
-                    <dt className="text-ink-muted">Unit price</dt>
-                    <dd className="text-right tabular-nums">{formatMoney(row.unit_price, row.currency)}</dd>
-                    <dt className="text-ink-muted">Line total</dt>
-                    <dd className="text-right tabular-nums">{formatMoney(row.line_total, row.currency)}</dd>
-                    <dt className="text-ink-muted">Store</dt>
-                    <dd className="text-right">{row.store_name ?? 'Not detected'}</dd>
-                    <dt className="text-ink-muted">Apartment</dt>
-                    <dd className="text-right">{row.apartment_name ?? 'Not detected'}</dd>
-                  </dl>
+                  <a href="#" onClick={(e) => e.preventDefault()} className="inline-block font-medium text-ink underline hover:text-brand">
+                    {row.name ? <ClampedText text={row.name} lines={2} /> : <MissingValue />}
+                  </a>
+                  <p className="mt-1 flex items-center gap-1 text-sm text-ink-muted">
+                    <DateCell value={row.purchase_date} /> <span aria-hidden="true">·</span>{' '}
+                    {row.store_name ? row.store_name : <MissingValue />}
+                  </p>
+                  <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <span>
+                      Qty <span className="tabular-nums"><QuantityCell value={row.quantity} /></span>
+                    </span>
+                    <span className="whitespace-nowrap">
+                      Unit price{' '}
+                      <span className="tabular-nums">
+                        <MoneyCell value={row.unit_price} currency={row.currency} />
+                      </span>
+                    </span>
+                    <span className="whitespace-nowrap">
+                      Line total{' '}
+                      <span className="tabular-nums">
+                        <MoneyCell value={row.line_total} currency={row.currency} />
+                      </span>
+                    </span>
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <ApartmentCell name={row.apartment_name} />
+                    <StatusCell status={row.status} />
+                  </div>
                 </li>
               ))}
             </ul>

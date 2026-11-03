@@ -4,10 +4,20 @@ import { ApiError } from './api/ApiError'
 import { getReceiptFacets } from './api/getReceiptFacets'
 import { listItems } from './api/listItems'
 import type { ApartmentFacet, ItemRow } from './api/types'
-import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
+import { apartmentShortName } from './format/apartmentShortName'
+import { formatDisplayDate } from './format/formatDisplayDate'
+import ReceiptFilters, {
+  NONE_FILTER_VALUE,
+  STATUS_OPTIONS,
+  effectiveStatus,
+  effectiveYear,
+} from './ReceiptFilters'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
+import ClampedText from './components/ui/ClampedText'
+import MissingValue from './components/ui/MissingValue'
 import Skeleton from './components/ui/Skeleton'
+import StatusBadge from './components/ui/StatusBadge'
 import { formatMoney } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo } from './navigation'
@@ -16,19 +26,85 @@ const PAGE_SIZE = 50
 const MAX_SEARCH_LENGTH = 100
 const LOADING_ROW_COUNT = 4
 
-const NOT_DETECTED = 'Not detected'
-
 const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
 const LIST_FAILED_MESSAGE = 'Could not load items. Please try again.'
+const UNRECOGNIZED_DATE_TITLE =
+  'This date could not be read as a valid date. Open the receipt and fix it with Edit.'
 
 const FOCUS_TAB_INDEX_SESSION_KEY = 'receiptItemsFocusTabIndex'
 
-function displayText(value: string | null | undefined): string {
-  return value === null || value === undefined || value === '' ? NOT_DETECTED : value
+export function DateCell({ value }: { value: string | null }) {
+  const display = formatDisplayDate(value)
+  if (display.kind === 'missing') {
+    return <MissingValue />
+  }
+  if (display.kind === 'raw') {
+    return (
+      <span className="inline-flex items-center gap-1" title={UNRECOGNIZED_DATE_TITLE}>
+        <WarningIcon />
+        {display.text}
+        <span className="sr-only">Date not recognized</span>
+      </span>
+    )
+  }
+  return <>{display.text}</>
 }
 
-function displayQuantity(value: number | null | undefined): string {
-  return value === null || value === undefined || Number.isNaN(value) ? NOT_DETECTED : String(value)
+function WarningIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 flex-shrink-0 text-warning" fill="none">
+      <path
+        d="M10 3.5l8 13.5H2l8-13.5z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path d="M10 8.5v3.5M10 11.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function ApartmentCell({ name }: { name: string | null }) {
+  if (!name) {
+    return <MissingValue />
+  }
+  const short = apartmentShortName(name)
+  return (
+    <span
+      title={name}
+      className="inline-flex max-w-full items-center truncate rounded-full border border-border px-2 py-0.5 text-xs font-medium text-ink"
+    >
+      {short}
+    </span>
+  )
+}
+
+export function QuantityCell({ value }: { value: number | null | undefined }) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return <MissingValue />
+  }
+  return <>{value}</>
+}
+
+export function MoneyCell({ value, currency }: { value: number | null; currency: string | null }) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return <MissingValue />
+  }
+  return <>{formatMoney(value, currency)}</>
+}
+
+export function StoreCell({ value }: { value: string | null }) {
+  if (!value) {
+    return <MissingValue />
+  }
+  return <ClampedText text={value} lines={1} />
+}
+
+export function StatusCell({ status }: { status: string | null | undefined }) {
+  if (status !== 'needs_review' && status !== 'approved') {
+    return <MissingValue />
+  }
+  return <StatusBadge status={status} />
 }
 
 interface ItemsUrlParams {
@@ -72,6 +148,10 @@ interface ItemRowLinkProps {
   onOpen: (receiptId: string) => void
 }
 
+const ITEM_LINK_CLASSES =
+  'inline-block font-medium text-ink underline hover:text-brand focus-visible:text-brand ' +
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
+
 function ItemNameLink({ row, onOpen }: ItemRowLinkProps) {
   return (
     <a
@@ -80,9 +160,9 @@ function ItemNameLink({ row, onOpen }: ItemRowLinkProps) {
         e.preventDefault()
         onOpen(row.receipt_id)
       }}
-      className="font-medium text-brand underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      className={ITEM_LINK_CLASSES}
     >
-      {displayText(row.name)}
+      {row.name ? <ClampedText text={row.name} lines={2} /> : <MissingValue />}
     </a>
   )
 }
@@ -97,24 +177,33 @@ function ItemCard({ row, showApartment, onOpen }: ItemCardProps) {
   return (
     <li className="rounded-md border border-border p-3">
       <ItemNameLink row={row} onOpen={onOpen} />
-      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        <dt className="text-ink-muted">Date</dt>
-        <dd className="text-right">{displayText(row.purchase_date)}</dd>
-        <dt className="text-ink-muted">Qty</dt>
-        <dd className="text-right tabular-nums">{displayQuantity(row.quantity)}</dd>
-        <dt className="text-ink-muted">Unit price</dt>
-        <dd className="whitespace-nowrap text-right tabular-nums">{formatMoney(row.unit_price, row.currency)}</dd>
-        <dt className="text-ink-muted">Line total</dt>
-        <dd className="whitespace-nowrap text-right tabular-nums">{formatMoney(row.line_total, row.currency)}</dd>
-        <dt className="text-ink-muted">Store</dt>
-        <dd className="text-right">{displayText(row.store_name)}</dd>
-        {showApartment && (
-          <>
-            <dt className="text-ink-muted">Apartment</dt>
-            <dd className="text-right">{displayText(row.apartment_name)}</dd>
-          </>
-        )}
-      </dl>
+      <p className="mt-1 flex items-center gap-1 text-sm text-ink-muted">
+        <DateCell value={row.purchase_date} /> <span aria-hidden="true">·</span>{' '}
+        {row.store_name ? row.store_name : <MissingValue />}
+      </p>
+      <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <span>
+          Qty <span className="tabular-nums">
+            <QuantityCell value={row.quantity} />
+          </span>
+        </span>
+        <span className="whitespace-nowrap">
+          Unit price{' '}
+          <span className="tabular-nums">
+            <MoneyCell value={row.unit_price} currency={row.currency} />
+          </span>
+        </span>
+        <span className="whitespace-nowrap">
+          Line total{' '}
+          <span className="tabular-nums">
+            <MoneyCell value={row.line_total} currency={row.currency} />
+          </span>
+        </span>
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {showApartment && <ApartmentCell name={row.apartment_name} />}
+        <StatusCell status={row.status} />
+      </div>
     </li>
   )
 }
@@ -293,6 +382,17 @@ function ReceiptItems() {
   const isUnfiltered = effectiveApartmentId === null && !anyFilterActive
   const showApartmentColumn = effectiveApartmentId === null
 
+  // "Waldglück · 2026 · Approved · "milch"" -- only the parts that are
+  // actually active, in a fixed order, for the summary bar above the table.
+  const selectedApartment = apartments?.find((a) => a.id === effectiveApartmentId) ?? null
+  const filterSummaryParts = [
+    selectedApartment ? apartmentShortName(selectedApartment.name) : null,
+    year ? (year === NONE_FILTER_VALUE ? 'No valid date' : year) : null,
+    status ? (STATUS_OPTIONS.find((option) => option.value === status)?.label ?? null) : null,
+    q ? `"${q}"` : null,
+  ].filter((part): part is string => part !== null)
+  const filterSummaryText = filterSummaryParts.length > 0 ? filterSummaryParts.join(' · ') : null
+
   if (isLoading) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -323,6 +423,32 @@ function ReceiptItems() {
     )
   }
 
+  const searchBox = (
+    <form onSubmit={handleSearchSubmit} className="flex flex-col gap-1">
+      <label htmlFor="items-search-input" className="text-sm font-medium text-ink">
+        Search items or stores
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="items-search-input"
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          maxLength={MAX_SEARCH_LENGTH}
+          className="h-11 min-h-[44px] flex-1 rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+        />
+        {searchInput && (
+          <Button type="button" variant="ghost" size="sm" onClick={handleClearSearch}>
+            Clear
+          </Button>
+        )}
+        <Button type="submit" size="sm">
+          Search
+        </Button>
+      </div>
+    </form>
+  )
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <ReceiptFilters
@@ -338,31 +464,8 @@ function ReceiptItems() {
         statusValue={status}
         onStatusChange={handleStatusChange}
         statusSelectId="items-status-select"
+        extraFilter={searchBox}
       />
-
-      <form onSubmit={handleSearchSubmit} className="flex flex-col gap-1">
-        <label htmlFor="items-search-input" className="text-sm font-medium text-ink">
-          Search items or stores
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="items-search-input"
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            maxLength={MAX_SEARCH_LENGTH}
-            className="h-11 min-h-[44px] flex-1 rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          />
-          {searchInput && (
-            <Button type="button" variant="ghost" size="sm" onClick={handleClearSearch}>
-              Clear
-            </Button>
-          )}
-          <Button type="submit" size="sm">
-            Search
-          </Button>
-        </div>
-      </form>
 
       {items && items.length === 0 ? (
         isUnfiltered ? (
@@ -386,6 +489,20 @@ function ReceiptItems() {
         )
       ) : (
         <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p role="status" className="text-sm text-ink-muted">
+              {count} of {total} items
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {filterSummaryText && <p className="text-sm text-ink-muted">{filterSummaryText}</p>}
+              {anyFilterActive && (
+                <Button variant="secondary" size="sm" onClick={handleClearFilters}>
+                  Clear filters
+                </Button>
+              )}
+            </div>
+          </div>
+
           {isSmallScreen ? (
             <ul className="flex flex-col gap-2">
               {items?.map((row) => (
@@ -399,53 +516,70 @@ function ReceiptItems() {
             </ul>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="w-full table-fixed text-left text-sm">
                 <caption className="sr-only">Purchased items</caption>
                 <thead>
                   <tr className="border-b border-border text-ink-muted">
-                    <th scope="col" className="whitespace-nowrap py-1 pr-2 font-medium">
+                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 font-medium">
                       Date
                     </th>
-                    <th scope="col" className="py-1 pr-2 font-medium">
+                    <th scope="col" className="py-2 pr-2 font-medium">
                       Item
                     </th>
-                    <th scope="col" className="py-1 pr-2 text-right font-medium">
+                    <th scope="col" className="w-16 py-2 pr-2 text-right font-medium">
                       Qty
                     </th>
-                    <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
+                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
                       Unit price
                     </th>
-                    <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
+                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
                       Line total
                     </th>
-                    <th scope="col" className="py-1 pr-2 font-medium">
+                    <th scope="col" className="w-40 py-2 pr-2 font-medium">
                       Store
                     </th>
                     {showApartmentColumn && (
-                      <th scope="col" className="py-1 font-medium">
+                      <th scope="col" className="w-28 py-2 pr-2 font-medium">
                         Apartment
                       </th>
                     )}
+                    <th scope="col" className="w-28 py-2 font-medium">
+                      Status
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {items?.map((row) => (
-                    <tr key={`${row.receipt_id}-${row.line_index}`} className="border-b border-border/40">
-                      <td className="whitespace-nowrap py-1 pr-2">{displayText(row.purchase_date)}</td>
-                      <td className="py-1 pr-2">
+                    <tr
+                      key={`${row.receipt_id}-${row.line_index}`}
+                      className="border-b border-border/40 hover:bg-slate-50"
+                    >
+                      <td className="whitespace-nowrap py-2 pr-2">
+                        <DateCell value={row.purchase_date} />
+                      </td>
+                      <td className="py-2 pr-2">
                         <ItemNameLink row={row} onOpen={openItem} />
                       </td>
-                      <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
-                        {displayQuantity(row.quantity)}
+                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
+                        <QuantityCell value={row.quantity} />
                       </td>
-                      <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
-                        {formatMoney(row.unit_price, row.currency)}
+                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
+                        <MoneyCell value={row.unit_price} currency={row.currency} />
                       </td>
-                      <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">
-                        {formatMoney(row.line_total, row.currency)}
+                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
+                        <MoneyCell value={row.line_total} currency={row.currency} />
                       </td>
-                      <td className="py-1 pr-2">{displayText(row.store_name)}</td>
-                      {showApartmentColumn && <td className="py-1">{displayText(row.apartment_name)}</td>}
+                      <td className="py-2 pr-2">
+                        <StoreCell value={row.store_name} />
+                      </td>
+                      {showApartmentColumn && (
+                        <td className="py-2 pr-2">
+                          <ApartmentCell name={row.apartment_name} />
+                        </td>
+                      )}
+                      <td className="py-2">
+                        <StatusCell status={row.status} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -454,9 +588,6 @@ function ReceiptItems() {
           )}
 
           <div className="flex flex-col gap-2">
-            <p role="status" className="text-sm text-ink-muted">
-              {count} of {total} items
-            </p>
             {loadMoreError && (
               <>
                 <Alert variant="error">{loadMoreError}</Alert>

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import type { ReceiptStatus } from './api/types'
 
 /** Shared by ReceiptHistory and the Items view: the apartment tab bar plus
@@ -48,6 +48,11 @@ interface ReceiptFiltersProps {
   statusValue: ReceiptStatus | null
   onStatusChange: (value: string) => void
   statusSelectId: string
+  /** An optional extra filter control (e.g. the Items view's search box),
+   * rendered in the same row as Year/Status from `md` up. Omitting it
+   * (ReceiptHistory's case) leaves the existing `sm:flex-row` two-select
+   * layout completely unchanged. */
+  extraFilter?: ReactNode
 }
 
 function ReceiptFilters({
@@ -63,6 +68,7 @@ function ReceiptFilters({
   statusValue,
   onStatusChange,
   statusSelectId,
+  extraFilter,
 }: ReceiptFiltersProps) {
   const tabListRef = useRef<HTMLDivElement>(null)
   const selectedTabIndex = tabs.findIndex((tab) => tab.id === selectedApartmentId)
@@ -124,8 +130,8 @@ function ReceiptFilters({
         })}
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="flex flex-1 flex-col gap-1">
+      <div className={`flex flex-col gap-3 ${extraFilter ? 'md:flex-row md:items-end' : 'sm:flex-row'}`}>
+        <div className={`flex flex-col gap-1 ${extraFilter ? 'md:w-48 md:flex-none' : 'flex-1'}`}>
           <label htmlFor={yearSelectId} className="text-sm font-medium text-ink">
             Year
           </label>
@@ -145,7 +151,7 @@ function ReceiptFilters({
           </select>
         </div>
 
-        <div className="flex flex-1 flex-col gap-1">
+        <div className={`flex flex-col gap-1 ${extraFilter ? 'md:w-48 md:flex-none' : 'flex-1'}`}>
           <label htmlFor={statusSelectId} className="text-sm font-medium text-ink">
             Status
           </label>
@@ -163,6 +169,8 @@ function ReceiptFilters({
             ))}
           </select>
         </div>
+
+        {extraFilter && <div className="flex flex-1 flex-col gap-1">{extraFilter}</div>}
       </div>
     </>
   )

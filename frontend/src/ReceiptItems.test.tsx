@@ -645,4 +645,190 @@ describe('ReceiptItems', () => {
     expect(screen.queryByText('Stale Item')).not.toBeInTheDocument()
     expect(screen.getByText('Fresh Item')).toBeInTheDocument()
   })
+
+  // --- Date, apartment, status, clamping (table redesign) -----------------
+
+  test('a valid ISO date shows as DD.MM.YYYY', async () => {
+    const row = makeRow({ purchase_date: '2026-06-02' })
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(screen.getByText('02.06.2026')).toBeInTheDocument()
+    })
+  })
+
+  test('a raw, unrecognized stored date shows the raw text with a hidden "Date not recognized" and a title', async () => {
+    const row = makeRow({ purchase_date: '02.06.2026' })
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(screen.getByText('02.06.2026')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Date not recognized')).toBeInTheDocument()
+    expect(
+      screen.getByTitle(
+        'This date could not be read as a valid date. Open the receipt and fix it with Edit.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  test('a null date shows a dash with hidden "Not detected"', async () => {
+    const row = makeRow({ purchase_date: null })
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Milk')).toBeInTheDocument()
+    })
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.getAllByText('Not detected').length).toBeGreaterThan(0)
+  })
+
+  test('the apartment cell shows the short name with the full name in its title, and is absent in a single-apartment tab', async () => {
+    const row = makeRow({ apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück' })
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+
+    const { unmount } = render(<ReceiptItems />)
+    await waitFor(() => {
+      expect(screen.getByText('Waldglück')).toBeInTheDocument()
+    })
+    expect(screen.getByTitle('Fewo JoJo - Sankt Englmar - Waldglück')).toBeInTheDocument()
+    unmount()
+
+    window.history.replaceState({}, '', `/?view=items&apartment=${OBERAUDORF.id}`)
+    render(<ReceiptItems />)
+    await waitFor(() => {
+      expect(screen.getByText('Milk')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Waldglück')).not.toBeInTheDocument()
+  })
+
+  test('the status badge text is shown per row', async () => {
+    const row = makeRow({ status: 'approved' })
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Milk')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('table')).toHaveTextContent('Approved')
+  })
+
+  test('a long item name and a long store name both carry a title with the full text', async () => {
+    const longName = 'A'.repeat(120)
+    const longStore = 'B'.repeat(80)
+    const row = makeRow({ name: longName, store_name: longStore })
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(screen.getByTitle(longName)).toBeInTheDocument()
+    })
+    expect(screen.getByTitle(longStore)).toBeInTheDocument()
+  })
+
+  test('money text is unchanged ("EUR 2.23")', async () => {
+    const row = makeRow({ unit_price: 2.23, currency: 'EUR' })
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(screen.getByText('EUR 2.23')).toBeInTheDocument()
+    })
+  })
+
+  test('the summary bar shows active filters and search, and Clear filters resets them', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      `/?view=items&apartment=${WALDGLUECK.id}&year=2026&status=approved&q=milch`,
+    )
+    const row = makeRow({ apartment_id: WALDGLUECK.id, apartment_name: WALDGLUECK.name })
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+    const user = userEvent.setup()
+
+    render(<ItemsHarness />)
+
+    await waitFor(() => {
+      expect(screen.getByText(`${WALDGLUECK.name} · 2026 · Approved · "milch"`)).toBeInTheDocument()
+    })
+    const clearButtons = screen.getAllByRole('button', { name: 'Clear filters' })
+    expect(clearButtons.length).toBeGreaterThan(0)
+
+    await user.click(clearButtons[0])
+
+    await waitFor(() => {
+      expect(window.location.search).not.toContain('year=')
+    })
+    expect(window.location.search).not.toContain('status=')
+    expect(window.location.search).not.toContain('q=')
+    expect(window.location.search).toContain(`apartment=${WALDGLUECK.id}`)
+  })
+
+  test('the item link keeps its href and the from mechanism', async () => {
+    const row = makeRow()
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Milk' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('link', { name: 'Milk' })).toHaveAttribute(
+      'href',
+      `/?receipt=${row.receipt_id}`,
+    )
+  })
+
+  test('the card variant shows "date · store", the Qty/Unit price/Line total labels, and the badges', async () => {
+    mockMatchMedia(true)
+    const row = makeRow({
+      purchase_date: '2026-06-02',
+      store_name: 'Corner Store',
+      status: 'approved',
+      apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück',
+    })
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Milk')).toBeInTheDocument()
+    })
+    const card = screen.getByText('Milk').closest('li') as HTMLElement
+    expect(card).toHaveTextContent('02.06.2026 · Corner Store')
+    expect(card).toHaveTextContent('Qty')
+    expect(card).toHaveTextContent('Unit price')
+    expect(card).toHaveTextContent('Line total')
+    expect(card).toHaveTextContent('Waldglück')
+    expect(card).toHaveTextContent('Approved')
+  })
 })

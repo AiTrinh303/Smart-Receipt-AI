@@ -94,23 +94,35 @@ Navigation is URL-based, with no router library:
   Browser back/forward works for all of these.
 - `?view=items` — a flat, searchable table of every purchased line item
   (not receipts) across all your uploads: date, item name, quantity, unit
-  price, line total, store, and — only in the "All apartments" tab —
-  apartment. It shares the exact same apartment tab bar and Year/Status
-  dropdowns as History (its tab labels show no counts — the counts
-  History uses come from receipts, not items, so they'd be misleading
-  here), plus a "Search items or stores" box (type and press Enter, or
-  click "Search"; a "Clear" button appears once you've typed something).
-  Everything lives in the URL
-  (`?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>`); changing any
-  filter or the search always starts over from the first page. Below
-  the `sm` breakpoint the table becomes a list of cards instead. Amounts
-  show their own row's currency (e.g. "EUR 4.99"), since items can come
-  from receipts in different currencies. The item name is a link that
-  opens the same receipt detail view as History's rows do, with a "Back
-  to items" link that returns you to the same tab, filters and search.
-  Below the list, "N of TOTAL items" plus a "Show more" button loads
-  further pages and appends them to what's already shown, rather than
-  replacing it; a failed "Show more" leaves what's already loaded in
+  price, line total, store, apartment (only in the "All apartments" tab),
+  and review status — built for scanning a long list and checking what's
+  ready for a tax declaration. It shares the exact same apartment tab bar
+  as History (its tab labels show no counts — the counts History uses
+  come from receipts, not items, so they'd be misleading here); from the
+  `md` breakpoint up, Year, Status and a "Search items or stores" box
+  (type and press Enter, or click "Search"; a "Clear" button appears once
+  you've typed something) sit on one row, stacking below that. Everything
+  lives in the URL (`?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>`);
+  changing any filter or the search always starts over from the first
+  page. A summary line above the table ("Waldglück · 2026 · Approved ·
+  "milch"", only the parts that are active) sits next to the row count and
+  the "Clear filters" button. Below the `sm` breakpoint the table becomes
+  a list of cards instead. Dates always show as `DD.MM.YYYY`; a date that
+  couldn't be read that way shows its original text with a warning icon
+  you can hover for an explanation, rather than being hidden or
+  reformatted. Apartment names show as a short badge (e.g. "Waldglück"
+  instead of the full "Fewo JoJo - Sankt Englmar - Waldglück") with the
+  full name available on hover. A long item title or store name is capped
+  at a couple of lines instead of pushing the row taller, with the full
+  text on hover. A missing value shows a plain dash rather than the words
+  "Not detected", so it doesn't compete for attention with real data.
+  Amounts show their own row's currency (e.g. "EUR 4.99"), since items
+  can come from receipts in different currencies. The item name is a
+  link that opens the same receipt detail view as History's rows do, with
+  a "Back to items" link that returns you to the same tab, filters and
+  search. Below the list, "N of TOTAL items" plus a "Show more" button
+  loads further pages and appends them to what's already shown, rather
+  than replacing it; a failed "Show more" leaves what's already loaded in
   place and offers its own Retry. No sums/totals, grouping, reports, CSV
   export, or sort options — just a flat, filterable, searchable list.
 
