@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { ApiError } from './api/ApiError'
 import { getReceiptFacets } from './api/getReceiptFacets'
 import { listItems } from './api/listItems'
-import type { ApartmentFacet, ItemRow } from './api/types'
+import type { ApartmentFacet, ItemRow, ItemSort } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
 import { formatDisplayDate } from './format/formatDisplayDate'
 import ReceiptFilters, {
@@ -32,6 +32,16 @@ const UNRECOGNIZED_DATE_TITLE =
   'This date could not be read as a valid date. Open the receipt and fix it with Edit.'
 
 const FOCUS_TAB_INDEX_SESSION_KEY = 'receiptItemsFocusTabIndex'
+
+const DEFAULT_ITEM_SORT: ItemSort = 'date_desc'
+const SORT_OPTIONS: { value: ItemSort; label: string }[] = [
+  { value: 'date_desc', label: 'Date (newest first)' },
+  { value: 'date_asc', label: 'Date (oldest first)' },
+  { value: 'amount_desc', label: 'Amount (high to low)' },
+  { value: 'amount_asc', label: 'Amount (low to high)' },
+  { value: 'store', label: 'Store (A-Z)' },
+]
+const ALLOWED_ITEM_SORT_VALUES = SORT_OPTIONS.map((option) => option.value)
 
 export function DateCell({ value }: { value: string | null }) {
   const display = formatDisplayDate(value)
@@ -112,6 +122,7 @@ interface ItemsUrlParams {
   year: string | null
   status: string | null
   q: string | null
+  sort: string | null
 }
 
 function readUrlParams(): ItemsUrlParams {
@@ -121,6 +132,7 @@ function readUrlParams(): ItemsUrlParams {
     year: params.get('year'),
     status: params.get('status'),
     q: params.get('q'),
+    sort: params.get('sort'),
   }
 }
 
@@ -131,6 +143,9 @@ function buildItemsSearch(params: ItemsUrlParams): string {
   if (params.year) usp.set('year', params.year)
   if (params.status) usp.set('status', params.status)
   if (params.q) usp.set('q', params.q)
+  // The default sort is omitted from the URL, same spirit as every other
+  // "unset" filter here.
+  if (params.sort && params.sort !== DEFAULT_ITEM_SORT) usp.set('sort', params.sort)
   return `?${usp.toString()}`
 }
 
@@ -141,6 +156,16 @@ function effectiveQuery(rawQuery: string | null): string | null {
   const trimmed = rawQuery.trim()
   if (trimmed === '' || trimmed.length > MAX_SEARCH_LENGTH) return null
   return trimmed
+}
+
+/** An unrecognized sort value is ignored (falls back to the default), never
+ * sent to the server and never a crash -- same spirit as an invalid
+ * year/status. */
+function effectiveSort(rawSort: string | null): ItemSort {
+  if (rawSort !== null && (ALLOWED_ITEM_SORT_VALUES as string[]).includes(rawSort)) {
+    return rawSort as ItemSort
+  }
+  return DEFAULT_ITEM_SORT
 }
 
 interface ItemRowLinkProps {
@@ -232,6 +257,7 @@ function ReceiptItems() {
   const year = effectiveYear(urlParams.year)
   const status = effectiveStatus(urlParams.status)
   const q = effectiveQuery(urlParams.q)
+  const sort = effectiveSort(urlParams.sort)
 
   useEffect(() => {
     let cancelled = false
@@ -280,6 +306,7 @@ function ReceiptItems() {
           year: year ?? undefined,
           status: status ?? undefined,
           q: q ?? undefined,
+          sort,
           limit: PAGE_SIZE,
           offset: 0,
         })
@@ -317,6 +344,7 @@ function ReceiptItems() {
         year: year ?? undefined,
         status: status ?? undefined,
         q: q ?? undefined,
+        sort,
         limit: PAGE_SIZE,
         offset: count,
       })
@@ -358,6 +386,10 @@ function ReceiptItems() {
     navigateTo(buildItemsSearch({ ...urlParams, status: value || null }))
   }
 
+  const handleSortChange = (value: string) => {
+    navigateTo(buildItemsSearch({ ...urlParams, sort: value || null }))
+  }
+
   const handleSearchSubmit = (e?: FormEvent) => {
     e?.preventDefault()
     const trimmed = searchInput.trim()
@@ -370,7 +402,9 @@ function ReceiptItems() {
   }
 
   const handleClearFilters = () => {
-    navigateTo(buildItemsSearch({ apartment: urlParams.apartment, year: null, status: null, q: null }))
+    navigateTo(
+      buildItemsSearch({ apartment: urlParams.apartment, year: null, status: null, q: null, sort: urlParams.sort }),
+    )
   }
 
   const tabs: { id: string | null; label: string }[] = [
@@ -449,6 +483,33 @@ function ReceiptItems() {
     </form>
   )
 
+  const sortSelect = (
+    <div className="flex flex-col gap-1 md:w-48">
+      <label htmlFor="items-sort-select" className="text-sm font-medium text-ink">
+        Sort by
+      </label>
+      <select
+        id="items-sort-select"
+        value={sort}
+        onChange={(e) => handleSortChange(e.target.value)}
+        className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      >
+        {SORT_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+
+  const extraFilter = (
+    <div className="flex flex-col gap-3 md:flex-row md:items-end">
+      <div className="flex-1">{searchBox}</div>
+      {sortSelect}
+    </div>
+  )
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <ReceiptFilters
@@ -464,7 +525,7 @@ function ReceiptItems() {
         statusValue={status}
         onStatusChange={handleStatusChange}
         statusSelectId="items-status-select"
-        extraFilter={searchBox}
+        extraFilter={extraFilter}
       />
 
       {items && items.length === 0 ? (

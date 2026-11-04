@@ -194,18 +194,38 @@ the purchase info, and the result is displayed for review.
   `{id, label: a.name}`, deliberately with **no count suffix**, since
   `GET /receipts/facets`'s counts are receipt counts, not item counts,
   and would misrepresent how many rows that tab actually has. State:
-  `?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>`. A search box
-  ("Search items or stores", `maxLength={100}`, a `<form>` so Enter
+  `?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>&sort=<v>`. A search
+  box ("Search items or stores", `maxLength={100}`, a `<form>` so Enter
   submits, a "Clear" button shown only once `searchInput` is non-empty)
   commits to the URL on submit, not as-you-type; `effectiveQuery()`
   (local to this file) trims and drops a `q` over 100 chars, same
-  "ignored, never sent" spirit as `effectiveYear`/`effectiveStatus`. This
-  search box is passed to `ReceiptFilters` as its `extraFilter` prop, so
-  from `md` up it sits on the same row as Year/Status (which then get a
-  fixed `md:w-48`); `ReceiptHistory` never passes `extraFilter`, so its
-  own layout (`sm:flex-row`, `flex-1` selects) is completely unchanged —
+  "ignored, never sent" spirit as `effectiveYear`/`effectiveStatus`. A
+  "Sort by" `<select>` (`SORT_OPTIONS`: "Date (newest first)" `date_desc`
+  default, "Date (oldest first)" `date_asc`, "Amount (high to low)"
+  `amount_desc`, "Amount (low to high)" `amount_asc`, "Store (A-Z)"
+  `store` — the exact five values `GET /items`'s `sort` param accepts)
+  sits next to the search box; `effectiveSort()` (local to this file,
+  same "ignored, never sent" pattern as `effectiveQuery`) maps an
+  unrecognized/missing URL value to the default. `buildItemsSearch()`
+  omits `sort` from the URL when it equals the default, same spirit as
+  every other "unset means default" param here, but `listItems()` is
+  always called with an explicit `sort` (so the request sent and the
+  backend's own default agree regardless of what the address bar shows).
+  Both are combined into a single `extraFilter` element (search box
+  `flex-1`, sort `md:w-48`, row switches to `md:flex-row` from `md` up)
+  passed to `ReceiptFilters` as its `extraFilter` prop, so from `md` up
+  they sit on the same row as Year/Status (which then get a fixed
+  `md:w-48`); `ReceiptHistory` never passes `extraFilter`, so its own
+  layout (`sm:flex-row`, `flex-1` selects) is completely unchanged —
   confirmed by every `ReceiptHistory` test passing unchanged after this
-  was added.
+  was added. Changing the sort, like every other filter/search change
+  here, fully remounts the page via `navigateTo()`, so paging resets to
+  `offset=0` for free — no separate "reset paging" state exists.
+  "Clear filters" leaves the chosen sort untouched (sort is an ordering
+  preference, not a filter: it's excluded from `anyFilterActive` and the
+  filter-summary text), and the existing `requestIdRef` stale-response
+  guard and `limit`/`offset` "Show more" pagination are unchanged, with
+  `sort` simply threaded through to both `listItems()` call sites.
   **Table (`sm` and up) vs. a card list below it**, via `useMediaQuery`,
   same pattern as `ReceiptResult.tsx` — never both mounted. The table is
   `table-fixed` with an explicit width on every column except Item
@@ -589,7 +609,10 @@ the purchase info, and the result is displayed for review.
   files), the batch paused (unavailable/network/stopped)/finished
   states, and the Items view's loading/table (normal, unrecognized-date,
   missing-values, long-title and long-store rows)/matching cards/both
-  empty states/error/"Show more" states, with static sample data (no network
+  empty states/error/"Show more" states (plus a standalone "Sort by"
+  select sample, not wired to any of the above — a static visual check of
+  the control itself, same spirit as the other isolated samples on this
+  page), with static sample data (no network
   calls) — open it after any visual change, since jsdom cannot see
   colors or layout. Gated on `env.ts`'s `isDev` (`import.meta.env.DEV`,
   isolated into its own module specifically so tests can

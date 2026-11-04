@@ -153,6 +153,7 @@ function StyleGuide() {
   const [itemsViewState, setItemsViewState] = useState<
     'loading' | 'table' | 'cards' | 'empty-unfiltered' | 'empty-filtered' | 'error'
   >('table')
+  const [itemsSortSample, setItemsSortSample] = useState('date_desc')
 
   return (
     <div className="flex flex-col gap-10 pb-16">
@@ -656,6 +657,24 @@ function StyleGuide() {
           <Button variant="secondary" size="sm" onClick={() => setItemsViewState('error')}>
             Show error
           </Button>
+        </div>
+
+        <div className="flex flex-col gap-1 sm:w-48">
+          <label htmlFor="styleguide-items-sort" className="text-sm font-medium text-ink">
+            Sort by
+          </label>
+          <select
+            id="styleguide-items-sort"
+            value={itemsSortSample}
+            onChange={(e) => setItemsSortSample(e.target.value)}
+            className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          >
+            <option value="date_desc">Date (newest first)</option>
+            <option value="date_asc">Date (oldest first)</option>
+            <option value="amount_desc">Amount (high to low)</option>
+            <option value="amount_asc">Amount (low to high)</option>
+            <option value="store">Store (A-Z)</option>
+          </select>
         </div>
 
         <Card className="flex flex-col gap-4">

@@ -388,8 +388,9 @@ the full trail of evidence.
   a "Clear filters" button (resets year/status/search, keeps the selected
   apartment tab, same spirit as History's own `Clear filters`) otherwise.
 - **Out of scope, per the ticket:** no sums/totals, no grouping or merging
-  of similar item names, no reports or CSV export, no sort options, no
-  new dependencies, no backend changes.
+  of similar item names, no reports or CSV export, no sort options (added
+  later -- see "Sorting the Items view" below), no new dependencies, no
+  backend changes.
 
 ## Redesigning the Items table for scanning and auditing
 
@@ -488,6 +489,45 @@ fixes; the display helpers it leans on (`formatDisplayDate`,
   apartment short-name pill, shown only in "All apartments", and the
   status badge) -- still only one of table/cards ever mounted at once,
   via the same `useMediaQuery` check as before.
+
+## Sorting the Items view
+
+`GET /items` gained a `sort` parameter (see backend docs/README for the
+five allowed values and their tie-breakers); the frontend surfaces this as
+a "Sort by" `<select>` with a visible label, joining the search box in the
+`extraFilter` slot (`ReceiptFilters.tsx`) so Items' filter row reads
+Year / Status / Search / Sort from `md` up -- `ReceiptHistory` still never
+passes `extraFilter`, so its own layout is untouched.
+
+- **Options, in order:** "Date (newest first)" (`date_desc`, the default),
+  "Date (oldest first)" (`date_asc`), "Amount (high to low)"
+  (`amount_desc`), "Amount (low to high)" (`amount_asc`), "Store (A-Z)"
+  (`store`) -- the exact five values `backend/api/routes.py` accepts.
+- **URL param `sort`.** The default (`date_desc`) is omitted from the URL
+  entirely, same "unset means default" spirit as every other filter here;
+  any other recognized value is written as `&sort=<value>`. An
+  unrecognized value in the URL (typed by hand, or left over from a future
+  rollback) is ignored -- treated exactly as if `sort` weren't present at
+  all, never sent to the backend and never a crash -- via a local
+  `effectiveSort()` validator mirroring `effectiveYear`/`effectiveStatus`'s
+  "ignored, not an error" pattern. `listItems()` is still always called
+  with an explicit `sort` (defaulting to `date_desc` when nothing valid is
+  in the URL), so the API call and the backend's own default agree whether
+  or not the param appears in the address bar.
+- **Changing the sort resets paging** for free: like every other
+  filter/search change here, picking a new sort calls `navigateTo()` with
+  a new URL, which fully remounts `ReceiptItems` (`App.tsx`'s
+  `key={locationKey}`) -- there is no separate "reset offset" step to get
+  out of sync, and `GET /items` is always re-requested from `offset=0`.
+- **Stale-response protection and the "Show more" flow are both
+  unchanged**: the same `requestIdRef` guard and the same
+  `limit`/`offset` pagination apply exactly as before, with `sort` simply
+  threaded through as one more parameter to both `listItems()` call sites
+  (the main load effect and `handleShowMore`).
+- **Every existing string is unchanged** -- "Clear filters" still resets
+  only year/status/search, leaving both the apartment tab and the chosen
+  sort alone (sort is an ordering preference, not a filter, so it isn't
+  part of `anyFilterActive` or the filter-summary text either).
 
 ## Display helpers: dates, short apartment names, clamped text, missing values
 

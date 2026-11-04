@@ -102,9 +102,13 @@ Navigation is URL-based, with no router library:
   `md` breakpoint up, Year, Status and a "Search items or stores" box
   (type and press Enter, or click "Search"; a "Clear" button appears once
   you've typed something) sit on one row, stacking below that. Everything
-  lives in the URL (`?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>`);
-  changing any filter or the search always starts over from the first
-  page. A summary line above the table ("Waldglück · 2026 · Approved ·
+  lives in the URL (`?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>&sort=<v>`);
+  changing any filter, the search, or the sort always starts over from the
+  first page. A "Sort by" select (Date newest/oldest first, Amount high/low,
+  Store A-Z — same five values and defaults as `GET /items`'s `sort`
+  parameter below) sits next to the search box; the default (newest first)
+  is left out of the URL, and an unrecognized `sort` value in the URL is
+  ignored. A summary line above the table ("Waldglück · 2026 · Approved ·
   "milch"", only the parts that are active) sits next to the row count and
   the "Clear filters" button. Below the `sm` breakpoint the table becomes
   a list of cards instead. Dates always show as `DD.MM.YYYY`; a date that
@@ -123,8 +127,8 @@ Navigation is URL-based, with no router library:
   search. Below the list, "N of TOTAL items" plus a "Show more" button
   loads further pages and appends them to what's already shown, rather
   than replacing it; a failed "Show more" leaves what's already loaded in
-  place and offers its own Retry. No sums/totals, grouping, reports, CSV
-  export, or sort options — just a flat, filterable, searchable list.
+  place and offers its own Retry. No sums/totals, grouping, or reports/CSV
+  export — just a flat, filterable, searchable, sortable list.
 
 On any saved-receipt view (both right after extraction and when reopening
 `?receipt=<id>`), an "Apartment" card above the receipt data shows the same

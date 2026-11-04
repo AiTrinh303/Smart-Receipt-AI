@@ -72,6 +72,8 @@ export interface ReceiptFacets {
   has_undated: boolean
 }
 
+export type ItemSort = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'store'
+
 export interface ItemRow {
   receipt_id: string
   line_index: number

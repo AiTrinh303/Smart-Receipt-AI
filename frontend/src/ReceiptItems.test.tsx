@@ -806,6 +806,133 @@ describe('ReceiptItems', () => {
     )
   })
 
+  // --- Sorting --------------------------------------------------------------
+
+  test('the default sort is not sent and not shown in the URL', async () => {
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        items: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 }))
+        },
+      }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(calls.length).toBeGreaterThan(0)
+    })
+    expect(calls[0]).toContain('sort=date_desc')
+    expect(window.location.search).not.toContain('sort=')
+    expect(screen.getByLabelText('Sort by')).toHaveValue('date_desc')
+  })
+
+  test('choosing a sort sends it, updates the URL, and resets paging', async () => {
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        items: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 5 }))
+        },
+      }),
+    )
+    const user = userEvent.setup()
+    render(<ItemsHarness />)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Sort by')).toBeInTheDocument()
+    })
+
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'Amount (high to low)')
+
+    await waitFor(() => expect(window.location.search).toContain('sort=amount_desc'))
+    const lastCall = calls[calls.length - 1]
+    expect(lastCall).toContain('sort=amount_desc')
+    expect(lastCall).toContain('offset=0')
+  })
+
+  test('an invalid sort value in the URL is ignored, falling back to the default', async () => {
+    window.history.replaceState({}, '', '/?view=items&sort=not-a-real-sort')
+    let capturedUrl = ''
+    fetchSpy.mockImplementation(
+      routeFetch({
+        items: (urlString) => {
+          capturedUrl = urlString
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 }))
+        },
+      }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(capturedUrl).not.toBe('')
+    })
+    expect(capturedUrl).not.toContain('sort=not-a-real-sort')
+    expect(capturedUrl).toContain('sort=date_desc')
+    expect(screen.getByLabelText('Sort by')).toHaveValue('date_desc')
+  })
+
+  test('a non-default sort in the URL loads on first render and sends it', async () => {
+    window.history.replaceState({}, '', '/?view=items&sort=store')
+    let capturedUrl = ''
+    fetchSpy.mockImplementation(
+      routeFetch({
+        items: (urlString) => {
+          capturedUrl = urlString
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 }))
+        },
+      }),
+    )
+
+    render(<ReceiptItems />)
+
+    await waitFor(() => {
+      expect(capturedUrl).toContain('sort=store')
+    })
+    expect(screen.getByLabelText('Sort by')).toHaveValue('store')
+  })
+
+  test('Back/Forward restores the previously selected sort', async () => {
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        items: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 }))
+        },
+      }),
+    )
+    const user = userEvent.setup()
+    render(<ItemsHarness />)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Sort by')).toBeInTheDocument()
+    })
+
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'Store (A-Z)')
+    await waitFor(() => expect(window.location.search).toContain('sort=store'))
+
+    // Simulate the browser's Back button: pop to the prior history entry and
+    // dispatch the real popstate event ItemsHarness listens for.
+    window.history.back()
+    await waitFor(() => {
+      expect(window.location.search).not.toContain('sort=')
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('Sort by')).toHaveValue('date_desc')
+    })
+
+    window.history.forward()
+    await waitFor(() => {
+      expect(window.location.search).toContain('sort=store')
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('Sort by')).toHaveValue('store')
+    })
+  })
+
   test('the card variant shows "date · store", the Qty/Unit price/Line total labels, and the badges', async () => {
     mockMatchMedia(true)
     const row = makeRow({
