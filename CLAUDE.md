@@ -646,9 +646,28 @@ the purchase info, and the result is displayed for review.
     extension -> fixed media type map used by the file-serving endpoint, so
     `Content-Type` is never taken from client input — plus two more pure
     functions: `normalize_purchase_date(raw)` extracts a leading ISO date
-    (`"2025-06-26 11"`/`"2025-06-26T11:04:00"` -> `"2025-06-26"`) and
+    (`"2025-06-26 11"`/`"2025-06-26T11:04:00"` -> `"2025-06-26"`, via
+    `_LEADING_ISO_DATE_PATTERN`) **or** a leading dotted German date,
+    `D.M.YYYY`/`DD.MM.YYYY` (`"2.6.2026"`/`"02.06.2026"`/
+    `"02.06.2026 11:04"` -> `"2026-06-02"`, via
+    `_LEADING_DOTTED_DATE_PATTERN` — 1-2 digit day/month, exactly 4-digit
+    year, dots only, optionally one trailing space/comma + arbitrary
+    extra text), and
     returns `None` for anything else (never guesses day/month order for
-    `"26/06/2025"`, never raises); `check_receipt(data, today)` — `today`
+    `"26/06/2025"`, and deliberately never recognizes slash dates,
+    2-digit years, or month names — all explicitly out of scope). Both
+    shapes are validated against a real calendar by constructing a
+    `date(year, month, day)` and catching the `ValueError` it raises for
+    an out-of-range day/month (e.g. `"31.04.2026"` or a non-leap-year
+    `"29.02.2025"`) — never a hand-rolled day-count table, and never
+    raises itself. Since every call site that normalizes a date for
+    display/filtering/sorting (`get_receipt`, the year filter,
+    `has_undated`, `flatten_line_items`, and — indirectly, since it's
+    always handed an already-normalized value — `check_receipt`'s
+    `DATE_NOT_STANDARD` check) funnels through this one function, teaching
+    it the dotted format was the *only* code change needed to make a
+    legacy row whose stored text is a dotted date behave as fully dated
+    everywhere, with its stored row never rewritten; `check_receipt(data, today)` — `today`
     is an injected parameter so callers/tests are deterministic — returns
     `MISSING_STORE`/`MISSING_DATE`/`DATE_NOT_STANDARD`/`FUTURE_DATE`
     (1-day grace)/`MISSING_TOTAL`/`TOTAL_MISMATCH` (skipped unless every
@@ -665,7 +684,31 @@ the purchase info, and the result is displayed for review.
     appear, via `str.casefold()` (not `.lower()`), in the row's item name
     or store name; a null item name can still match through the store
     name; an empty `q` matches every row, though `api/routes.py` simply
-    skips calling this at all for a blank query),
+    skips calling this at all for a blank query); `sort_line_items(rows,
+    sort)` — pure, no I/O — `DEFAULT_ITEM_SORT = "date_desc"`,
+    `ALLOWED_ITEM_SORT_VALUES = ("date_desc", "date_asc", "amount_desc",
+    "amount_asc", "store")`. Expects `rows` already in the tie-break
+    order (receipt `created_at` DESC, `receipt_id` ASC, `line_index`
+    ASC — the order `list_matching_receipts`/`flatten_line_items`
+    naturally produce) and relies on Python's sort being **stable**:
+    sorting by just the primary criterion reproduces that full tie-break
+    order for free among rows sharing the same primary key, with no need
+    to re-state it as a compound key. `"store"` sorts by
+    `store_name.casefold()`, a `None` name always last. `"amount_desc"`/
+    `"amount_asc"` sort by `line_total` as `Decimal(str(value))` — never
+    a raw float — a `None` `line_total` always last in both directions
+    (mixed currencies are compared by number only — a deliberate
+    simplification, no conversion). `"date_desc"`/`"date_asc"` (default)
+    sort by `normalize_purchase_date(row.purchase_date)` — safe to call
+    again even though `flatten_line_items` already normalized the row's
+    `purchase_date` for display, since re-normalizing an already-ISO date
+    is a no-op and re-normalizing an already-unparseable raw string still
+    correctly returns `None` — a row with no valid date always sorts
+    last, in both directions (every "last" case is implemented by
+    partitioning into two lists — e.g. `with_amount`/`without_amount` —
+    sorting only the first stably, then concatenating, rather than
+    encoding "missing" into the sort key itself, which would risk
+    putting it first when `reverse=True`).
     `ports.py` (`ReceiptExtractor` Protocol + `ExtractionError` /
     `ExtractionUnavailableError`, `ReceiptRepository` Protocol —
     `save_upload`/`get_upload`/`save_receipt`/`get_receipt`/
@@ -875,7 +918,10 @@ the purchase info, and the result is displayed for review.
     "unrecognized parameter is ignored" behavior for a stray `category_id`)
     plus `q`
     (stripped; `422` if longer than `MAX_ITEM_SEARCH_LENGTH` = 100 *after*
-    stripping; a blank result is treated as "no search," not an error) and
+    stripping; a blank result is treated as "no search," not an error),
+    `sort` (`Query(default=DEFAULT_ITEM_SORT)`, 422 if not in
+    `ALLOWED_ITEM_SORT_VALUES` — checked right after the shared filter
+    validation, before the `q` length check), and
     `limit`/`offset` (`Query(default=100, ge=1, le=500)`/
     `Query(default=0, ge=0)`, else `422`). Calls
     `repository.list_matching_receipts(**filters)` (unlimited, already
@@ -883,13 +929,26 @@ the purchase info, and the result is displayed for review.
     documented in a code comment as fine at this app's scale but not
     forever — flattens every matching receipt via
     `domain.rules.flatten_line_items`, filters by `q` via
-    `domain.rules.matches_query` when `q` isn't blank, and slices
+    `domain.rules.matches_query` when `q` isn't blank, sorts via
+    `domain.rules.sort_line_items(rows, sort)` (always — even for the
+    default — so the explicit `sort=date_desc` and no `sort` param at all
+    produce byte-identical responses), and *then* slices
     `rows[offset : offset + limit]`; `total` is `len(rows)` *before* that
-    slice, `count` is `len(page)` after it. Row order (receipt
-    `created_at` DESC/`receipt_id` ASC, then `line_index` ASC) falls out
+    slice, `count` is `len(page)` after it. Without a `sort` param, row
+    order (receipt
+    `created_at` DESC/`receipt_id` ASC, then `line_index` ASC) used to
+    fall out
     entirely from `list_matching_receipts`'s own order plus
-    `flatten_line_items` enumerating each receipt's `items` in place — no
-    separate sort needed. `PUT /receipts/{receipt_id}`
+    `flatten_line_items` enumerating each receipt's `items` in place; that
+    tie-break order is now the *fallback* within `sort_line_items` (see
+    `domain/rules.py` above) rather than the only order, since
+    `date_desc` is now the explicit default sort rather than "no
+    sorting at all" — a deliberate, intentional change to the previously
+    implicit default order (the pre-existing ordering tests in
+    `tests/test_items.py` needed no changes, since every row in them
+    shares the same `purchase_date`, so `date_desc`'s stable tie-break
+    reproduces the exact order those tests already asserted; new tests
+    cover every sort mode explicitly). `PUT /receipts/{receipt_id}`
     — corrects the editable fields, `FastAPI`-validates the body against
     `ReceiptUpdate` (auto-`422`), 404 if the receipt doesn't exist (PUT
     never creates one), 200 with the same shape/types as GET,

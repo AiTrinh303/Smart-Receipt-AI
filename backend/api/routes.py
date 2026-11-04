@@ -26,6 +26,8 @@ from domain.ports import (
     ReceiptRepository,
 )
 from domain.rules import (
+    ALLOWED_ITEM_SORT_VALUES,
+    DEFAULT_ITEM_SORT,
     EmptyFileError,
     FileTooLargeError,
     UnsupportedFileTypeError,
@@ -35,6 +37,7 @@ from domain.rules import (
     matches_query,
     media_type_for_extension,
     normalize_purchase_date,
+    sort_line_items,
     validate_upload,
 )
 
@@ -201,11 +204,18 @@ def list_items(
     year: str | None = Query(default=None),
     status: str | None = Query(default=None),
     q: str | None = Query(default=None),
+    sort: str = Query(default=DEFAULT_ITEM_SORT),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     repository: ReceiptRepository = Depends(get_repository),
 ):
     filters = _validate_receipt_filters(repository, apartment_id, year, status)
+
+    if sort not in ALLOWED_ITEM_SORT_VALUES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"sort must be one of: {', '.join(ALLOWED_ITEM_SORT_VALUES)}.",
+        )
 
     q_value: str | None = None
     if q is not None:
@@ -218,16 +228,17 @@ def list_items(
 
     receipts = repository.list_matching_receipts(**filters)
 
-    # Flattening, the q filter, and the limit/offset slice all happen here
-    # in Python, after the adapter has already applied the apartment/year/
-    # status filters in SQL (and the date filter in Python) and
-    # returned the matching receipts. This is fine at this app's scale --
-    # thousands of rows, not millions -- but would need a dedicated
+    # Flattening, the q filter, the sort, and the limit/offset slice all
+    # happen here in Python, after the adapter has already applied the
+    # apartment/year/status filters in SQL (and the date filter in Python)
+    # and returned the matching receipts. This is fine at this app's scale
+    # -- thousands of rows, not millions -- but would need a dedicated
     # line_items table (with its own indexed search column) if that ever
     # stops being true.
     rows = [row for receipt in receipts for row in flatten_line_items(receipt)]
     if q_value is not None:
         rows = [row for row in rows if matches_query(row, q_value)]
+    rows = sort_line_items(rows, sort)
 
     total = len(rows)
     page = rows[offset : offset + limit]

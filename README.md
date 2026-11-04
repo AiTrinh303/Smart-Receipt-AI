@@ -318,12 +318,25 @@ project does not install any cron job or systemd unit):
   to OpenAI for processing when this endpoint is called. **Date
   normalization:** a `purchase_date` the AI prints with a stray time suffix
   (e.g. `"2025-06-26 11"` or `"2025-06-26T11:04:00"`) is normalized to the
-  plain ISO date (`"2025-06-26"`) before saving; a date that doesn't start
-  with a valid ISO date (e.g. `"26/06/2025"`, free text — day/month order is
-  never guessed) is kept exactly as the AI returned it, so it can be seen
+  plain ISO date (`"2025-06-26"`) before saving. A dotted German date,
+  `D.M.YYYY` or `DD.MM.YYYY` (e.g. `"2.6.2026"` or `"02.06.2026"`,
+  optionally followed by a stray time the same way, e.g.
+  `"02.06.2026 11:04"`), is also recognized and normalized the same way
+  (`"2026-06-02"`) — validated against a real calendar, so `"31.04.2026"`
+  (April has 30 days) or `"29.02.2025"` (not a leap year) are rejected, not
+  guessed. Slash dates, 2-digit years, and month names are **not**
+  recognized (day/month order is never guessed for an ambiguous format).
+  A date that doesn't start with one of these two recognized shapes (e.g.
+  `"26/06/2025"`, free text) is kept exactly as the AI returned it, so it
+  can be seen
   and corrected, and is flagged by a `DATE_NOT_STANDARD` warning (below).
   The original AI output in `ai_result_json` always keeps the raw,
-  unnormalized value. Error responses:
+  unnormalized value. A receipt saved before dotted-date recognition
+  existed, whose stored text is a dotted date, is **not** rewritten —
+  it's simply recognized as valid from now on wherever the date is read
+  back for display, filtering, or sorting (see `GET /receipts/{id}`,
+  `GET /items`, the `year` filter, and `has_undated` below), without
+  touching the stored row. Error responses:
   - `503` — the AI *service* isn't usable right now: `OPENAI_API_KEY` is
     missing, empty, or still the `.env.example` placeholder
     (`your-key-here`) — none of these ever reach the provider — or the
@@ -509,13 +522,25 @@ All amount math uses `Decimal(str(value))`, never raw floats.
     ignored, not an error. Split into words; **every** word must appear,
     case-insensitively, in the item's name or its receipt's store name —
     so a row with no item name can still match through the store name.
+  - `sort` — one of `date_desc` (default), `date_asc`, `amount_desc`,
+    `amount_asc`, `store`; anything else is `422`. `date_*` sorts by the
+    row's normalized purchase date; `amount_*` sorts by `line_total`
+    (compared as an exact decimal, never a float — mixed currencies are
+    compared by number only, with no conversion); `store` sorts the store
+    name case-insensitively, A–Z. In every mode, rows with no usable value
+    for that mode (no valid date, no `line_total`, no store name) sort
+    **last**, in both directions for `date_*`/`amount_*`. Ties (e.g. two
+    rows with the same date) break by receipt `created_at` (newest first),
+    then `receipt_id`, then `line_index` — the same order the rows already
+    arrive in before sorting. Sorting happens before `limit`/`offset`.
   - `limit` (default 100, 1–500) and `offset` (default 0, ≥ 0) — an
     out-of-range value is `422`.
   An empty result is `200` with `items: []`, `count: 0`, `total: 0`, never
   `404`. A receipt that was only uploaded, never extracted, contributes no
   rows, same as `GET /receipts`. **Implementation note:** filtering by
   apartment/year/status happens the same way `GET /receipts`
-  does; flattening each matching receipt's items, the `q` search, and the
+  does; flattening each matching receipt's items, the `q` search, the
+  `sort`, and the
   `limit`/`offset` slice all then happen in Python, after fetching every
   matching receipt — fine at this app's scale (thousands of rows, not
   millions), but would need a dedicated indexed table if that ever

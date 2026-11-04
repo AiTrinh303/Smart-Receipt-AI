@@ -74,6 +74,17 @@ def mk_item(name="Item", quantity=1.0, unit_price=10.0, line_total=10.0):
         ("", None),
         (None, None),
         ("2025-06-26 11 22", None),
+        # Dotted German dates (D.M.YYYY / DD.MM.YYYY), added for Issue
+        # "recognize dotted German dates":
+        ("02.06.2026", "2026-06-02"),
+        ("2.6.2026", "2026-06-02"),
+        ("29.02.2024", "2024-02-29"),  # 2024 is a leap year
+        ("02.06.2026 11:04", "2026-06-02"),  # one trailing token, same as ISO
+        ("29.02.2025", None),  # 2025 is not a leap year
+        ("31.04.2026", None),  # April has 30 days
+        ("02/06/2026", None),  # slash dates stay out of scope
+        ("02.06.26", None),  # 2-digit years stay out of scope
+        ("2026.06.02", None),  # year-first dotted order is not recognized
     ],
 )
 def test_normalize_purchase_date(raw, expected):
@@ -84,7 +95,7 @@ def test_normalize_purchase_date(raw, expected):
 
 
 def test_normalize_purchase_date_never_raises_on_garbage():
-    for raw in ["\n", "2025", "2025-06", "2025-06-26-26", "   ", "2025/06/26"]:
+    for raw in ["\n", "2025", "2025-06", "2025-06-26-26", "   ", "2025/06/26", "99.99.9999", "0.0.2026"]:
         normalize_purchase_date(raw)  # must not raise
 
 

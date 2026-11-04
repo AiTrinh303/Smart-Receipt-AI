@@ -57,29 +57,51 @@ def validate_upload(extension: str, content_type: str | None, size_bytes: int) -
 # looks like more than one stray value, not a single mangled timestamp.
 _LEADING_ISO_DATE_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2})([ T,][^\s]*)?$")
 
+# A dotted German date, D.M.YYYY or DD.MM.YYYY (1-2 digit day/month, exactly
+# 4-digit year, dots only -- a slash or a 2-digit year never matches this),
+# optionally followed by one separator (space or comma) and arbitrary extra
+# text, e.g. "02.06.2026 11:04". Deliberately narrower than a general
+# day-first parser: no slash dates, no 2-digit years, no month names (all
+# explicitly out of scope).
+_LEADING_DOTTED_DATE_PATTERN = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ ,].*)?$")
+
 TOTAL_TOLERANCE = Decimal("0.05")
 FUTURE_DATE_GRACE_DAYS = 1
 
 
 def normalize_purchase_date(raw: str | None) -> str | None:
-    """Extracts a valid ISO date (YYYY-MM-DD) from the start of a raw
-    AI-extracted date string. Never guesses day/month order for an
-    ambiguous format like "26/06/2025" -- that, and any other text that
-    doesn't start with an ISO date (or has more than one trailing stray
-    token), returns None rather than a guess. Never raises."""
+    """Extracts a valid date from the start of a raw AI-extracted date
+    string, in one of two accepted shapes: an ISO date (YYYY-MM-DD) or a
+    dotted German date (D.M.YYYY / DD.MM.YYYY) -- see the two patterns
+    above. Never guesses day/month order for an ambiguous format like
+    "26/06/2025" -- that, slash dates, 2-digit years, month names, and any
+    other text that doesn't start with one of the two accepted shapes (or
+    has more than one trailing stray token, for the ISO shape) all return
+    None rather than a guess. Both shapes are validated against a real
+    calendar (leap years included, via the `date` constructor itself, which
+    raises on an out-of-range day/month rather than silently rolling over).
+    Never raises."""
     if raw is None:
         return None
 
-    match = _LEADING_ISO_DATE_PATTERN.match(raw)
-    if not match:
-        return None
+    iso_match = _LEADING_ISO_DATE_PATTERN.match(raw)
+    if iso_match:
+        candidate = iso_match.group(1)
+        try:
+            date.fromisoformat(candidate)
+        except ValueError:
+            return None
+        return candidate
 
-    candidate = match.group(1)
-    try:
-        date.fromisoformat(candidate)
-    except ValueError:
-        return None
-    return candidate
+    dotted_match = _LEADING_DOTTED_DATE_PATTERN.match(raw)
+    if dotted_match:
+        day, month, year = (int(group) for group in dotted_match.groups())
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            return None
+
+    return None
 
 
 def _to_decimal(value: float) -> Decimal:
@@ -349,3 +371,45 @@ def matches_query(row: LineItemRow, q: str) -> bool:
         return True
     haystack = " ".join(part for part in (row.name, row.store_name) if part).casefold()
     return all(word.casefold() in haystack for word in words)
+
+
+DEFAULT_ITEM_SORT = "date_desc"
+ALLOWED_ITEM_SORT_VALUES = ("date_desc", "date_asc", "amount_desc", "amount_asc", "store")
+
+
+def sort_line_items(rows: list[LineItemRow], sort: str) -> list[LineItemRow]:
+    """Sorts flattened GET /items rows. `rows` is expected already in the
+    tie-break order (receipt created_at DESC, receipt_id ASC, line_index
+    ASC -- the order list_matching_receipts/flatten_line_items naturally
+    produce); Python's sort is stable, so sorting by just the primary
+    criterion below reproduces that full tie-break order for free among
+    rows that share the same primary key, without re-stating it.
+
+    - "date_desc"/"date_asc": by the row's normalized purchase date;
+      receipts without a valid date always sort LAST, in both directions
+      (never interleaved by falling back to e.g. the raw text).
+    - "amount_desc"/"amount_asc": by `line_total`, compared as
+      `Decimal(str(value))` -- never a raw float; a null `line_total`
+      always sorts last, in both directions. Mixed currencies are
+      compared by number only (a deliberate simplification -- no currency
+      conversion here).
+    - "store": store name, `casefold()`-ed, A-Z; a null store name sorts
+      last.
+    """
+    if sort == "store":
+        undated = [row for row in rows if row.store_name is None]
+        named = [row for row in rows if row.store_name is not None]
+        named.sort(key=lambda row: row.store_name.casefold())
+        return named + undated
+
+    if sort in ("amount_desc", "amount_asc"):
+        with_amount = [row for row in rows if row.line_total is not None]
+        without_amount = [row for row in rows if row.line_total is None]
+        with_amount.sort(key=lambda row: Decimal(str(row.line_total)), reverse=(sort == "amount_desc"))
+        return with_amount + without_amount
+
+    # "date_desc" (default) / "date_asc"
+    dated = [row for row in rows if normalize_purchase_date(row.purchase_date) is not None]
+    undated = [row for row in rows if normalize_purchase_date(row.purchase_date) is None]
+    dated.sort(key=lambda row: normalize_purchase_date(row.purchase_date), reverse=(sort == "date_desc"))
+    return dated + undated

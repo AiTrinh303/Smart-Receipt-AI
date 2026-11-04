@@ -229,6 +229,116 @@ def test_q_single_word_matches_item_name(temp_repository):
     assert item_names(response) == ["Whole Milk"]
 
 
+# --- Sorting ---------------------------------------------------------------
+
+
+@pytest.fixture
+def sort_seed(temp_repository):
+    import time
+
+    ids = {}
+    # Seeded in an order that differs from every sort criterion below, so a
+    # passing test actually proves the sort, not an accidental match with
+    # insertion order.
+    ids["mid"] = seed(
+        temp_repository,
+        purchase_date="2026-02-01",
+        store_name="Mango Store",
+        items=[item(name="Mid", line_total=20.0)],
+    )
+    time.sleep(0.01)
+    ids["newest"] = seed(
+        temp_repository,
+        purchase_date="2026-03-01",
+        store_name="Apple Store",
+        items=[item(name="Newest", line_total=5.0)],
+    )
+    time.sleep(0.01)
+    ids["undated"] = seed(
+        temp_repository,
+        purchase_date=None,
+        store_name=None,
+        items=[item(name="Undated", line_total=None)],
+    )
+    time.sleep(0.01)
+    ids["oldest"] = seed(
+        temp_repository,
+        purchase_date="2026-01-01",
+        store_name="Zebra Store",
+        items=[item(name="Oldest", line_total=30.0)],
+    )
+    return ids
+
+
+def test_default_sort_is_date_desc(sort_seed):
+    default_response = client.get("/items")
+    explicit_response = client.get("/items?sort=date_desc")
+
+    assert default_response.status_code == 200
+    assert item_names(default_response) == item_names(explicit_response)
+    assert item_names(default_response) == ["Newest", "Mid", "Oldest", "Undated"]
+
+
+def test_sort_date_asc_still_puts_undated_last(sort_seed):
+    response = client.get("/items?sort=date_asc")
+
+    assert response.status_code == 200
+    assert item_names(response) == ["Oldest", "Mid", "Newest", "Undated"]
+
+
+def test_sort_amount_desc_puts_null_amounts_last(sort_seed):
+    response = client.get("/items?sort=amount_desc")
+
+    assert response.status_code == 200
+    assert item_names(response) == ["Oldest", "Mid", "Newest", "Undated"]
+
+
+def test_sort_amount_asc_puts_null_amounts_last(sort_seed):
+    response = client.get("/items?sort=amount_asc")
+
+    assert response.status_code == 200
+    assert item_names(response) == ["Newest", "Mid", "Oldest", "Undated"]
+
+
+def test_sort_store_is_casefold_a_to_z_with_null_last(sort_seed):
+    response = client.get("/items?sort=store")
+
+    assert response.status_code == 200
+    # Apple Store < Mango Store < Zebra Store < (null store, last)
+    assert item_names(response) == ["Newest", "Mid", "Oldest", "Undated"]
+
+
+def test_sort_tie_breakers_fall_back_to_created_at_desc_receipt_id_asc_line_index_asc(temp_repository):
+    import time
+
+    # Given two receipts sharing the exact same purchase date
+    first = seed(temp_repository, purchase_date="2026-05-01", items=[item(name="First")])
+    time.sleep(0.01)
+    second = seed(temp_repository, purchase_date="2026-05-01", items=[item(name="Second")])
+
+    # When sorted by date (either direction -- the tie-break is identical)
+    response = client.get("/items?sort=date_desc")
+
+    # Then the newer receipt (created_at DESC) comes first
+    assert response.status_code == 200
+    assert receipt_ids(response) == [second, first]
+
+
+def test_invalid_sort_returns_422(sort_seed):
+    response = client.get("/items?sort=newest")
+    assert response.status_code == 422
+
+
+def test_limit_and_offset_apply_after_sorting(sort_seed):
+    response = client.get("/items?sort=date_asc&limit=2&offset=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert item_names(response) == ["Mid", "Newest"]
+    assert body["count"] == 2
+    assert body["total"] == 4
+
+
 def test_q_several_words_requires_all_of_them(temp_repository):
     seed(temp_repository, items=[item(name="Whole Milk"), item(name="Milk Chocolate")])
 
