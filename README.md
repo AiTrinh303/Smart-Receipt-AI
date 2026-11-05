@@ -40,6 +40,14 @@ which keeps the store name as its own title. The header bar above it
 aligns with the page content below (same max width), and shows a
 receipt-shaped logo mark (also used as the browser favicon).
 
+The upload form itself is split into two numbered sections, "Apartment"
+and "Receipts" — the number is a small decorative badge next to each
+heading. From a wide enough screen (roughly laptop width and up), it sits
+next to a static "How it works" panel (three steps, plus the reading tips
+already expanded); on a narrower screen that panel isn't shown at all, and
+the tips stay behind a collapsible "Tips for better reading" control
+instead — only one of the two is ever on the page at once.
+
 Above the dropzone, the upload screen asks "Which apartment is this receipt
 for?" (or, once 2+ files are queued, "Which apartment are these receipts
 for?") as a set of selectable cards (nothing preselected) fetched from
@@ -55,10 +63,11 @@ apartment to continue." hint appears; with only an apartment chosen, a muted
 "Choose a file to continue." hint appears instead. The choice is kept in
 memory for the session: it survives "Remove", picking a different file, and
 "Upload another receipt", so uploading several receipts for the same
-apartment in one sitting only requires choosing it once. A collapsed "Tips
-for better reading" section under the dropzone lists tips for a cleanly
+apartment in one sitting only requires choosing it once. Tips for a cleanly
 readable photo (lay it flat, good light, whole receipt in frame including
-the total, one receipt per photo).
+the total, one receipt per photo) are always shown — collapsed behind
+"Tips for better reading" on a narrower screen, already expanded inside
+the "How it works" panel on a wide one (see above).
 
 The upload screen is a dropzone: click it, press Enter/Space, or drag a
 receipt onto it to choose a file. On small screens, a "Take photo" button

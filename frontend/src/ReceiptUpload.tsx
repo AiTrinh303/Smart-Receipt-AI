@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { ApiError } from './api/ApiError'
 import { deleteReceipt } from './api/deleteReceipt'
 import { extractReceipt } from './api/extractReceipt'
@@ -16,6 +17,7 @@ import { navigateTo } from './navigation'
 import { apartmentPlace } from './format/apartmentPlace'
 import { apartmentShortName } from './format/apartmentShortName'
 import { useApartments } from './hooks/useApartments'
+import { useMediaQuery } from './hooks/useMediaQuery'
 import BatchQueue from './batch/BatchQueue'
 import { useBatchUpload } from './batch/useBatchUpload'
 import ReceiptApartment from './ReceiptApartment'
@@ -127,6 +129,96 @@ function TrashIcon() {
   )
 }
 
+const TIPS_ITEMS = [
+  'Lay the receipt flat.',
+  'Use good light.',
+  'Keep the whole receipt in frame, including the total.',
+  'One receipt per photo.',
+]
+
+const HOW_IT_WORKS_STEPS = [
+  'Choose the apartment.',
+  'Add photos or PDFs.',
+  'Review the result and approve it in History or Items.',
+]
+
+/** A numbered section heading inside the upload form card -- the number is
+ * a decorative badge (`aria-hidden`), so the heading's own accessible name
+ * is just the word (e.g. "Apartment"), never "1 Apartment". */
+function SectionHeading({ number, children }: { number: number; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-semibold text-white"
+      >
+        {number}
+      </span>
+      <h2 className="text-base font-semibold text-ink">{children}</h2>
+    </div>
+  )
+}
+
+function ChevronIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className={className} fill="none">
+      <path d="M7.5 4.5l5 5.5-5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Collapsible reading tips, shown below `lg` (where the static HelpPanel
+ * isn't rendered) -- a plain <details>/<summary> styled as a text-style
+ * control rather than a bordered box, with a chevron that rotates open. */
+function TipsDetails() {
+  return (
+    <details className="group text-sm text-ink-muted">
+      <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 font-medium text-ink [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+        <ChevronIcon className="h-4 w-4 flex-shrink-0 text-ink-muted transition-transform duration-150 motion-reduce:transition-none group-open:rotate-90" />
+        Tips for better reading
+      </summary>
+      <ul className="mt-2 flex flex-col gap-1 pl-6 list-disc">
+        {TIPS_ITEMS.map((tip) => (
+          <li key={tip}>{tip}</li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
+/** Static "How it works" + reading tips, shown instead of the collapsible
+ * tips from `lg` up -- no fetch, no state, just reference content next to
+ * the form. */
+function HelpPanel() {
+  return (
+    <Card className="flex flex-col gap-4 shadow-popover">
+      <h2 className="text-base font-semibold text-ink">How it works</h2>
+      <ol className="flex flex-col gap-3">
+        {HOW_IT_WORKS_STEPS.map((step, index) => (
+          <li key={step} className="flex gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-subtle text-xs font-semibold text-brand"
+            >
+              {index + 1}
+            </span>
+            <p className="text-sm text-ink-muted">{step}</p>
+          </li>
+        ))}
+      </ol>
+
+      <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
+        <h3 className="text-sm font-semibold text-ink">Tips for better reading</h3>
+        <ul className="flex flex-col gap-1 pl-5 list-disc text-sm text-ink-muted">
+          {TIPS_ITEMS.map((tip) => (
+            <li key={tip}>{tip}</li>
+          ))}
+        </ul>
+      </div>
+    </Card>
+  )
+}
+
 function ReceiptUpload() {
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -164,6 +256,12 @@ function ReceiptUpload() {
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+  // The static help panel (from `lg` up) and the collapsible tips (below
+  // `lg`) show the same tips content -- only one is ever rendered, decided
+  // here, never by CSS alone, so the text can never appear twice in the
+  // DOM. `useMediaQuery` defaults to `false` when `matchMedia` doesn't
+  // exist (jsdom's default), which is exactly the below-`lg` variant.
+  const isWideScreen = useMediaQuery('(min-width: 1024px)')
 
   const batch = useBatchUpload()
   const isBatchActive = batch.items.length > 0
@@ -703,327 +801,350 @@ function ReceiptUpload() {
   const isInputDisabled = isBusy || batch.running
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title="Upload receipts" description={UPLOAD_DESCRIPTION} />
-      <Card className="flex flex-col gap-4">
-        {apartmentsError ? (
-          <div className="flex flex-col gap-2">
-            <Alert variant="error">{apartmentsError}</Alert>
-            <Button variant="secondary" size="sm" className="self-start" onClick={retryApartments}>
-              Retry
-            </Button>
-          </div>
-        ) : isLoadingApartments ? (
-          <div role="status" aria-busy="true" className="flex flex-col gap-2">
-            <span className="text-sm text-ink-muted">Loading apartments...</span>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Skeleton className="h-11 flex-1" />
-              <Skeleton className="h-11 flex-1" />
-            </div>
-          </div>
-        ) : (
-          apartments && (
-            <RadioCardGroup
-              legend={isBatchActive ? 'Which apartment are these receipts for?' : 'Which apartment is this receipt for?'}
-              name="apartment"
-              options={apartments.map((apartment) => ({
-                value: apartment.id,
-                label: apartmentShortName(apartment.name) ?? apartment.name,
-                secondaryLabel: apartmentPlace(apartment.name),
-                accessibleName: apartment.name,
-              }))}
-              value={apartmentId}
-              onChange={setApartmentId}
-              disabled={isInputDisabled}
-              describedBy={(file || isBatchActive) && !apartmentId ? APARTMENT_HELPER_ID : undefined}
-            />
-          )
-        )}
 
-        {apartments && (file || isBatchActive) && !apartmentId && (
-          <p id={APARTMENT_HELPER_ID} className="text-sm text-ink-muted">
-            Choose an apartment to continue.
-          </p>
-        )}
+      <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
+        <div className="flex flex-col gap-4 lg:col-span-7">
+          <Card className="flex flex-col gap-6">
+            <div className="flex flex-col gap-3">
+              <SectionHeading number={1}>Apartment</SectionHeading>
 
-        <label htmlFor="receipt-file" className="sr-only">
-          Upload receipt (JPG, PNG, or PDF)
-        </label>
-        <input
-          ref={fileInputRef}
-          id="receipt-file"
-          type="file"
-          accept=".jpg,.jpeg,.png,.pdf"
-          multiple
-          onChange={handleFileChange}
-          disabled={isInputDisabled}
-          className="sr-only"
-        />
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleFileChange}
-          disabled={isInputDisabled}
-          aria-hidden="true"
-          tabIndex={-1}
-          className="sr-only"
-        />
-
-        {isBatchActive ? (
-          <div
-            role="button"
-            tabIndex={isInputDisabled ? -1 : 0}
-            aria-disabled={isInputDisabled}
-            onClick={openFilePicker}
-            onKeyDown={handleZoneKeyDown}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`flex items-center justify-center gap-2 rounded-lg border-2 border-dashed p-3 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-              isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-soft'
-            } ${isDragOver ? 'border-brand bg-brand-soft' : 'border-border'}`}
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 flex-shrink-0 text-brand" fill="none">
-              <path
-                d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <p className="text-sm font-medium text-ink">Add more files</p>
-          </div>
-        ) : (
-          <div
-            role="button"
-            tabIndex={isInputDisabled ? -1 : 0}
-            aria-disabled={isInputDisabled}
-            onClick={openFilePicker}
-            onKeyDown={handleZoneKeyDown}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-              isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-soft'
-            } ${isDragOver ? 'border-brand bg-brand-soft' : 'border-border'}`}
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-brand" fill="none">
-              <path
-                d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <p className="text-sm font-medium text-ink">Drag a receipt here, or choose a file</p>
-            <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB</p>
-          </div>
-        )}
-
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={isInputDisabled}
-          onClick={() => cameraInputRef.current?.click()}
-          className="w-full sm:hidden"
-        >
-          Take photo
-        </Button>
-
-        <details className="rounded-md border border-border px-3 py-2 text-sm text-ink-muted">
-          <summary className="cursor-pointer select-none font-medium text-ink">
-            Tips for better reading
-          </summary>
-          <ul className="mt-2 flex flex-col gap-1 pl-4 list-disc">
-            <li>Lay the receipt flat.</li>
-            <li>Use good light.</li>
-            <li>Keep the whole receipt in frame, including the total.</li>
-            <li>One receipt per photo.</li>
-          </ul>
-        </details>
-
-        {isBatchActive ? (
-          <div className="flex flex-col gap-4">
-            <BatchQueue items={batch.items} rejected={batch.rejected} onRetry={batch.retry} onRemove={batch.remove} />
-
-            <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-3 border-t border-border bg-surface px-6 pb-6 pt-4">
-              {batch.running ? (
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="batch-progress" className="text-sm font-medium text-ink">
-                    Batch progress
-                  </label>
-                  <progress
-                    id="batch-progress"
-                    value={batchDoneCount + batchFailedCount}
-                    max={batch.items.length}
-                    className="h-2 w-full accent-brand"
-                  />
-                  <p role="status" className="text-sm text-ink-muted">
-                    {batchDoneCount} of {batch.items.length} read, {batchFailedCount} failed
-                  </p>
+              {apartmentsError ? (
+                <div className="flex flex-col gap-2">
+                  <Alert variant="error">{apartmentsError}</Alert>
+                  <Button variant="secondary" size="sm" className="self-start" onClick={retryApartments}>
+                    Retry
+                  </Button>
+                </div>
+              ) : isLoadingApartments ? (
+                <div role="status" aria-busy="true" className="flex flex-col gap-2">
+                  <span className="text-sm text-ink-muted">Loading apartments...</span>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Skeleton className="h-11 flex-1" />
+                    <Skeleton className="h-11 flex-1" />
+                  </div>
                 </div>
               ) : (
-                <p className="text-sm text-ink-muted">{batchSummaryText}</p>
+                apartments && (
+                  <RadioCardGroup
+                    legend={
+                      isBatchActive
+                        ? 'Which apartment are these receipts for?'
+                        : 'Which apartment is this receipt for?'
+                    }
+                    name="apartment"
+                    options={apartments.map((apartment) => ({
+                      value: apartment.id,
+                      label: apartmentShortName(apartment.name) ?? apartment.name,
+                      secondaryLabel: apartmentPlace(apartment.name),
+                      accessibleName: apartment.name,
+                    }))}
+                    value={apartmentId}
+                    onChange={setApartmentId}
+                    disabled={isInputDisabled}
+                    describedBy={(file || isBatchActive) && !apartmentId ? APARTMENT_HELPER_ID : undefined}
+                  />
+                )
               )}
 
-              {isBatchFinished ? (
-                <>
-                  <Alert variant="success">
-                    Done: {batchDoneCount} read, {batchFailedCount} failed.
-                  </Alert>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => navigateTo(`?view=history&apartment=${apartmentId}&status=needs_review`)}
-                    >
-                      Review in History
-                    </Button>
-                    <Button variant="secondary" size="sm" onClick={handleBatchReset}>
-                      Read more receipts
-                    </Button>
+              {apartments && (file || isBatchActive) && !apartmentId && (
+                <p id={APARTMENT_HELPER_ID} className="text-sm text-ink-muted">
+                  Choose an apartment to continue.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <SectionHeading number={2}>Receipts</SectionHeading>
+
+              <label htmlFor="receipt-file" className="sr-only">
+                Upload receipt (JPG, PNG, or PDF)
+              </label>
+              <input
+                ref={fileInputRef}
+                id="receipt-file"
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf"
+                multiple
+                onChange={handleFileChange}
+                disabled={isInputDisabled}
+                className="sr-only"
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileChange}
+                disabled={isInputDisabled}
+                aria-hidden="true"
+                tabIndex={-1}
+                className="sr-only"
+              />
+
+              {isBatchActive ? (
+                <div
+                  role="button"
+                  tabIndex={isInputDisabled ? -1 : 0}
+                  aria-disabled={isInputDisabled}
+                  onClick={openFilePicker}
+                  onKeyDown={handleZoneKeyDown}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`flex items-center justify-center gap-2 rounded-control border-2 border-dashed bg-brand-subtle p-3 text-center transition-colors duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                    isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'
+                  } ${isDragOver ? 'border-brand' : 'border-border'}`}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 flex-shrink-0 text-brand" fill="none">
+                    <path
+                      d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <p className="text-sm font-medium text-ink">Add more files</p>
+                </div>
+              ) : (
+                <div
+                  role="button"
+                  tabIndex={isInputDisabled ? -1 : 0}
+                  aria-disabled={isInputDisabled}
+                  onClick={openFilePicker}
+                  onKeyDown={handleZoneKeyDown}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`flex flex-col items-center gap-2 rounded-control border-2 border-dashed bg-brand-subtle p-8 text-center transition-colors duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                    isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'
+                  } ${isDragOver ? 'border-brand' : 'border-border'}`}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-brand" fill="none">
+                    <path
+                      d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <p className="text-sm font-medium text-ink">Drag a receipt here, or choose a file</p>
+                  <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB</p>
+                </div>
+              )}
+
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={isInputDisabled}
+                onClick={() => cameraInputRef.current?.click()}
+                className="w-full sm:hidden"
+              >
+                Take photo
+              </Button>
+
+              {!isWideScreen && <TipsDetails />}
+
+              {isBatchActive ? (
+                <div className="flex flex-col gap-4">
+                  <BatchQueue
+                    items={batch.items}
+                    rejected={batch.rejected}
+                    onRetry={batch.retry}
+                    onRemove={batch.remove}
+                  />
+
+                  <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-3 border-t border-border bg-surface px-6 pb-6 pt-4">
+                    {batch.running ? (
+                      <div className="flex flex-col gap-1">
+                        <label htmlFor="batch-progress" className="text-sm font-medium text-ink">
+                          Batch progress
+                        </label>
+                        <progress
+                          id="batch-progress"
+                          value={batchDoneCount + batchFailedCount}
+                          max={batch.items.length}
+                          className="h-2 w-full accent-brand"
+                        />
+                        <p role="status" className="text-sm text-ink-muted">
+                          {batchDoneCount} of {batch.items.length} read, {batchFailedCount} failed
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-ink-muted">{batchSummaryText}</p>
+                    )}
+
+                    {isBatchFinished ? (
+                      <>
+                        <Alert variant="success">
+                          Done: {batchDoneCount} read, {batchFailedCount} failed.
+                        </Alert>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => navigateTo(`?view=history&apartment=${apartmentId}&status=needs_review`)}
+                          >
+                            Review in History
+                          </Button>
+                          <Button variant="secondary" size="sm" onClick={handleBatchReset}>
+                            Read more receipts
+                          </Button>
+                        </div>
+                      </>
+                    ) : batch.running ? (
+                      batch.pausedReason ? (
+                        <>
+                          <Alert variant={batch.pausedReason === 'stopped' ? 'warning' : 'error'}>
+                            {batch.pausedReason === 'unavailable'
+                              ? EXTRACTION_NOT_CONFIGURED_MESSAGE
+                              : batch.pausedReason === 'network'
+                                ? NETWORK_ERROR_MESSAGE
+                                : STOPPED_MESSAGE}
+                          </Alert>
+                          <Button size="sm" onClick={batch.resume}>
+                            Resume
+                          </Button>
+                        </>
+                      ) : (
+                        <Button variant="secondary" size="sm" onClick={batch.stop}>
+                          Stop
+                        </Button>
+                      )
+                    ) : (
+                      <>
+                        <Button
+                          onClick={() => apartmentId && batch.start(apartmentId)}
+                          disabled={!apartmentId || batch.items.length === 0}
+                        >
+                          Read {batch.items.length} receipts
+                        </Button>
+                        <p className="flex items-start gap-1.5 text-sm text-ink-muted">
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 20 20"
+                            className="mt-0.5 h-4 w-4 flex-shrink-0"
+                            fill="none"
+                          >
+                            <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
+                            <path
+                              d="M10 9v4.5M10 6.75h.01"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          Each receipt is sent to OpenAI to read it ({batch.items.length} requests).
+                        </p>
+                      </>
+                    )}
                   </div>
-                </>
-              ) : batch.running ? (
-                batch.pausedReason ? (
-                  <>
-                    <Alert variant={batch.pausedReason === 'stopped' ? 'warning' : 'error'}>
-                      {batch.pausedReason === 'unavailable'
-                        ? EXTRACTION_NOT_CONFIGURED_MESSAGE
-                        : batch.pausedReason === 'network'
-                          ? NETWORK_ERROR_MESSAGE
-                          : STOPPED_MESSAGE}
-                    </Alert>
-                    <Button size="sm" onClick={batch.resume}>
-                      Resume
-                    </Button>
-                  </>
-                ) : (
-                  <Button variant="secondary" size="sm" onClick={batch.stop}>
-                    Stop
-                  </Button>
-                )
+                </div>
               ) : (
                 <>
+                  {file && (
+                    <div className="flex items-center gap-3 rounded-control bg-surface-page px-3 py-2">
+                      {previewUrl ? (
+                        <img
+                          src={previewUrl}
+                          alt="Preview of the selected receipt"
+                          className="h-16 w-16 flex-shrink-0 rounded-md border border-border bg-slate-100 object-contain sm:h-20 sm:w-20"
+                        />
+                      ) : (
+                        <svg
+                          aria-hidden="true"
+                          viewBox="0 0 24 24"
+                          className="h-5 w-5 flex-shrink-0 text-ink-muted"
+                          fill="none"
+                        >
+                          <path d="M6 2h8l4 4v16H6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={file.name}>
+                        <span>Selected file: {file.name}</span>{' '}
+                        <span className="text-ink-muted">({formatFileSize(file.size)})</span>
+                      </p>
+                      <Button variant="ghost" size="sm" onClick={handleRemoveFile} disabled={isBusy}>
+                        Remove
+                      </Button>
+                    </div>
+                  )}
+
+                  {error && <Alert variant="error">{error}</Alert>}
+
+                  {success && (
+                    <Alert variant="success">
+                      Upload successful. Receipt ID: {success.receiptId} ({success.filename})
+                    </Alert>
+                  )}
+
+                  {isBusy && (
+                    <div role="status" aria-busy="true" className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2 text-sm text-ink-muted">
+                        <Spinner size="sm" label={isUploading ? 'Uploading' : 'Reading receipt'} />
+                        <span>{isUploading ? 'Uploading...' : 'Extracting receipt data...'}</span>
+                      </div>
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-2/3" />
+                    </div>
+                  )}
+
+                  {extractionError && (
+                    <>
+                      <Alert variant="error">{extractionError}</Alert>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleRetryExtraction}>
+                          Retry
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={handleReset}>
+                          Upload another receipt
+                        </Button>
+                      </div>
+                    </>
+                  )}
+
                   <Button
-                    onClick={() => apartmentId && batch.start(apartmentId)}
-                    disabled={!apartmentId || batch.items.length === 0}
+                    onClick={handleSubmit}
+                    disabled={!file || !apartmentId || isBusy}
+                    loading={isBusy}
+                    loadingText={isUploading ? 'Uploading...' : 'Extracting...'}
+                    aria-describedby={apartmentId && !file ? FILE_HELPER_ID : undefined}
                   >
-                    Read {batch.items.length} receipts
+                    Read receipt
                   </Button>
+
+                  {apartmentId && !file && (
+                    <p id={FILE_HELPER_ID} className="text-sm text-ink-muted">
+                      Choose a file to continue.
+                    </p>
+                  )}
+
                   <p className="flex items-start gap-1.5 text-sm text-ink-muted">
                     <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none">
                       <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
-                      <path d="M10 9v4.5M10 6.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      <path
+                        d="M10 9v4.5M10 6.75h.01"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
                     </svg>
-                    Each receipt is sent to OpenAI to read it ({batch.items.length} requests).
+                    The file is sent to OpenAI to read it. The extracted data is saved in this app.
                   </p>
                 </>
               )}
             </div>
-          </div>
-        ) : (
-          <>
-            {file && (
-          <div className="flex items-center gap-3 rounded-control bg-surface-page px-3 py-2">
-            {previewUrl ? (
-              <img
-                src={previewUrl}
-                alt="Preview of the selected receipt"
-                className="h-16 w-16 flex-shrink-0 rounded-md border border-border bg-slate-100 object-contain sm:h-20 sm:w-20"
-              />
-            ) : (
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-5 w-5 flex-shrink-0 text-ink-muted"
-                fill="none"
-              >
-                <path
-                  d="M6 2h8l4 4v16H6z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            )}
-            <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={file.name}>
-              <span>Selected file: {file.name}</span>{' '}
-              <span className="text-ink-muted">({formatFileSize(file.size)})</span>
-            </p>
-            <Button variant="ghost" size="sm" onClick={handleRemoveFile} disabled={isBusy}>
-              Remove
-            </Button>
+          </Card>
+        </div>
+
+        {isWideScreen && (
+          <div className="lg:col-span-5">
+            <HelpPanel />
           </div>
         )}
-
-        {error && <Alert variant="error">{error}</Alert>}
-
-        {success && (
-          <Alert variant="success">
-            Upload successful. Receipt ID: {success.receiptId} ({success.filename})
-          </Alert>
-        )}
-
-        {isBusy && (
-          <div role="status" aria-busy="true" className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 text-sm text-ink-muted">
-              <Spinner size="sm" label={isUploading ? 'Uploading' : 'Reading receipt'} />
-              <span>{isUploading ? 'Uploading...' : 'Extracting receipt data...'}</span>
-            </div>
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-2/3" />
-          </div>
-        )}
-
-        {extractionError && (
-          <>
-            <Alert variant="error">{extractionError}</Alert>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={handleRetryExtraction}>
-                Retry
-              </Button>
-              <Button variant="secondary" size="sm" onClick={handleReset}>
-                Upload another receipt
-              </Button>
-            </div>
-          </>
-        )}
-
-        <Button
-          onClick={handleSubmit}
-          disabled={!file || !apartmentId || isBusy}
-          loading={isBusy}
-          loadingText={isUploading ? 'Uploading...' : 'Extracting...'}
-          aria-describedby={apartmentId && !file ? FILE_HELPER_ID : undefined}
-        >
-          Read receipt
-        </Button>
-
-        {apartmentId && !file && (
-          <p id={FILE_HELPER_ID} className="text-sm text-ink-muted">
-            Choose a file to continue.
-          </p>
-        )}
-
-        <p className="flex items-start gap-1.5 text-sm text-ink-muted">
-          <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none">
-            <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
-            <path
-              d="M10 9v4.5M10 6.75h.01"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
-          The file is sent to OpenAI to read it. The extracted data is saved in this app.
-        </p>
-          </>
-        )}
-      </Card>
+      </div>
     </div>
   )
 }

@@ -117,15 +117,52 @@ the purchase info, and the result is displayed for review.
   no batch), a muted "Choose a file to continue." hint is shown instead,
   tied to the "Read receipt" button the same way (the two helpers can never
   both show, since each requires the other's precondition to be *missing*).
-  A closed-by-default `<details>`/`<summary>` ("Tips for better reading")
-  under the dropzone/camera button lists: lay the receipt flat, use good
-  light, keep the whole receipt in frame including the total, one receipt
-  per photo. The chosen `apartmentId` is plain
+  A closed-by-default `<details>`/`<summary>` ("Tips for better reading",
+  styled as a text-style control — no box, `list-none` +
+  `[&::-webkit-details-marker]:hidden` to remove the native disclosure
+  triangle, a `ChevronIcon` that rotates via `group-open:rotate-90`
+  instead) under the dropzone/camera button lists: lay the receipt flat,
+  use good light, keep the whole receipt in frame including the total,
+  one receipt per photo — shown only below `lg` (see "Upload page layout"
+  below for the wide-screen alternative, `HelpPanel`). The chosen `apartmentId` is plain
   component state, untouched by `handleRemoveFile`/`processFile`/
   `handleReset`, so it survives Remove, a new file, and "Upload another
   receipt" within the session (never persisted across a real reload).
   `uploadReceipt(file, apartmentId)` sends `apartment_id` as a second
   `FormData` field.
+  **Upload page layout (`SectionHeading`, `HelpPanel`, `TipsDetails`, all
+  local to `ReceiptUpload.tsx`):** the form `Card` is split into two
+  `SectionHeading`s — a small circular number badge (`aria-hidden="true"`)
+  next to an `<h2>` reading just the word ("Apartment", "Receipts"; the
+  number is never part of the heading's accessible name) — section 1
+  holds the `RadioCardGroup` (and its helper text), section 2 holds the
+  file input/dropzone/camera button/tips-or-nothing/batch-or-single-file
+  content, exactly as before, just re-nested; every string inside stayed
+  the same. `App.tsx`'s `mainSize` gives Upload the wider `xl` `Container`
+  (previously `lg`, now matching Items/receipt-detail — only History
+  stays at `lg`), and the page wraps its content in `grid gap-6
+  lg:grid-cols-12 lg:items-start` with the form `lg:col-span-7` and a
+  help-panel column `lg:col-span-5` — plain CSS, collapsing to one
+  stacked column below `lg`. Whether that second column actually renders
+  `HelpPanel` is decided in JS, not CSS: `isWideScreen =
+  useMediaQuery('(min-width: 1024px)')` — `true` renders the static,
+  no-fetch `HelpPanel` ("How it works": choose the apartment / add photos
+  or PDFs / review and approve, each with its own number badge, plus the
+  same tips list already expanded) and skips `TipsDetails` entirely;
+  `false` (including whenever `matchMedia` doesn't exist, jsdom's
+  default) renders `TipsDetails` and skips `HelpPanel` — **never both**,
+  since both show the identical tips text and a CSS-only
+  show/hide-one-of-two approach would leave that text in the DOM twice at
+  once. The idle dropzone (both the full and the compact "Add more files"
+  variants) now has `bg-brand-subtle` as its resting background (not just
+  on hover/drag-over), `rounded-control` (was `rounded-lg`), and
+  `transition-colors duration-150 motion-reduce:transition-none` for the
+  hover/drag-over change — its `border-border` dashed border is unchanged
+  (a dropzone is `role="button"`, an interactive control, so it keeps the
+  stronger border, never `border-subtle`). The batch queue and sticky
+  action bar are functionally untouched — only their column got
+  narrower; the sticky bar's `-mx-6 -mb-6` trick is relative to its own
+  `Card`, unaffected by the surrounding grid.
   Dependency direction: UI components (`App.tsx`, `ReceiptUpload.tsx`,
   `ReceiptResult.tsx`, `ReceiptHistory.tsx`, `ReceiptItems.tsx`,
   `ReceiptFilters.tsx`) -> `src/api/` ->
@@ -730,7 +767,14 @@ the purchase info, and the result is displayed for review.
   ends.
   **Style guide (`StyleGuide.tsx`, `env.ts`, `?view=styleguide`):**
   dev-only page showing every `Button`/`Alert` variant, the nav tab's
-  active/inactive states, the logo mark, the dropzone's
+  active/inactive states, the logo mark (the receipt-shaped `AppMark`,
+  kept in sync with `App.tsx`'s own copy), a "Page header" section with
+  two static `PageHeader` samples (one with just a description, one with
+  an `actions` button, demonstrating the one-`<h1>`-per-view component),
+  a "Numbered section headings" section showing the `SectionHeading`
+  number-badge pattern standalone, an "Upload help panel" section showing
+  the static `HelpPanel` content (three "How it works" steps plus the
+  expanded tips) exactly as it renders at `lg` and up, the dropzone's
   idle/drag-over/file-selected states, a `Skeleton` sample, the
   card-variant items list, the warnings panel/Edited badge/reset
   confirmation, a `BatchQueue` sample (compact rows, one per status, plus

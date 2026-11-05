@@ -128,7 +128,12 @@ function App() {
 
   const view = getView()
   const activeNav = getActiveNav(view)
-  const mainSize = (view === 'upload' && isReceiptDetailView()) || view === 'items' ? 'xl' : 'lg'
+  // History stays narrower (a single list column); Upload needs the wider
+  // container for its two-column form/help-panel layout from `lg` up
+  // (narrower screens still render a single column, so the extra width is
+  // simply unused there), and the receipt-detail view and Items already
+  // needed it.
+  const mainSize = view === 'history' ? 'lg' : 'xl'
 
   useEffect(() => {
     document.title = `${getPageName(view)} · Smart Receipt AI`

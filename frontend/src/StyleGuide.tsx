@@ -5,6 +5,7 @@ import Button from './components/ui/Button'
 import Card from './components/ui/Card'
 import ClampedText from './components/ui/ClampedText'
 import MissingValue from './components/ui/MissingValue'
+import PageHeader from './components/ui/PageHeader'
 import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
@@ -41,7 +42,11 @@ function LogoMark() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-8 w-8 flex-shrink-0">
       <rect x="1" y="1" width="22" height="22" rx="6" className="fill-brand" />
-      <path d="M7 7h10M7 11.5h10M7 16h6" stroke="white" strokeWidth="1.75" strokeLinecap="round" />
+      <path
+        d="M7 5h10v10.5l-1.4 1.3-1.4-1.3-1.4 1.3-1.4-1.3-1.4 1.3-1.4-1.3L7 15.5V5z"
+        fill="white"
+      />
+      <path d="M9 9h6M9 12h6" className="stroke-brand" strokeWidth="1.1" strokeLinecap="round" />
     </svg>
   )
 }
@@ -168,9 +173,81 @@ function StyleGuide() {
       </div>
 
       <Section title="Logo mark">
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-surface p-4">
+        <div className="flex items-center gap-2 rounded-card border border-border-subtle bg-surface p-4">
           <LogoMark />
           <span className="text-lg font-bold text-ink">Smart Receipt AI</span>
+        </div>
+      </Section>
+
+      <Section title="Page header (PageHeader -- one <h1> per view, optional description and actions)">
+        <Card className="flex flex-col gap-6">
+          <PageHeader title="Upload receipts" description="Read the date, store, items and total automatically." />
+          <PageHeader
+            title="Items"
+            description="Search every purchased item across all your receipts."
+            actions={
+              <Button variant="secondary" size="sm">
+                Export
+              </Button>
+            }
+          />
+        </Card>
+      </Section>
+
+      <Section title="Numbered section headings (SectionHeading -- the number badge is aria-hidden)">
+        <Card className="flex flex-col gap-6">
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-semibold text-white"
+            >
+              1
+            </span>
+            <h2 className="text-base font-semibold text-ink">Apartment</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-semibold text-white"
+            >
+              2
+            </span>
+            <h2 className="text-base font-semibold text-ink">Receipts</h2>
+          </div>
+        </Card>
+      </Section>
+
+      <Section title="Upload help panel (static, from lg up -- replaces the collapsible tips)">
+        <div className="max-w-sm">
+          <Card className="flex flex-col gap-4 shadow-popover">
+            <h2 className="text-base font-semibold text-ink">How it works</h2>
+            <ol className="flex flex-col gap-3">
+              {[
+                'Choose the apartment.',
+                'Add photos or PDFs.',
+                'Review the result and approve it in History or Items.',
+              ].map((step, index) => (
+                <li key={step} className="flex gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-subtle text-xs font-semibold text-brand"
+                  >
+                    {index + 1}
+                  </span>
+                  <p className="text-sm text-ink-muted">{step}</p>
+                </li>
+              ))}
+            </ol>
+            <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
+              <h3 className="text-sm font-semibold text-ink">Tips for better reading</h3>
+              <ul className="flex flex-col gap-1 pl-5 list-disc text-sm text-ink-muted">
+                <li>Lay the receipt flat.</li>
+                <li>Use good light.</li>
+                <li>Keep the whole receipt in frame, including the total.</li>
+                <li>One receipt per photo.</li>
+              </ul>
+            </div>
+          </Card>
         </div>
       </Section>
 

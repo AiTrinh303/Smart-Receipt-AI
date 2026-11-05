@@ -250,6 +250,73 @@ card never visually aligned.
   hover/`focus-visible` states as before -- only the transition timing
   changed (see "Shared component refresh" above).
 
+## Upload page layout: numbered sections and a help panel
+
+The last piece of the visual audit: a 450px upload card sitting inside a
+much wider page left most of the screen empty, had no sense of progression
+through the form, and buried its reading tips behind a heavy bordered box.
+
+- **Numbered sections, not just a legend.** The form `Card` is split into
+  two sections, each with a `SectionHeading`: a small circular number
+  badge (`aria-hidden="true"` -- the number is decorative, never part of
+  the heading's accessible name) next to an `<h2>` reading just the word
+  ("Apartment", "Receipts"). Visually this reads as "1 Apartment"/
+  "2 Receipts"; to a screen reader it's "Apartment"/"Receipts", two plain
+  level-2 headings. Every existing string inside each section (the
+  `RadioCardGroup` legend, "Choose an apartment to continue.", "Choose a
+  file to continue.", the dropzone text, etc.) is completely unchanged --
+  only the wrapping structure around them changed.
+- **Two columns from `lg` up.** `App.tsx`'s `mainSize` now gives the
+  Upload view (and the receipt-detail view and Items, as before) the
+  wider `xl` `Container`, instead of the narrower `lg` only History still
+  uses -- without that, the two-column grid below would have nowhere to
+  put a second column. Inside it, `grid gap-6 lg:grid-cols-12
+  lg:items-start` gives the form card `lg:col-span-7` and the help panel
+  `lg:col-span-5` (both plain CSS, collapsing to a single stacked column
+  below `lg` automatically).
+- **The help panel is a presence decision, not a CSS one.** `isWideScreen
+  = useMediaQuery('(min-width: 1024px)')` decides, in JavaScript, whether
+  to render `HelpPanel` (static "How it works" -- three steps: choose the
+  apartment, add photos or PDFs, review and approve -- plus the tips list
+  already expanded, no fetch, no state) **or** the collapsible
+  `TipsDetails` (the same tips list, as before, behind a `<details>`) --
+  never both. This matters specifically because both show the exact same
+  tips text: if the grid's column visibility were CSS-only (both always
+  mounted, one hidden), that same text would exist twice in the DOM
+  simultaneously, which is wrong for screen readers and for a "find this
+  text" test alike. `useMediaQuery` returns `false` when `matchMedia`
+  doesn't exist (jsdom's default) -- exactly the below-`lg` variant --
+  so every existing test (none of which mock `matchMedia` for this
+  component) keeps seeing the collapsible tips, unchanged.
+- **The collapsible tips are now a text-style control.** `TipsDetails`'s
+  `<summary>` lost its bordered box and default browser marker
+  (`list-none` plus `[&::-webkit-details-marker]:hidden`, since Chrome/
+  Safari's native triangle is a `::-webkit-details-marker` pseudo-element,
+  not something `list-none` alone removes) in favor of a small
+  `ChevronIcon` that rotates 90° open (`group-open:rotate-90` on the icon,
+  `group` on the `<details>`, `transition-transform duration-150
+  motion-reduce:transition-none`). `<summary>` is natively focusable and
+  keyboard-operable (Enter/Space toggle it) with no extra JS -- the
+  `focus-visible` ring class is the only addition needed to make that
+  state visible.
+- **Idle dropzone: `bg-brand-subtle`, not plain white.** Previously the
+  dropzone only tinted on hover/drag-over; now `bg-brand-subtle` is the
+  *idle* background too (both the full and the compact "Add more files"
+  variants), with the existing `border-border` dashed control border (a
+  dropzone is `role="button"`, an interactive control, so it keeps the
+  stronger border -- never `border-subtle`) and the existing brand-colored
+  icon. `rounded-lg` moved to `rounded-control` (same interactive-element
+  radius as `Button`/`RadioCardGroup`), and a
+  `transition-colors duration-150 motion-reduce:transition-none` was
+  added for the hover/drag-over color change (previously instant).
+- **The batch queue and sticky action bar are unchanged in behavior** --
+  only their surrounding column got narrower (`lg:col-span-7` instead of
+  the full page). The sticky bar's own `-mx-6 -mb-6` escape-the-card-
+  padding trick is relative to the `Card` it's inside, not the page, so it
+  keeps working exactly as before regardless of the column width around
+  it (confirmed by the existing batch tests passing unchanged, and noted
+  for the manual browser check below).
+
 ## Mobile-friendly patterns
 
 - **Items as cards below `sm`.** `ReceiptResult` renders the items table from
