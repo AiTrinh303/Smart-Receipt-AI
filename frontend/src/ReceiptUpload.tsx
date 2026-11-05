@@ -41,6 +41,17 @@ function isValidUuid(value: string): boolean {
   return UUID_PATTERN.test(value)
 }
 
+// Files often arrive in browser/OS enumeration order (e.g. newest-first by
+// date), which reads as random next to a camera's sequential filenames. A
+// natural-compare sort by name (numeric runs compared as numbers, so
+// "img2.jpg" sorts before "img10.jpg") gives a predictable, intuitive order
+// regardless of how the picker/drop handed the files over.
+const NATURAL_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+function sortFilesByName(files: File[]): File[] {
+  return [...files].sort((a, b) => NATURAL_COLLATOR.compare(a.name, b.name))
+}
+
 function getReceiptIdFromUrl(): { id: string | null; invalid: boolean } {
   const params = new URLSearchParams(window.location.search)
   const raw = params.get(RECEIPT_QUERY_PARAM)
@@ -161,6 +172,19 @@ function ReceiptUpload() {
   const isBatchFinished = isBatchActive && !batchWaitingOrInFlight
   const batchDoneCount = batch.items.filter((item) => item.status === 'done').length
   const batchFailedCount = batch.items.filter((item) => item.status === 'failed').length
+
+  // "N receipts · X MB · for <short apartment name>" -- shown before start,
+  // replaced by the <progress>/"N of M read, K failed" text once running
+  // (which also covers paused and finished, since `running` is never reset
+  // back to false by STOP or finishing).
+  const batchTotalBytes = batch.items.reduce((sum, item) => sum + item.file.size, 0)
+  const batchSelectedApartment = apartments?.find((a) => a.id === apartmentId) ?? null
+  const batchApartmentLabel = batchSelectedApartment
+    ? (apartmentShortName(batchSelectedApartment.name) ?? batchSelectedApartment.name)
+    : null
+  const batchSummaryText = batchApartmentLabel
+    ? `${batch.items.length} receipts · ${formatFileSize(batchTotalBytes)} · for ${batchApartmentLabel}`
+    : `${batch.items.length} receipts · ${formatFileSize(batchTotalBytes)}`
 
   // Warn before leaving the page while a batch upload/extract call is
   // actually in flight -- closing the tab then would lose that receipt.
@@ -293,7 +317,7 @@ function ReceiptUpload() {
     setIsEditing(false)
     setExtractionError(null)
     setReceiptId(null)
-    await batch.addFiles(files)
+    await batch.addFiles(sortFilesByName(files))
   }
 
   const handleBatchReset = () => {
@@ -744,31 +768,58 @@ function ReceiptUpload() {
           className="sr-only"
         />
 
-        <div
-          role="button"
-          tabIndex={isInputDisabled ? -1 : 0}
-          aria-disabled={isInputDisabled}
-          onClick={openFilePicker}
-          onKeyDown={handleZoneKeyDown}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={`flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-            isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-soft'
-          } ${isDragOver ? 'border-brand bg-brand-soft' : 'border-border'}`}
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-brand" fill="none">
-            <path
-              d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <p className="text-sm font-medium text-ink">Drag a receipt here, or choose a file</p>
-          <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB</p>
-        </div>
+        {isBatchActive ? (
+          <div
+            role="button"
+            tabIndex={isInputDisabled ? -1 : 0}
+            aria-disabled={isInputDisabled}
+            onClick={openFilePicker}
+            onKeyDown={handleZoneKeyDown}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`flex items-center justify-center gap-2 rounded-lg border-2 border-dashed p-3 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+              isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-soft'
+            } ${isDragOver ? 'border-brand bg-brand-soft' : 'border-border'}`}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 flex-shrink-0 text-brand" fill="none">
+              <path
+                d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <p className="text-sm font-medium text-ink">Add more files</p>
+          </div>
+        ) : (
+          <div
+            role="button"
+            tabIndex={isInputDisabled ? -1 : 0}
+            aria-disabled={isInputDisabled}
+            onClick={openFilePicker}
+            onKeyDown={handleZoneKeyDown}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+              isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-soft'
+            } ${isDragOver ? 'border-brand bg-brand-soft' : 'border-border'}`}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-brand" fill="none">
+              <path
+                d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <p className="text-sm font-medium text-ink">Drag a receipt here, or choose a file</p>
+            <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB</p>
+          </div>
+        )}
 
         <Button
           variant="secondary"
@@ -796,59 +847,80 @@ function ReceiptUpload() {
           <div className="flex flex-col gap-4">
             <BatchQueue items={batch.items} rejected={batch.rejected} onRetry={batch.retry} onRemove={batch.remove} />
 
-            {isBatchFinished ? (
-              <>
-                <Alert variant="success">
-                  Done: {batchDoneCount} read, {batchFailedCount} failed.
-                </Alert>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => navigateTo(`?view=history&apartment=${apartmentId}&status=needs_review`)}
-                  >
-                    Review in History
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={handleBatchReset}>
-                    Read more receipts
-                  </Button>
+            <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-3 border-t border-border bg-surface px-6 pb-6 pt-4">
+              {batch.running ? (
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="batch-progress" className="text-sm font-medium text-ink">
+                    Batch progress
+                  </label>
+                  <progress
+                    id="batch-progress"
+                    value={batchDoneCount + batchFailedCount}
+                    max={batch.items.length}
+                    className="h-2 w-full accent-brand"
+                  />
+                  <p role="status" className="text-sm text-ink-muted">
+                    {batchDoneCount} of {batch.items.length} read, {batchFailedCount} failed
+                  </p>
                 </div>
-              </>
-            ) : batch.running ? (
-              batch.pausedReason ? (
-                <>
-                  <Alert variant={batch.pausedReason === 'stopped' ? 'warning' : 'error'}>
-                    {batch.pausedReason === 'unavailable'
-                      ? EXTRACTION_NOT_CONFIGURED_MESSAGE
-                      : batch.pausedReason === 'network'
-                        ? NETWORK_ERROR_MESSAGE
-                        : STOPPED_MESSAGE}
-                  </Alert>
-                  <Button size="sm" onClick={batch.resume}>
-                    Resume
-                  </Button>
-                </>
               ) : (
-                <Button variant="secondary" size="sm" onClick={batch.stop}>
-                  Stop
-                </Button>
-              )
-            ) : (
-              <>
-                <Button
-                  onClick={() => apartmentId && batch.start(apartmentId)}
-                  disabled={!apartmentId || batch.items.length === 0}
-                >
-                  Read {batch.items.length} receipts
-                </Button>
-                <p className="flex items-start gap-1.5 text-sm text-ink-muted">
-                  <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none">
-                    <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
-                    <path d="M10 9v4.5M10 6.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                  Each receipt is sent to OpenAI to read it ({batch.items.length} requests).
-                </p>
-              </>
-            )}
+                <p className="text-sm text-ink-muted">{batchSummaryText}</p>
+              )}
+
+              {isBatchFinished ? (
+                <>
+                  <Alert variant="success">
+                    Done: {batchDoneCount} read, {batchFailedCount} failed.
+                  </Alert>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => navigateTo(`?view=history&apartment=${apartmentId}&status=needs_review`)}
+                    >
+                      Review in History
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={handleBatchReset}>
+                      Read more receipts
+                    </Button>
+                  </div>
+                </>
+              ) : batch.running ? (
+                batch.pausedReason ? (
+                  <>
+                    <Alert variant={batch.pausedReason === 'stopped' ? 'warning' : 'error'}>
+                      {batch.pausedReason === 'unavailable'
+                        ? EXTRACTION_NOT_CONFIGURED_MESSAGE
+                        : batch.pausedReason === 'network'
+                          ? NETWORK_ERROR_MESSAGE
+                          : STOPPED_MESSAGE}
+                    </Alert>
+                    <Button size="sm" onClick={batch.resume}>
+                      Resume
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="secondary" size="sm" onClick={batch.stop}>
+                    Stop
+                  </Button>
+                )
+              ) : (
+                <>
+                  <Button
+                    onClick={() => apartmentId && batch.start(apartmentId)}
+                    disabled={!apartmentId || batch.items.length === 0}
+                  >
+                    Read {batch.items.length} receipts
+                  </Button>
+                  <p className="flex items-start gap-1.5 text-sm text-ink-muted">
+                    <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none">
+                      <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
+                      <path d="M10 9v4.5M10 6.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    Each receipt is sent to OpenAI to read it ({batch.items.length} requests).
+                  </p>
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <>

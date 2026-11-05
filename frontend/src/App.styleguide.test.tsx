@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import App from './App'
+import { mockObjectUrl } from './test/objectUrl'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/?view=styleguide')
@@ -7,6 +8,17 @@ beforeEach(() => {
 
 afterEach(() => {
   window.history.replaceState({}, '', '/')
+})
+
+// The style guide's BatchQueue sample includes image (.jpg) files, which
+// now get a thumbnail via URL.createObjectURL -- jsdom has neither that nor
+// URL.revokeObjectURL.
+let objectUrl: ReturnType<typeof mockObjectUrl>
+beforeEach(() => {
+  objectUrl = mockObjectUrl()
+})
+afterEach(() => {
+  objectUrl.restore()
 })
 
 test('the style guide page renders every Button variant, Alert variant, the logo and a Card', async () => {

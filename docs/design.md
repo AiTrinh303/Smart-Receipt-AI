@@ -715,6 +715,119 @@ reach for these rather than re-deriving its own formatting.
   the three paused messages and the finished summary, reusing the same
   shared error-message constants as the real flow.
 
+## Batch upload polish: compact rows, a sticky action bar, thumbnails
+
+A follow-up pass after uploading up to 20 receipts at once found the first
+batch UI didn't scale: each row was ~94px tall (the outlined "Remove"
+button had its own line), rows only showed a file icon and camera-roll
+filenames (no way to tell receipts apart at a glance), the primary "Read N
+receipts" button sat at the bottom of a list that could be ~2000px tall,
+the progress bar looked grey/disabled before anything started, and files
+arrived in whatever order the browser/OS handed them over (often
+newest-first), which read as random next to a camera's sequential names.
+
+- **One-line compact rows with a thumbnail.** `BatchQueue.tsx`'s row is now
+  a single ~56px line: a 40×40px thumbnail (`object-contain` on a
+  `slate-100` background -- an `<img>` built from a per-item
+  `URL.createObjectURL` for an image file, or the plain file icon in the
+  same-sized box for a PDF), the truncated name (`title` carries the full
+  name), the size, the existing status chip, and an icon-only Remove
+  button -- never two full lines plus a separate "Remove" row like before.
+  A **done** row's "Open" link / "Check values (N)" badge, and a **failed**
+  row's error text + "Retry" button, now sit on their own line *under* the
+  main line (so the 56px line stays uniform across every status) instead
+  of sharing it.
+- **Remove is icon-only, named by the file.** The `Button` variant/size
+  stay the same (`ghost`/`sm`, so it keeps its 44px touch target below
+  `sm`), but its child is now just an `X` icon (`aria-hidden`) with an
+  explicit `aria-label="Remove <file name>"` instead of visible "Remove"
+  text -- necessary once there are up to 20 identical-looking icon buttons
+  on the page; each one now has a distinct accessible name. This is a
+  **deliberate, listed change**: the one existing test asserting the old
+  plain `/^remove$/i` name on a batch row was updated to look for
+  `'Remove a.jpg'` instead (the single-file flow's own, separate "Remove"
+  button next to the file preview is completely unaffected).
+- **Thumbnail object URLs (`BatchQueue.tsx`'s `useThumbnails` hook).** One
+  object URL is created per queued **image** file (checked via the same
+  `IMAGE_EXTENSIONS`/`getExtension` from `fileValidation.ts` the rest of
+  the app already uses -- a PDF never gets a thumbnail), lazily, inside a
+  `useEffect` keyed on the `items` array (never during render, so
+  `createObjectURL`/`revokeObjectURL` stay accountable React side
+  effects). The hook diffs ids rather than reacting to every status
+  change: an existing item's id already has an entry, so a plain
+  Waiting→Uploading→Done status transition never churns its thumbnail,
+  but the moment an id drops out of `items` -- Remove, a whole-queue
+  replace before starting (picking files again replaces the array with
+  new ids), or "Read more receipts"/reset unmounting the whole panel --
+  its URL is revoked. A second effect (empty deps) revokes everything
+  still held on unmount, covering the case where several thumbnails are
+  showing when the panel disappears at once.
+- **Summary line replaces the progress bar before anything starts.** The
+  old static `<progress value={0}>` read as full-looking-but-disabled grey
+  bar before a batch had even begun; now, before `start()`, a plain text
+  summary -- `"N receipts · X MB · for <short apartment name>"` (the size
+  is the *sum* of every queued file's size, run through the existing
+  `formatFileSize` once; the apartment name reuses `apartmentShortName`
+  from the previous polish pass) -- takes its place, and no `<progress>`
+  element exists at all yet. The moment `start()` is called, this flips to
+  the `<progress>` (now with a brand-colored fill via Tailwind's
+  `accent-brand` utility, which maps modern browsers' `accent-color` for
+  form controls including `<progress>`) and the existing "X of Y read, Z
+  failed" text -- and stays that way through running, any paused state,
+  and finished, since `batch.running` is never reset back to `false` by
+  `STOP` or finishing (the same flag the rest of the batch UI already
+  relies on for this).
+- **A sticky action bar, not an inline block.** The summary/progress line,
+  every stage's primary control (the "Read N receipts" button, "Stop",
+  the paused `Alert` + "Resume", or the finished `Alert` +
+  "Review in History"/"Read more receipts"), and the OpenAI note are now
+  wrapped in one `<div className="sticky bottom-0 ...">` sitting below
+  `BatchQueue`'s row list, inside the same `Card` -- escaping the card's
+  own `p-6` padding with negative margins (`-mx-6 -mb-6`, re-adding
+  `px-6`/`pb-6`) so its `border-t` and `bg-surface` span the full card
+  width. As the row list scrolls (within the page, since nothing else
+  scrolls independently), this bar stays pinned to the bottom of the
+  viewport as long as the card itself is still in view -- so the action a
+  user needs (Stop, Resume, or just seeing progress) is never buried below
+  20 rows. (Only a real browser can confirm the pinned-while-scrolling
+  behavior itself -- jsdom has no layout engine; `?view=styleguide`'s new
+  "Batch summary line and sticky action bar" section demonstrates the same
+  markup pattern over a short, scrollable sample list for a quick visual
+  check.)
+- **Compact "Add more files" bar once files are queued.** The full
+  dropzone (icon, "Drag a receipt here, or choose a file",
+  "JPG, PNG or PDF, up to 10 MB") is only shown with 0 or 1 file selected.
+  The moment `isBatchActive` (2+ files queued), it's replaced by a
+  shorter, single-line bar ("Add more files") using the exact same
+  `role="button"`/keyboard/drag-and-drop handlers and the same hidden
+  `<input>` -- still disabled while the batch is running, still opens the
+  same file picker and accepts the same drag-and-drop. This is a
+  **deliberate, listed change**: the one existing test asserting the full
+  dropzone's `/drag a receipt here/i` accessible name while a batch is
+  running was updated to look for `/add more files/i` instead. The
+  "Take photo" button and the apartment `RadioCardGroup` are unaffected by
+  this switch -- they stay exactly where they were.
+- **Files sorted by name before queuing (natural compare).** Both
+  `handleFileChange` and `handleDrop` route 2+ files through
+  `handleBatchFilesSelected`, which now sorts the incoming array with
+  `Intl.Collator(undefined, {numeric: true, sensitivity: 'base'})` before
+  calling `batch.addFiles(...)` -- so `"img2.jpg"` sorts before
+  `"img10.jpg"` (a plain string sort would put `"img10.jpg"` first), and
+  the resulting order no longer depends on what order the browser/OS
+  handed the files over in (often newest-first). This sort happens at the
+  call site in `ReceiptUpload.tsx`, not inside `useBatchUpload`/
+  `batchReducer` -- those stay exactly as they were (no existing
+  `useBatchUpload.test.ts` assertion needed to change), since every file
+  set in that suite already happens to be in alphabetical/numeric order.
+  The 20-file cap and duplicate-detection rules are untouched.
+- **Added to `?view=styleguide`:** the existing "Batch upload queue"
+  section now shows the compact rows automatically (same component,
+  updated in place); a new "Batch summary line and sticky action bar"
+  section demonstrates both the before-start summary text and the
+  after-start progress/button state over a short scrollable sample list;
+  a new "Reading tips (collapsible, under the dropzone)" section shows the
+  `<details>`/`<summary>` tips element on its own.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

@@ -573,38 +573,97 @@ the purchase info, and the result is displayed for review.
   keeps the single-file flow byte-for-byte unchanged (same strings,
   button, preview row), picking or dropping 2+ replaces the current
   selection and switches to batch mode, rendering `BatchQueue` in place of
-  the single-file row (the dropzone/apartment group/camera button stay).
-  Both are disabled while `isBusy || batch.running`
-  (`isInputDisabled`); selecting a single file while a finished/failed
-  batch is still shown calls `batch.reset()` first, so the two panels
-  never coexist. `BatchQueue` renders a `<ul>` (file icon, truncated name
-  with a `title`, size via the shared `formatFileSize`, an icon+text
-  status chip for Waiting/Uploading…/Reading…/Done/Failed — never color
-  alone), a native `<progress>` with a `<label>` and a `role="status"`
-  summary ("X of Y read, Z failed"), and rejected files in a warning
-  `Alert` as `"<name>: <reason>"` (or just the reason with no filename,
-  e.g. the MAX_BATCH overflow entry). A done row with a `receiptId` gets a
-  real `<a href="/?receipt=<id>" target="_blank"
-  rel="noopener noreferrer">Open</a>` — a real anchor rather than
-  `navigateTo()`, since the queue only lives in this page's memory and
-  navigating away would lose it — plus a "Check values (N)" badge when
-  `warningsCount > 0`; a failed row shows its error (same shared messages
-  as the single-file flow) and a "Retry" button; "Remove" is offered for
-  waiting/failed rows only, matching the engine's own no-op rule.
-  **Start/stop/pause/finish**, in `ReceiptUpload.tsx`: before `start()`, a
-  primary "Read N receipts" button (disabled until an apartment is chosen
-  and N ≥ 1, same "Choose an apartment to continue." helper, now shown for
-  `file || isBatchActive`) plus a muted "Each receipt is sent to OpenAI to
-  read it (N requests)." note; while running and not paused, a secondary
-  "Stop" button; while paused (`pausedReason`: `'unavailable'`/`'network'`
-  from the engine, or `'stopped'` after Stop), an `Alert` (`error` variant
-  for the first two, `warning` for `'stopped'`) with
-  `EXTRACTION_NOT_CONFIGURED_MESSAGE`/`NETWORK_ERROR_MESSAGE`/a new local
+  the single-file row. The 2+ files are sorted by name — natural compare
+  via `new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'})`
+  (so `"img2.jpg"` sorts before `"img10.jpg"`) — in `ReceiptUpload.tsx`'s
+  `handleBatchFilesSelected()`, the one function both `handleFileChange`
+  and `handleDrop` call for 2+ files, **before** `batch.addFiles(...)` is
+  called — `useBatchUpload`/`batchReducer` themselves are untouched, so
+  `addFiles`'s own replace-vs-append/duplicate/`MAX_BATCH` rules stay
+  exactly as they were. Both the dropzone and every file input are
+  disabled while `isBusy || batch.running` (`isInputDisabled`); selecting
+  a single file while a finished/failed batch is still shown calls
+  `batch.reset()` first, so the two panels never coexist.
+  **The dropzone shrinks once `isBatchActive`:** the full dropzone (icon +
+  "Drag a receipt here, or choose a file" + the JPG/PNG/PDF subtitle) only
+  renders with 0 or 1 file; the moment 2+ files are queued, a separate,
+  shorter `role="button"` bar ("Add more files") renders instead, reusing
+  the exact same `openFilePicker`/`handleZoneKeyDown`/drag handlers and
+  the same hidden `<input multiple>` — still disabled while running. The
+  "Take photo" button and the apartment `RadioCardGroup` are unaffected by
+  this switch.
+  **`BatchQueue.tsx`'s row is one compact ~56px line:** a 40×40px
+  thumbnail (`<img>` with `object-contain` on a `slate-100` background for
+  an image file, or the file icon in the same box for a PDF), the
+  truncated name with a `title`, size via `formatFileSize`, the existing
+  icon+text status chip (Waiting/Uploading…/Reading…/Done/Failed — never
+  color alone), and an **icon-only Remove button** (`X` icon,
+  `aria-label="Remove <file name>"`, same `ghost`/`sm` `Button` so it
+  keeps its 44px touch target below `sm` — replacing the old plain-text
+  "Remove" button, which is why the one existing test asserting
+  `/^remove$/i` on a batch row needed updating to the new
+  `'Remove <name>'` name; the single-file flow's own, separate "Remove"
+  button is untouched). A **done** row's `<a href="/?receipt=<id>"
+  target="_blank" rel="noopener noreferrer">Open</a>`/"Check values (N)"
+  badge, and a **failed** row's error text (same shared messages as the
+  single-file flow) + "Retry" button, now render on their own line
+  *beneath* the main 56px line, so every row's main line stays the same
+  height regardless of status. "Remove" is offered for waiting/failed rows
+  only, matching the engine's own no-op rule.
+  **Thumbnails (`useThumbnails`, inside `BatchQueue.tsx`):** one object URL
+  per queued **image** file (checked via `fileValidation.ts`'s
+  `IMAGE_EXTENSIONS`/`getExtension` — a PDF never gets one), created
+  lazily inside a `useEffect` keyed on `items` (never during render), via
+  a `Map<itemId, url>` held in `useState` + a `useRef` mirror (so the
+  unmount-cleanup effect always sees the latest map without needing it in
+  its own deps). The effect diffs **ids**, not statuses: an id already
+  present is left alone (a Waiting→Uploading→Done transition never
+  recreates its thumbnail), but an id no longer in `items` has its URL
+  revoked immediately — covering Remove, a whole-queue replace before
+  starting (`addFiles`'s own "replace when not running" case produces
+  brand-new ids), and the panel unmounting entirely on "Read more
+  receipts"/reset. A second, unmount-only effect revokes whatever's left
+  in the map, covering several thumbnails disappearing at once.
+  **Summary line / `<progress>` switch, and the sticky action bar, both in
+  `ReceiptUpload.tsx`:** before `batch.running` (never yet started), a
+  plain text summary — `` `${batch.items.length} receipts ·
+  ${formatFileSize(totalBytes)}` `` plus `` ` · for ${apartmentShortName}`
+  `` when an apartment is chosen (`totalBytes` is the **sum** of every
+  queued file's size, formatted once, not per-file) — replaces what used
+  to always be a `<progress>` element; no `<progress>` exists yet at this
+  stage. The moment `start()` flips `batch.running` to `true`, this
+  becomes the `<progress id="batch-progress">` (`accent-brand` for a
+  brand-colored fill — Tailwind's `accent-*` utility maps the CSS
+  `accent-color` property, which modern browsers use to tint native form
+  controls including `<progress>`) plus the unchanged "X of Y read, Z
+  failed" `role="status"` text, and **stays** that way through running,
+  any paused state, and finished, since `running` is never reset back to
+  `false` by `STOP` or finishing (the same flag already used for
+  `isBatchFinished` elsewhere). This summary/progress block, together with
+  every stage's primary button(s) (start/"Read N receipts", "Stop", the
+  paused `Alert` + "Resume", or the finished `Alert` +
+  "Review in History"/"Read more receipts") and the OpenAI note, now live
+  inside one `<div className="sticky bottom-0 -mx-6 -mb-6 ... bg-surface
+  border-t">` directly below `BatchQueue`'s row list (negative margins
+  escape the surrounding `Card`'s own `p-6` so the bar's border/background
+  span the full card width) — pinning the controls to the bottom of the
+  viewport while the card is in view, instead of leaving them at the
+  bottom of a 20-row list. Internal logic (pause rules, finished
+  detection, the `apartmentId` read, etc.) is unchanged from before — only
+  the JSX location moved.
+  **Start/stop/pause/finish** (unchanged logic, relocated into the sticky
+  bar): before `start()`, a primary "Read N receipts" button (disabled
+  until an apartment is chosen and N ≥ 1, same "Choose an apartment to
+  continue." helper, shown for `file || isBatchActive`) plus the muted
+  "Each receipt is sent to OpenAI to read it (N requests)." note; while
+  running and not paused, a secondary "Stop" button; while paused
+  (`pausedReason`: `'unavailable'`/`'network'` from the engine, or
+  `'stopped'` after Stop), an `Alert` (`error` variant for the first two,
+  `warning` for `'stopped'`) with
+  `EXTRACTION_NOT_CONFIGURED_MESSAGE`/`NETWORK_ERROR_MESSAGE`/a local
   `STOPPED_MESSAGE` ("Stopped. The remaining receipts were not
   processed.") plus a "Resume" button. Once nothing is waiting or in
-  flight (`batchWaitingOrInFlight`, derived from item statuses — the
-  engine's own `running` flag is deliberately never reset back to `false`
-  by `STOP`/finishing, so it can't be used for this check), a success
+  flight (`batchWaitingOrInFlight`, derived from item statuses), a success
   `Alert` ("Done: X read, Y failed.") offers "Review in History"
   (`navigateTo('?view=history&apartment=<id>&status=needs_review')`,
   reading the component's own `apartmentId` state, which can't drift from
@@ -627,9 +686,16 @@ the purchase info, and the result is displayed for review.
   active/inactive states, the logo mark, the dropzone's
   idle/drag-over/file-selected states, a `Skeleton` sample, the
   card-variant items list, the warnings panel/Edited badge/reset
-  confirmation, a `BatchQueue` sample (one row per status plus rejected
-  files), the batch paused (unavailable/network/stopped)/finished
-  states, and the Items view's loading/table (normal, unrecognized-date,
+  confirmation, a `BatchQueue` sample (compact rows, one per status, plus
+  rejected files — reflecting the same component the real batch flow
+  uses), the batch paused (unavailable/network/stopped)/finished
+  states, a dedicated "Batch summary line and sticky action bar" section
+  (toggles between the before-start summary text and the after-start
+  progress/button state, over a short scrollable sample list, for a quick
+  visual check of the sticky-positioning markup), a "Reading tips
+  (collapsible, under the dropzone)" section showing the
+  `<details>`/`<summary>` tips element on its own, and the Items view's
+  loading/table (normal, unrecognized-date,
   missing-values, long-title and long-store rows)/matching cards/both
   empty states/error/"Show more" states (plus a standalone "Sort by"
   select sample, not wired to any of the above — a static visual check of

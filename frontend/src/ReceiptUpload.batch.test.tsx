@@ -271,7 +271,9 @@ test('Given a waiting file, When Remove is clicked, Then it disappears from the 
   selectFiles([makeFile('a.jpg'), makeFile('b.jpg')])
 
   await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument())
-  fireEvent.click(screen.getAllByRole('button', { name: /^remove$/i })[0])
+  // The batch queue's Remove is now an icon-only button, named by the file
+  // it removes (e.g. "Remove a.jpg") rather than the old plain "Remove".
+  fireEvent.click(screen.getByRole('button', { name: 'Remove a.jpg' }))
 
   expect(screen.queryByText('a.jpg')).not.toBeInTheDocument()
   expect(getStartButton(1)).toBeInTheDocument()
@@ -374,7 +376,9 @@ test('Given a batch is running, Then the apartment group and the dropzone are di
 
   await waitFor(() => expect(uploadDeferreds.size).toBe(2))
   expect(screen.getByRole('radio', { name: SAMPLE_APARTMENTS[0].name })).toBeDisabled()
-  expect(screen.getByRole('button', { name: /drag a receipt here/i })).toHaveAttribute('aria-disabled', 'true')
+  // Once files are queued, the full dropzone is replaced by a compact
+  // "Add more files" bar (same input/validation, disabled while running).
+  expect(screen.getByRole('button', { name: /add more files/i })).toHaveAttribute('aria-disabled', 'true')
   expect(getFileInput()).toBeDisabled()
 })
 
@@ -404,4 +408,53 @@ test('Given a batch upload is in flight, Then a beforeunload handler is register
 
   addSpy.mockRestore()
   removeSpy.mockRestore()
+})
+
+// --- Compact queue / sticky action bar (upload screen polish) --------------
+
+test('before start, a summary line shows the count, total size and chosen apartment -- no progress bar yet', async () => {
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+  selectFiles([makeFile('a.jpg'), makeFile('b.jpg')])
+  await chooseApartment()
+
+  expect(screen.getByText(`2 receipts · 10 B · for ${SAMPLE_APARTMENTS[0].name}`)).toBeInTheDocument()
+  expect(screen.queryByLabelText('Batch progress')).not.toBeInTheDocument()
+})
+
+test('once started, the progress bar and "N of M read, K failed" text replace the summary line', async () => {
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+  selectFiles([makeFile('a.jpg'), makeFile('b.jpg')])
+  await chooseApartment()
+  fireEvent.click(getStartButton(2))
+
+  await waitFor(() => expect(uploadDeferreds.size).toBe(2))
+  expect(screen.getByLabelText('Batch progress')).toBeInTheDocument()
+  expect(screen.getByText('0 of 2 read, 0 failed')).toBeInTheDocument()
+  expect(screen.queryByText(`2 receipts · 10 B · for ${SAMPLE_APARTMENTS[0].name}`)).not.toBeInTheDocument()
+})
+
+test('the sticky action bar contains the "Read N receipts" button', async () => {
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+  selectFiles([makeFile('a.jpg'), makeFile('b.jpg')])
+  await chooseApartment()
+
+  const startButton = getStartButton(2)
+  const stickyBar = startButton.closest('.sticky')
+  expect(stickyBar).not.toBeNull()
+  expect(stickyBar).toHaveClass('bottom-0')
+})
+
+test('files are queued in natural filename order regardless of selection order', async () => {
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+
+  // Selected newest-first / out of numeric order, as a camera roll often is
+  selectFiles([makeFile('img10.jpg'), makeFile('img2.jpg'), makeFile('img1.jpg')])
+
+  await waitFor(() => expect(screen.getByText('img1.jpg')).toBeInTheDocument())
+  const names = screen.getAllByTitle(/^img\d+\.jpg$/).map((el) => el.textContent)
+  expect(names).toEqual(['img1.jpg', 'img2.jpg', 'img10.jpg'])
 })

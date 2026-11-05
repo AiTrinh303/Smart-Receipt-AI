@@ -150,6 +150,7 @@ function StyleGuide() {
   const [receiptStatusState, setReceiptStatusState] = useState<ReceiptStatusState>('needs_review')
   const [historyTab, setHistoryTab] = useState<'all' | 'oberaudorf'>('all')
   const [batchPauseState, setBatchPauseState] = useState<BatchPauseState>('finished')
+  const [batchSummaryState, setBatchSummaryState] = useState<'before-start' | 'running'>('before-start')
   const [itemsViewState, setItemsViewState] = useState<
     'loading' | 'table' | 'cards' | 'empty-unfiltered' | 'empty-filtered' | 'error'
   >('table')
@@ -582,7 +583,7 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Batch upload queue (BatchQueue -- waiting / in progress / done with warnings / failed / rejected files)">
+      <Section title="Batch upload queue (BatchQueue -- compact rows: waiting / in progress / done with warnings / failed / rejected files)">
         <Card className="flex flex-col gap-4">
           <BatchQueue
             items={SAMPLE_BATCH_ITEMS}
@@ -590,6 +591,79 @@ function StyleGuide() {
             onRetry={() => {}}
             onRemove={() => {}}
           />
+        </Card>
+      </Section>
+
+      <Section title="Batch summary line and sticky action bar (ReceiptUpload batch mode)">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setBatchSummaryState('before-start')}>
+            Show before start (summary line)
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setBatchSummaryState('running')}>
+            Show after start (progress)
+          </Button>
+        </div>
+
+        <Card className="relative flex max-h-56 flex-col gap-2 overflow-y-auto p-0">
+          <ul className="flex flex-col gap-2 p-4">
+            <li className="rounded-md border border-border bg-surface-page px-3 py-2 text-sm text-ink-muted">
+              Row 1 (scrolls behind the sticky bar below)
+            </li>
+            <li className="rounded-md border border-border bg-surface-page px-3 py-2 text-sm text-ink-muted">
+              Row 2
+            </li>
+            <li className="rounded-md border border-border bg-surface-page px-3 py-2 text-sm text-ink-muted">
+              Row 3
+            </li>
+          </ul>
+
+          <div className="sticky bottom-0 flex flex-col gap-3 border-t border-border bg-surface px-4 py-3">
+            {batchSummaryState === 'running' ? (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="styleguide-batch-progress" className="text-sm font-medium text-ink">
+                  Batch progress
+                </label>
+                <progress id="styleguide-batch-progress" value={1} max={3} className="h-2 w-full accent-brand" />
+                <p role="status" className="text-sm text-ink-muted">
+                  1 of 3 read, 0 failed
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-ink-muted">3 receipts · 1.2 MB · for Waldglück</p>
+            )}
+            {batchSummaryState === 'running' ? (
+              <Button variant="secondary" size="sm" className="self-start">
+                Stop
+              </Button>
+            ) : (
+              <>
+                <Button className="self-start">Read 3 receipts</Button>
+                <p className="flex items-start gap-1.5 text-sm text-ink-muted">
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none">
+                    <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M10 9v4.5M10 6.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  Each receipt is sent to OpenAI to read it (3 requests).
+                </p>
+              </>
+            )}
+          </div>
+        </Card>
+      </Section>
+
+      <Section title="Reading tips (collapsible, under the dropzone)">
+        <Card className="flex flex-col gap-4">
+          <details className="rounded-md border border-border px-3 py-2 text-sm text-ink-muted">
+            <summary className="cursor-pointer select-none font-medium text-ink">
+              Tips for better reading
+            </summary>
+            <ul className="mt-2 flex flex-col gap-1 pl-4 list-disc">
+              <li>Lay the receipt flat.</li>
+              <li>Use good light.</li>
+              <li>Keep the whole receipt in frame, including the total.</li>
+              <li>One receipt per photo.</li>
+            </ul>
+          </details>
         </Card>
       </Section>
 

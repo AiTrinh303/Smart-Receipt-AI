@@ -58,21 +58,30 @@ receipt onto it to choose a file. On small screens, a "Take photo" button
 opens the device camera directly. Choosing or dropping exactly one file
 shows it with its name and size and a "Remove" button; choosing or dropping
 two or more switches to **batch mode** instead (up to 20 files at once, 2
-uploaded/read at a time): each file gets a row with its status
-(Waiting/Uploading.../Reading.../Done/Failed), and the primary button reads
-"Read N receipts". A done row gets an "Open" link (opens the receipt in a
-new tab, since the queue lives only in this page's memory) and a
-"Check values (N)" badge when the AI flagged anything; a failed row shows
-its error and a "Retry" button. A network failure or a `503` (AI service
-unavailable) pauses the whole queue with an explanation and a "Resume"
-button; "Stop" pauses deliberately, letting anything already in flight
-finish. Once nothing is left waiting or in flight, a summary ("Done: X read,
-Y failed.") offers "Review in History" (jumps to that apartment's
-needs-review receipts) or "Read more receipts". The dropzone and apartment
-choice are disabled while a batch is running, and leaving the page mid-
-upload prompts a browser confirmation. See [docs/design.md](docs/design.md)
-for the design system (tokens, shared components, accessibility rules) used
-throughout the UI.
+uploaded/read at a time, sorted by filename — e.g. "img2.jpg" before
+"img10.jpg" — regardless of the order the browser handed them over in).
+Once files are queued, the dropzone itself shrinks to a compact "Add more
+files" bar. Each file gets a single compact row (a thumbnail for an image,
+a file icon for a PDF, the name, size, a status chip, and an icon-only
+Remove button) with its status (Waiting/Uploading.../Reading.../Done/
+Failed); a done row additionally shows an "Open" link (opens the receipt in
+a new tab, since the queue lives only in this page's memory) and a
+"Check values (N)" badge when the AI flagged anything, and a failed row
+shows its error and a "Retry" button underneath. A sticky bar at the bottom
+of the card holds a summary line — "N receipts · X MB · for &lt;apartment&gt;"
+before starting, or a progress bar plus "X of Y read, Z failed" once
+started — together with the primary button ("Read N receipts"), "Stop" and
+"Resume", and the OpenAI note, so they stay visible without scrolling
+through a long queue. A network failure or a `503` (AI service unavailable)
+pauses the whole queue with an explanation and a "Resume" button; "Stop"
+pauses deliberately, letting anything already in flight finish. Once
+nothing is left waiting or in flight, a summary ("Done: X read, Y failed.")
+offers "Review in History" (jumps to that apartment's needs-review
+receipts) or "Read more receipts". The dropzone and apartment choice are
+disabled while a batch is running, and leaving the page mid-upload prompts
+a browser confirmation. See [docs/design.md](docs/design.md) for the design
+system (tokens, shared components, accessibility rules) used throughout the
+UI.
 
 After a receipt is uploaded and extracted, the address bar is updated to
 `?receipt=<id>` (via `history.replaceState`, no page reload). Reloading the
