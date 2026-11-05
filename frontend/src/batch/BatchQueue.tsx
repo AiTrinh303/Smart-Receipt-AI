@@ -161,7 +161,7 @@ function BatchQueue({ items, rejected, onRetry, onRemove }: BatchQueueProps) {
         {items.map((item) => {
           const thumbnailUrl = thumbnails.get(item.id)
           return (
-            <li key={item.id} className="rounded-md border border-border bg-surface-page">
+            <li key={item.id} className="rounded-control bg-surface-page">
               <div className="flex items-center gap-3 px-3 py-2">
                 {thumbnailUrl ? (
                   <img

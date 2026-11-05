@@ -67,9 +67,9 @@ function RadioCardGroup({
             <label
               key={option.value}
               title={accessibleName}
-              className={`flex min-h-[44px] flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand ${
+              className={`flex min-h-[44px] flex-1 items-center justify-between gap-2 rounded-control border px-3 py-2 text-sm transition-colors duration-150 motion-reduce:transition-none focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand ${
                 checked
-                  ? 'border-brand bg-brand-soft font-semibold text-ink'
+                  ? 'border-brand bg-brand-subtle font-semibold text-ink ring-2 ring-brand/15'
                   : 'border-border font-normal text-ink'
               } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'}`}
             >

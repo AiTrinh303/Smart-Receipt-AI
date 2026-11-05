@@ -13,13 +13,13 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const BASE =
-  'inline-flex items-center justify-center gap-2 rounded-md font-semibold ' +
+  'inline-flex items-center justify-center gap-2 rounded-control font-medium ' +
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ' +
-  'disabled:cursor-not-allowed transition-colors'
+  'disabled:cursor-not-allowed transition-colors duration-150 motion-reduce:transition-none'
 
 const SIZE_CLASSES: Record<Size, string> = {
-  sm: 'min-h-[44px] px-3 py-2 text-sm sm:min-h-0 sm:py-1.5',
-  md: 'min-h-[44px] px-4 py-2.5 text-sm',
+  sm: 'h-11 px-3 text-sm sm:h-10 sm:px-3.5',
+  md: 'h-11 px-4 text-sm sm:h-10 sm:px-4',
 }
 
 const VARIANT_CLASSES: Record<Variant, string> = {

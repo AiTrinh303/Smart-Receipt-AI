@@ -35,7 +35,9 @@ CSS" below -- jsdom's 100+ passing tests say nothing about layout or color.
 | `brand-soft`     | `#eef2ff` | Info background               | — (background)     |
 | `ink`            | `#0f172a` | Primary text                  | 17.9:1             |
 | `ink-muted`      | `#475569` | Secondary/helper text         | 7.6:1              |
-| `border`         | `#64748b` | Borders, dividers             | 4.76:1 (non-text)   |
+| `border`         | `#64748b` | **Control** borders: buttons, inputs, selectable cards, the dropzone -- anything interactive | 4.76:1 (non-text)   |
+| `border-subtle`  | `#e2e8f0` | **Decorative** container borders only: `Card`, panels -- never an interactive control | 1.23:1 (decorative, no minimum) |
+| `brand-subtle`   | `#e0e7ff` | Larger selected-background fills: a chosen `RadioCardGroup` card, the idle dropzone | ink 14.5:1, ink-muted 6.15:1 |
 | `success`        | `#15803d` | Success text/icons            | 5.1:1              |
 | `success-soft`   | `#f0fdf4` | Success background            | — (background)      |
 | `warning`        | `#a16207` | Warning text/icons            | 5.4:1              |
@@ -45,7 +47,65 @@ CSS" below -- jsdom's 100+ passing tests say nothing about layout or color.
 
 All text-on-background combinations above meet WCAG AA (4.5:1 for normal
 text). A disabled `Button` uses `slate-300`/`slate-600` text, which still
-meets 4.5:1.
+meets 4.5:1. `ink-muted` (the app-wide secondary/helper-text color) meets
+4.5:1 against **every** background it's actually used on: white (7.58:1),
+the page background `surface-page` (7.24:1), and the new `brand-subtle`
+selected-card background (6.15:1) -- checked explicitly in
+`Button.contrast.test.ts` (not just against white, since a muted helper
+line sitting on `surface-page` or inside a selected card is exactly the
+kind of pairing that's easy to silently under-contrast otherwise).
+
+## Type scale, radii and shadows
+
+Added alongside the token refresh in the visual design pass (calm, modern,
+professional look; see the Changelog for what prompted it).
+
+- **Type scale.** `text-xs` (12px/16px), `text-sm` (14px/20px) and
+  `text-base` (16px/24px) are Tailwind's own defaults and were never
+  redefined -- they already matched this app's "caption/small/body" needs
+  exactly. The only new scale step is `text-title` (`fontSize.title` in
+  `tailwind.config.js`): 28px/36px, `font-weight: 600`,
+  `letter-spacing: -0.025em` (the same value as Tailwind's own
+  `tracking-tight`, baked directly into the token so a page title is
+  always correctly weighted/tracked without remembering to add a second
+  utility). Used for exactly one element per view: `PageHeader`'s `<h1>`
+  (see "Page header pattern" below).
+- **Base body text.** `src/index.css` sets `body { @apply bg-surface-page
+  font-sans text-base text-ink; }` -- an explicit, intentional base rather
+  than relying on the browser default matching `text-base` by coincidence.
+  `App.tsx`'s root `<div>` keeps its own `bg-surface-page` too (harmless
+  duplication, and a fallback for any area outside the root node, e.g.
+  mobile overscroll).
+- **Radii.** `rounded-card` (12px) for decorative containers (`Card` and
+  similar panels) and `rounded-control` (8px) for interactive controls
+  (`Button`, `RadioCardGroup` cards, inputs) -- added as explicit,
+  self-documenting names alongside the pre-existing `rounded-sm`/`-md`/
+  `-lg` (which happen to resolve to the same 8px/12px values respectively,
+  but under generic names that don't say which kind of element they're
+  for).
+- **Shadows.** `shadow-card` (a soft, ink-tinted two-layer shadow --
+  `rgb(15 23 42 / …)` rather than pure black, for a calmer look) for
+  `Card`, and `shadow-popover` (a larger, more pronounced version) for an
+  elevated panel that should read as sitting above the page (the Upload
+  screen's help panel -- see "Upload page layout" below).
+- **`border` vs. `border-subtle` -- the rule that matters most here:**
+  `border` (`#64748b`, 4.76:1) is the **control** border -- every
+  interactive element (`Button`, every `RadioCardGroup` card whether
+  selected or not, the dropzone) keeps it, satisfying the 3:1 non-text
+  minimum a user needs to see where a clickable/selectable boundary is.
+  `border-subtle` (`#e2e8f0`, 1.23:1) is for **decorative** containers
+  only -- `Card`'s own border, and nothing a user interacts with directly
+  -- where a boundary just needs to be perceptible, not meet any contrast
+  minimum. Mixing these up in either direction is a bug: a `border-subtle`
+  control would be too faint to signal interactivity; a `border` on every
+  decorative panel is the "box-in-box, feels like a form" look this pass
+  specifically moved away from.
+- **Nested containers use a tint, not a second border.** A row that sits
+  *inside* a `Card` (the single-file preview row in `ReceiptUpload.tsx`,
+  each `BatchQueue` row) now uses `bg-surface-page` with no border of its
+  own at all -- the background tint alone is enough to separate it from
+  the card's white `bg-surface`, without stacking a second bordered box
+  inside the first one.
 
 ## Verified against the real built CSS
 
@@ -83,6 +143,44 @@ visual bug report describing an invisible enabled primary button could
 not be reproduced from this codebase's current source or build output.
 See the "Invisible button investigation" entry in the Changelog below for
 the full trail of evidence.
+
+## Shared component refresh (calm/modern visual pass)
+
+- **`Button`** uses `rounded-control` (was `rounded-md` -- same 8px value,
+  new self-documenting name), `font-medium` (was `font-semibold` -- a
+  calmer weight), and a fixed height instead of padding-driven sizing:
+  `h-11` (44px, the touch-target minimum) below `sm`, `h-10` (40px) from
+  `sm` up, for both the `sm` and `md` size props. `transition-colors
+  duration-150 motion-reduce:transition-none` replaces the old bare
+  `transition-colors` (which had no duration at all), so hover/focus color
+  changes are deliberately smooth rather than either instant or
+  undefined-duration, while fully respecting `prefers-reduced-motion`.
+  None of this touches `VARIANT_CLASSES`/`VARIANT_COLOR_TOKENS`, so every
+  variant's colors and the contrast table above are unchanged.
+- **`Alert`** gained a leading icon per variant (info/success/warning/
+  error -- the same inline-SVG style already used elsewhere in the app,
+  `aria-hidden`, `currentColor` so it always matches the variant's text
+  color) next to its existing soft background + role, and moved from
+  `rounded-md` to `rounded-control`. The icon is purely decorative --
+  `role="alert"`/`role="status"` plus the text content is still what
+  actually announces the message, exactly as before.
+- **`RadioCardGroup`'s selected state** moved from `bg-brand-soft` to
+  `bg-brand-subtle` (a slightly stronger indigo wash, meant for a
+  larger selected surface rather than a small pill) plus a soft
+  `ring-2 ring-brand/15` halo for extra, non-color-reliant emphasis
+  alongside the unchanged `border-brand` (the selected card's border
+  stays the 3:1+ brand color, never weakened to `border-subtle`, since
+  a selectable card is an interactive control). Also moved to
+  `rounded-control` and gained the same
+  `transition-colors duration-150 motion-reduce:transition-none` as
+  `Button`.
+- **The nav tabs** (`App.tsx`'s `NavLink`) gained the same
+  `transition-colors duration-150 motion-reduce:transition-none` for
+  their hover/active border-and-text change -- previously instant, with
+  no `prefers-reduced-motion` handling to instead skip.
+- **`StatusBadge`** (soft pill, icon + text, never color alone) and the
+  general badge pattern it establishes were already exactly what this
+  pass asks for everywhere else in the app -- left unchanged.
 
 ## Mobile-friendly patterns
 

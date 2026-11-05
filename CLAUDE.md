@@ -25,12 +25,28 @@ the purchase info, and the result is displayed for review.
   `tailwind.config.js` (`theme.extend`) — components must use these tokens
   (e.g. `bg-brand`, `text-ink-muted`, `border-border`), never hardcoded hex
   colors; see [docs/design.md](docs/design.md) for the palette, contrast
-  ratios, and when to use each shared component. Shared UI components live
+  ratios, and when to use each shared component. `border` (`#64748b`,
+  4.76:1) is the **control** border — every interactive element (`Button`,
+  every `RadioCardGroup` card, the dropzone) keeps it; `border-subtle`
+  (`#e2e8f0`) is for **decorative** containers only (`Card`'s own border)
+  and carries no contrast minimum — never put it on anything interactive.
+  `brand-subtle` (`#e0e7ff`) is for larger selected-background fills (a
+  chosen `RadioCardGroup` card, the idle dropzone), distinct from
+  `brand-soft` (`#eef2ff`, small badge/pill fills). `text-title`
+  (`fontSize.title`: 28px/36px, 600 weight, -0.025em tracking) is used for
+  exactly one element per view — `PageHeader`'s `<h1>`. `rounded-card`
+  (12px)/`rounded-control` (8px) and `shadow-card`/`shadow-popover` are
+  self-documenting aliases for the same 8px/12px radii and the two shadow
+  elevations already in use. Base `body` styles (`src/index.css`):
+  `bg-surface-page font-sans text-base text-ink`. Shared UI components live
   in `src/components/ui/` (`Button`, `Card`, `Alert`, `Spinner`, `Container`,
-  `RadioCardGroup`, `formatFileSize`) — reach for these instead of ad hoc
+  `RadioCardGroup`, `StatusBadge`, `formatFileSize`) — reach for these
+  instead of ad hoc
   markup. All
   interactive elements need a visible `focus-visible` ring and a minimum
-  44px touch target on small screens; never convey state with color alone.
+  44px touch target on small screens; never convey state with color alone;
+  every CSS transition pairs with a `motion-reduce:transition-none` (or
+  equivalent) variant.
   User-visible strings and roles that existing tests assert on (e.g.
   "Uploading...", "Extracting receipt data...", "Receipt not found",
   "Upload another receipt", the 502/503 messages) must stay exactly as they

@@ -91,8 +91,8 @@ interface NavLinkProps {
 }
 
 const NAV_LINK_BASE =
-  'border-b-2 px-1 py-2 text-sm focus-visible:outline focus-visible:outline-2 ' +
-  'focus-visible:outline-offset-2 focus-visible:outline-brand'
+  'border-b-2 px-1 py-2 text-sm transition-colors duration-150 motion-reduce:transition-none ' +
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
 
 function NavLink({ href, search, active, children }: NavLinkProps) {
   return (

@@ -81,7 +81,10 @@ receipts) or "Read more receipts". The dropzone and apartment choice are
 disabled while a batch is running, and leaving the page mid-upload prompts
 a browser confirmation. See [docs/design.md](docs/design.md) for the design
 system (tokens, shared components, accessibility rules) used throughout the
-UI.
+UI, including the type scale, radii and shadow tokens (`text-title`,
+`rounded-card`/`rounded-control`, `shadow-card`/`shadow-popover`) and the
+`border` (control)/`border-subtle` (decorative) distinction from the
+calm/modern visual refresh.
 
 After a receipt is uploaded and extracted, the address bar is updated to
 `?receipt=<id>` (via `history.replaceState`, no page reload). Reloading the

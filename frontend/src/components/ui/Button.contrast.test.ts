@@ -70,9 +70,11 @@ const ALL_CUSTOM_TOKENS = [
   'brand',
   'brand-hover',
   'brand-soft',
+  'brand-subtle',
   'ink',
   'ink-muted',
   'border',
+  'border-subtle',
   'surface',
   'surface-page',
   'success',
@@ -124,4 +126,37 @@ test("the enabled primary button's background token differs from its text token"
   const { background, text } = VARIANT_COLOR_TOKENS.primary
   expect(background).not.toBe(text)
   expect(resolveToken(background as string)).not.toBe(resolveToken(text))
+})
+
+// --- New tokens from the visual design refresh (border-subtle, brand-subtle) ---
+
+describe('ink-muted (the app-wide "secondary text" color)', () => {
+  test('meets 4.5:1 against white', () => {
+    const inkMuted = resolveToken('ink-muted') as string
+    expect(contrastRatio(inkMuted, resolveToken('white') as string)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  test('meets 4.5:1 against the page background (surface-page)', () => {
+    const inkMuted = resolveToken('ink-muted') as string
+    expect(contrastRatio(inkMuted, resolveToken('surface-page') as string)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  test('meets 4.5:1 against brand-subtle (a selected RadioCardGroup card\'s second line)', () => {
+    const inkMuted = resolveToken('ink-muted') as string
+    expect(contrastRatio(inkMuted, resolveToken('brand-subtle') as string)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+test('ink (primary text) meets 4.5:1 against brand-subtle (a selected RadioCardGroup card\'s label)', () => {
+  const ink = resolveToken('ink') as string
+  expect(contrastRatio(ink, resolveToken('brand-subtle') as string)).toBeGreaterThanOrEqual(4.5)
+})
+
+test('the brand border on a selected RadioCardGroup card meets 3:1 against its own brand-subtle background', () => {
+  const brand = resolveToken('brand') as string
+  expect(contrastRatio(brand, resolveToken('brand-subtle') as string)).toBeGreaterThanOrEqual(3)
+})
+
+test('border-subtle is a valid color but is NOT required to meet any contrast minimum -- decorative containers only, never an interactive control, a selectable card, or a dropzone', () => {
+  expect(resolveToken('border-subtle')).toMatch(HEX_PATTERN)
 })

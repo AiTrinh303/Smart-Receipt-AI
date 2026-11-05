@@ -925,7 +925,7 @@ function ReceiptUpload() {
         ) : (
           <>
             {file && (
-          <div className="flex items-center gap-3 rounded-md border border-border bg-surface-page px-3 py-2">
+          <div className="flex items-center gap-3 rounded-control bg-surface-page px-3 py-2">
             {previewUrl ? (
               <img
                 src={previewUrl}
