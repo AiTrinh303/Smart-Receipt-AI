@@ -16,6 +16,7 @@ import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import ClampedText from './components/ui/ClampedText'
 import MissingValue from './components/ui/MissingValue'
+import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
 import { formatMoney } from './components/ui/formatMoney'
@@ -32,6 +33,8 @@ const UNRECOGNIZED_DATE_TITLE =
   'This date could not be read as a valid date. Open the receipt and fix it with Edit.'
 
 const FOCUS_TAB_INDEX_SESSION_KEY = 'receiptItemsFocusTabIndex'
+
+const ITEMS_DESCRIPTION = 'Search every purchased item across all your receipts.'
 
 const DEFAULT_ITEM_SORT: ItemSort = 'date_desc'
 const SORT_OPTIONS: { value: ItemSort; label: string }[] = [
@@ -430,10 +433,11 @@ function ReceiptItems() {
   if (isLoading) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-4">
+        <PageHeader title="Items" description={ITEMS_DESCRIPTION} />
         <div
           role="status"
           aria-busy="true"
-          className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-6"
+          className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface p-6 shadow-card"
         >
           <span className="sr-only">Loading items...</span>
           {Array.from({ length: LOADING_ROW_COUNT }).map((_, index) => (
@@ -446,13 +450,16 @@ function ReceiptItems() {
 
   if (error) {
     return (
-      <div className="mx-auto flex max-w-4xl flex-col gap-4 rounded-lg border border-border bg-surface p-6">
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-        <Button variant="secondary" size="sm" className="self-start" onClick={retry}>
-          Retry
-        </Button>
+      <div className="mx-auto flex max-w-4xl flex-col gap-4">
+        <PageHeader title="Items" description={ITEMS_DESCRIPTION} />
+        <div className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface p-6 shadow-card">
+          <p role="alert" className="text-sm text-danger">
+            {error}
+          </p>
+          <Button variant="secondary" size="sm" className="self-start" onClick={retry}>
+            Retry
+          </Button>
+        </div>
       </div>
     )
   }
@@ -512,6 +519,7 @@ function ReceiptItems() {
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
+      <PageHeader title="Items" description={ITEMS_DESCRIPTION} />
       <ReceiptFilters
         tabs={tabs}
         selectedApartmentId={effectiveApartmentId}

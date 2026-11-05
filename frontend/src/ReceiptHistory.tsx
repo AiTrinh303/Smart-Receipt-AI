@@ -5,11 +5,14 @@ import { listReceipts } from './api/listReceipts'
 import type { ApartmentFacet, ReceiptSummary } from './api/types'
 import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
 import Button from './components/ui/Button'
+import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
 import { navigateTo } from './navigation'
 
 const LOADING_ROW_COUNT = 4
+
+const HISTORY_DESCRIPTION = 'Browse every saved receipt, filtered by apartment, year or status.'
 
 const NOT_DETECTED = 'Not detected'
 const NOT_ASSIGNED = 'Not assigned'
@@ -231,11 +234,12 @@ function ReceiptHistory() {
   if (isLoading) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
+        <PageHeader title="History" description={HISTORY_DESCRIPTION} />
         {noticeBanner}
         <div
           role="status"
           aria-busy="true"
-          className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-6"
+          className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface p-6 shadow-card"
         >
           <span className="sr-only">Loading receipts...</span>
           {Array.from({ length: LOADING_ROW_COUNT }).map((_, index) => (
@@ -248,14 +252,17 @@ function ReceiptHistory() {
 
   if (error) {
     return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4 rounded-lg border border-border bg-surface p-6">
-        {noticeBanner}
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-        <Button variant="secondary" size="sm" className="self-start" onClick={retry}>
-          Retry
-        </Button>
+      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+        <PageHeader title="History" description={HISTORY_DESCRIPTION} />
+        <div className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface p-6 shadow-card">
+          {noticeBanner}
+          <p role="alert" className="text-sm text-danger">
+            {error}
+          </p>
+          <Button variant="secondary" size="sm" className="self-start" onClick={retry}>
+            Retry
+          </Button>
+        </div>
       </div>
     )
   }
@@ -264,6 +271,7 @@ function ReceiptHistory() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <PageHeader title="History" description={HISTORY_DESCRIPTION} />
       {noticeBanner}
 
       <ReceiptFilters

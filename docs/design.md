@@ -182,6 +182,74 @@ the full trail of evidence.
   general badge pattern it establishes were already exactly what this
   pass asks for everywhere else in the app -- left unchanged.
 
+## Page header pattern and shell alignment
+
+A visual audit of the Upload screen found no page title at all (the first
+text on the page was a small question), and the header's content was
+wider than the 450px-max-width upload form below it, so the logo and the
+card never visually aligned.
+
+- **`PageHeader`** supplies the **one** `<h1>` a view has: `Upload`
+  (`"Upload receipts"` / `"Read the date, store, items and total
+  automatically."`), `History` (`"History"` / `"Browse every saved
+  receipt, filtered by apartment, year or status."`) and `Items`
+  (`"Items"` / `"Search every purchased item across all your receipts."`)
+  each render it once, at the top of **every** state of that view
+  (loading, error, and the loaded content) -- not only the happy path --
+  so the page never momentarily has zero or two `<h1>`s while data is
+  still loading. `ReceiptUpload.tsx` renders **both** the plain upload
+  form and the saved-receipt view (after extraction, or reopening
+  `?receipt=<uuid>`); only the upload-form branch gets `PageHeader` -- the
+  saved-receipt view keeps `ReceiptResult`'s own store-name `<h1>` as its
+  one heading, completely untouched, and the `?receipt=<id>` loading/
+  not-found/load-error states (which belong to that same saved-receipt
+  code path, not the plain form) render no `PageHeader` either.
+- **The header's "Smart Receipt AI" is no longer an `<h1>`.** Before this
+  pass, the site header rendered `<h1>Smart Receipt AI</h1>` on *every*
+  view -- once `PageHeader` adds its own `<h1>` per view, that would mean
+  two `<h1>`s per page. Since "Smart Receipt AI" is branding (a wordmark
+  next to the logo), not a page title, it's now a plain `<span>` with the
+  same visible text and styling -- a deliberate, listed test change
+  (`App.test.tsx`'s heading-role assertion became a plain text query).
+- **Header/main alignment.** The header's inner `Container` now uses the
+  *same* `size` prop main already computes per view (`mainSize` --
+  `'xl'` for the receipt-detail view and Items, `'lg'` otherwise) instead
+  of being hardcoded to `'lg'` -- so the header's content and the page's
+  content share the exact same max-width and left/right edges on every
+  view, rather than the header staying wider than a narrower page (or
+  vice versa). Header height is now a fixed `h-16` (64px, within the
+  required 56-64px range) instead of padding-driven sizing, and its
+  bottom border moved from `border-border` to `border-border-subtle`
+  (the header bar is a decorative structural divider, not an interactive
+  control).
+- **Logo mark.** `AppMark` (in `App.tsx`) is now a receipt shape -- a
+  white rectangle with a zigzag bottom edge (the torn-paper look of a
+  real receipt) and two short horizontal lines standing in for printed
+  text, in `brand` on the rounded brand-colored square -- replacing the
+  previous generic rounded-rectangle-with-three-lines "document" mark,
+  which read as a generic file icon rather than something that says
+  "receipt." The two text lines use Tailwind's `stroke-brand` utility
+  (a token-based stroke color, not a hardcoded hex) so the SVG still
+  follows the "tokens only" rule despite being hand-drawn markup.
+  `public/favicon.svg` holds the exact same shape, hand-duplicated as a
+  standalone file (hex literals there are an unavoidable exception --
+  the static SVG asset has no access to the Tailwind build pipeline or
+  its tokens) since `index.html` already had the matching
+  `<link rel="icon" type="image/svg+xml" href="/favicon.svg">` from the
+  very first commit; only the file's contents needed replacing, from an
+  unrelated placeholder icon the original Vite scaffold left behind.
+  `index.html` also gained `<meta name="theme-color" content="#4f46e5">`
+  (same hex-literal exception as the favicon) and a `<meta
+  name="description">`, and its static `<title>` changed from the
+  placeholder `"frontend"` to `"Smart Receipt AI"` -- the per-view
+  `document.title` effect in `App.tsx` still overwrites this immediately
+  on mount, unchanged.
+- **Nav tabs** keep their existing `aria-current="page"` + text-and-border
+  active style (bold brand-colored text and a brand-colored bottom
+  border, vs. muted text and a transparent border) with the same
+  hover/`focus-visible` states as before -- only the transition timing
+  changed (see "Shared component refresh" above).
+
 ## Mobile-friendly patterns
 
 - **Items as cards below `sm`.** `ReceiptResult` renders the items table from
@@ -1016,7 +1084,10 @@ newest-first), which read as random next to a camera's sequential names.
 
 ## Type scale
 
-- Page title: `text-2xl font-bold`
+- Page title (one `<h1>` per view, via `PageHeader`): `text-title`
+  (28px/36px, 600 weight, -0.025em tracking — see "Type scale, radii and
+  shadows" above; supersedes the earlier `text-2xl font-bold` this section
+  used before the visual design pass).
 - Section heading: `text-lg font-semibold`
 - Body text: `text-sm` / `text-base`
 - Helper/muted text: `text-sm text-ink-muted`
@@ -1070,6 +1141,11 @@ newest-first), which read as random next to a camera's sequential names.
   the upload form's apartment choice (see "Apartment choice" below).
 - **`formatFileSize`** — formats a byte count as `B`/`KB`/`MB`/`GB` for
   display next to a selected file.
+- **`PageHeader`** — `title` (rendered as the view's one `<h1>`,
+  `text-title`), optional `description` (`max-w-prose`, muted), and an
+  `actions` slot (sits to the right of the title from `sm` up, stacks below
+  it on narrow screens). See "Page header pattern and shell alignment"
+  below for where it's used and the one-`<h1>`-per-view rule.
 
 ## Accessibility rules
 

@@ -26,6 +26,7 @@ import ReceiptResult from './ReceiptResult'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
+import PageHeader from './components/ui/PageHeader'
 import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import Spinner from './components/ui/Spinner'
@@ -36,6 +37,7 @@ const HISTORY_RETURN_PARAM = 'from'
 const APARTMENT_HELPER_ID = 'apartment-helper'
 const FILE_HELPER_ID = 'file-helper'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const UPLOAD_DESCRIPTION = 'Read the date, store, items and total automatically.'
 
 function isValidUuid(value: string): boolean {
   return UUID_PATTERN.test(value)
@@ -702,6 +704,7 @@ function ReceiptUpload() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
+      <PageHeader title="Upload receipts" description={UPLOAD_DESCRIPTION} />
       <Card className="flex flex-col gap-4">
         {apartmentsError ? (
           <div className="flex flex-col gap-2">

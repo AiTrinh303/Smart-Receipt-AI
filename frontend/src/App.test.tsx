@@ -10,9 +10,86 @@ afterEach(() => {
   window.history.replaceState({}, '', '/')
 })
 
-test('renders the Smart Receipt AI heading', () => {
+test('renders the Smart Receipt AI brand name in the header', () => {
+  // The header's "Smart Receipt AI" is branding, not a page heading --
+  // each view supplies its own single <h1> (via PageHeader, or the store
+  // name on a saved receipt), so this is no longer a heading role.
   render(<App />)
-  expect(screen.getByRole('heading', { name: 'Smart Receipt AI' })).toBeInTheDocument()
+  expect(screen.getByText('Smart Receipt AI')).toBeInTheDocument()
+})
+
+// --- Exactly one <h1> per view (PageHeader / saved-receipt store name) ----
+
+test('exactly one h1 renders on the Upload view, with the page title', async () => {
+  const fetchSpy = jest.fn().mockResolvedValue(jsonResponse(200, { items: [], count: 0 }))
+  global.fetch = fetchSpy as unknown as typeof fetch
+
+  render(<App />)
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { level: 1, name: 'Upload receipts' })).toBeInTheDocument()
+  })
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
+})
+
+test('exactly one h1 renders on the History view, with the page title', async () => {
+  window.history.replaceState({}, '', '/?view=history')
+  const fetchSpy = jest.fn().mockImplementation((url: unknown) => {
+    const urlString = String(url)
+    if (urlString.includes('/receipts/facets')) {
+      return Promise.resolve(jsonResponse(200, DEFAULT_FACETS))
+    }
+    return Promise.resolve(jsonResponse(200, { items: [], count: 0 }))
+  })
+  global.fetch = fetchSpy as unknown as typeof fetch
+
+  render(<App />)
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { level: 1, name: 'History' })).toBeInTheDocument()
+  })
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
+})
+
+test('exactly one h1 renders on the Items view, with the page title', async () => {
+  window.history.replaceState({}, '', '/?view=items')
+  const fetchSpy = jest.fn().mockImplementation((url: unknown) => {
+    const urlString = String(url)
+    if (urlString.includes('/receipts/facets')) {
+      return Promise.resolve(jsonResponse(200, DEFAULT_FACETS))
+    }
+    return Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 }))
+  })
+  global.fetch = fetchSpy as unknown as typeof fetch
+
+  render(<App />)
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { level: 1, name: 'Items' })).toBeInTheDocument()
+  })
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
+})
+
+test('a saved receipt view has exactly one h1 -- the store name -- and no PageHeader', async () => {
+  window.history.replaceState({}, '', `/?receipt=${VALID_UUID}`)
+  const fetchSpy = jest.fn().mockResolvedValue(jsonResponse(200, SAVED_RECEIPT))
+  global.fetch = fetchSpy as unknown as typeof fetch
+
+  render(<App />)
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { level: 1, name: 'Corner Store' })).toBeInTheDocument()
+  })
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  expect(screen.queryByText('Upload receipts')).not.toBeInTheDocument()
+
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
 })
 
 test('all nav items are present, with aria-current="page" on the active one', () => {

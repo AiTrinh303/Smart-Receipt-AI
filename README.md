@@ -33,6 +33,13 @@ npm run dev
 Runs at http://localhost:5173. The frontend reads the backend's URL from
 `VITE_API_URL` (see `.env.example`); `.env` is gitignored and not committed.
 
+Each view (Upload, History, Items) shows one page title via a shared
+`PageHeader` component — "Upload receipts", "History" or "Items", each
+with a short description underneath — except the saved-receipt view,
+which keeps the store name as its own title. The header bar above it
+aligns with the page content below (same max width), and shows a
+receipt-shaped logo mark (also used as the browser favicon).
+
 Above the dropzone, the upload screen asks "Which apartment is this receipt
 for?" (or, once 2+ files are queued, "Which apartment are these receipts
 for?") as a set of selectable cards (nothing preselected) fetched from

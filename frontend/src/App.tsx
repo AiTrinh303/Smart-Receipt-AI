@@ -69,16 +69,19 @@ function getPageName(view: View): string {
   return isReceiptDetailView() ? 'Receipt' : 'Upload'
 }
 
+/** A receipt shape (a rectangle with a zigzag bottom edge, the torn-off
+ * look of a real paper receipt, plus two text lines) in white on the brand
+ * square -- replacing the previous generic document-square mark. Reused
+ * byte-for-byte as the favicon (`public/favicon.svg`). */
 function AppMark() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-8 w-8 flex-shrink-0">
       <rect x="1" y="1" width="22" height="22" rx="6" className="fill-brand" />
       <path
-        d="M7 7h10M7 11.5h10M7 16h6"
-        stroke="white"
-        strokeWidth="1.75"
-        strokeLinecap="round"
+        d="M7 5h10v10.5l-1.4 1.3-1.4-1.3-1.4 1.3-1.4-1.3-1.4 1.3-1.4-1.3L7 15.5V5z"
+        fill="white"
       />
+      <path d="M9 9h6M9 12h6" className="stroke-brand" strokeWidth="1.1" strokeLinecap="round" />
     </svg>
   )
 }
@@ -140,11 +143,13 @@ function App() {
         Skip to content
       </a>
 
-      <header className="border-b border-border bg-surface">
-        <Container size="lg" className="flex items-center justify-between gap-4 py-3">
+      <header className="border-b border-border-subtle bg-surface">
+        <Container size={mainSize} className="flex h-16 items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <AppMark />
-            <h1 className="text-lg font-bold text-ink sm:text-xl">Smart Receipt AI</h1>
+            {/* Branding, not a page title -- each view supplies its own single
+                <h1> via PageHeader (or, on a saved receipt, the store name). */}
+            <span className="text-lg font-bold text-ink sm:text-xl">Smart Receipt AI</span>
           </div>
 
           <nav className="flex gap-4 text-sm">

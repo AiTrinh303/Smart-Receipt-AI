@@ -40,8 +40,8 @@ the purchase info, and the result is displayed for review.
   elevations already in use. Base `body` styles (`src/index.css`):
   `bg-surface-page font-sans text-base text-ink`. Shared UI components live
   in `src/components/ui/` (`Button`, `Card`, `Alert`, `Spinner`, `Container`,
-  `RadioCardGroup`, `StatusBadge`, `formatFileSize`) — reach for these
-  instead of ad hoc
+  `RadioCardGroup`, `StatusBadge`, `PageHeader`, `formatFileSize`) — reach
+  for these instead of ad hoc
   markup. All
   interactive elements need a visible `focus-visible` ring and a minimum
   44px touch target on small screens; never convey state with color alone;
@@ -155,6 +155,37 @@ the purchase info, and the result is displayed for review.
   `getPageName()` (-> `document.title`, e.g. "Items · Smart Receipt AI")
   both switch on the same three-way `View` type, same `aria-current`
   treatment for all three.
+  **Page header pattern (`ui/PageHeader.tsx`) — exactly one `<h1>` per
+  view:** `PageHeader` renders a view's one `<h1>` (`text-title`), an
+  optional muted `description` (`max-w-prose`), and an `actions` slot
+  (right of the title from `sm` up, stacked below it otherwise). Used on
+  Upload (`"Upload receipts"`), History (`"History"`) and Items
+  (`"Items"`) — each renders it at the top of **every** state of that
+  view (loading/error/loaded), not just the happy path.
+  `ReceiptUpload.tsx` renders both the plain upload form and the
+  saved-receipt view: **only** the upload-form branch gets `PageHeader`
+  — the saved-receipt view (after extraction, or reopening
+  `?receipt=<uuid>`) keeps `ReceiptResult`'s own store-name `<h1>` as its
+  one heading, and the `?receipt=<id>` loading/not-found/load-error
+  states (part of that same saved-receipt path) render no `PageHeader`
+  either. The site header's "Smart Receipt AI" is **not** a heading — a
+  plain `<span>`, since it's branding next to the logo, not a page title
+  (it *was* an `<h1>` before `PageHeader` existed, which would have made
+  two `<h1>`s per page; `App.test.tsx`'s assertion moved from a heading
+  role query to a plain text query, a deliberate, listed change). The
+  header's inner `Container` now uses the same `size` `App.tsx` already
+  computes for `<main>` per view (`mainSize`) instead of a hardcoded
+  `'lg'`, so the header and the page content share the same max-width and
+  edges; header height is a fixed `h-16` (64px), bottom border
+  `border-border-subtle` (decorative, not interactive). `AppMark` is a
+  receipt-shaped inline SVG (white rectangle, zigzag bottom edge, two
+  text lines via `stroke-brand`) on the brand square, duplicated
+  byte-for-byte (as literal hex, the one unavoidable exception to
+  "tokens only" since it's a standalone asset outside the Tailwind build)
+  into `public/favicon.svg`; `index.html` also has `<meta
+  name="theme-color" content="#4f46e5">` and a `<meta name="description">`,
+  and its static `<title>` is `"Smart Receipt AI"` (the per-view
+  `document.title` effect still overwrites it on mount).
   `ReceiptHistory.tsx` lists saved receipts (store, date, total; "Not
   detected" for anything missing, each row's `apartment_name` as a small
   icon+text badge or plain muted "Not assigned" when it's `null`/missing
