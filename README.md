@@ -34,15 +34,24 @@ Runs at http://localhost:5173. The frontend reads the backend's URL from
 `VITE_API_URL` (see `.env.example`); `.env` is gitignored and not committed.
 
 Above the dropzone, the upload screen asks "Which apartment is this receipt
-for?" as a set of selectable cards (nothing preselected) fetched from
+for?" (or, once 2+ files are queued, "Which apartment are these receipts
+for?") as a set of selectable cards (nothing preselected) fetched from
 `GET /apartments`; while that loads it shows "Loading apartments...", and if
 it fails, an error with a "Retry" button (uploading is impossible either way
-until an apartment can be chosen). "Read receipt" stays disabled until both
-a valid file **and** an apartment are chosen — with only a file selected, a
-muted "Choose an apartment to continue." hint appears. The choice is kept in
+until an apartment can be chosen). Each card shows the apartment's short name
+in bold and, when its full name has exactly 3 `" - "`-separated segments, the
+middle one as a muted second line (e.g. "Waldglück" / "Sankt Englmar"); the
+full name is always available as a tooltip and as the card's accessible
+name. "Read receipt" stays disabled until both a valid file **and** an
+apartment are chosen — with only a file selected, a muted "Choose an
+apartment to continue." hint appears; with only an apartment chosen, a muted
+"Choose a file to continue." hint appears instead. The choice is kept in
 memory for the session: it survives "Remove", picking a different file, and
 "Upload another receipt", so uploading several receipts for the same
-apartment in one sitting only requires choosing it once.
+apartment in one sitting only requires choosing it once. A collapsed "Tips
+for better reading" section under the dropzone lists tips for a cleanly
+readable photo (lay it flat, good light, whole receipt in frame including
+the total, one receipt per photo).
 
 The upload screen is a dropzone: click it, press Enter/Space, or drag a
 receipt onto it to choose a file. On small screens, a "Take photo" button

@@ -1,8 +1,13 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
 import { mockObjectUrl } from './test/objectUrl'
 import { SAMPLE_APARTMENTS, clearApartmentsCache, jsonResponse, withApartments } from './test/apartmentsFetch'
+
+const DASHED_APARTMENTS = [
+  { id: 'a1', name: 'Fewo JoJo - Sankt Englmar - Waldglück' },
+  { id: 'a2', name: 'Fewo JoJo - Oberaudorf - Bergblick' },
+]
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -230,6 +235,97 @@ test('apartment load failure shows an error with Retry, and upload stays disable
   // Then the apartment options appear and can now be chosen
   await user.click(await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name }))
   expect(getSubmitButton()).toBeEnabled()
+})
+
+// --- Apartment card short name / place (Commit 1 polish) -------------------
+
+test('an apartment card shows the short name in bold and the place muted, with the full name in the title', async () => {
+  // Given the mocked apartments have a 3-segment " - " name
+  fetchSpy.mockImplementation(
+    withApartments(
+      () => Promise.reject(new Error('Unexpected fetch call')),
+      () => Promise.resolve(jsonResponse(200, { items: DASHED_APARTMENTS, count: DASHED_APARTMENTS.length })),
+    ),
+  )
+
+  render(<ReceiptUpload />)
+
+  // Then the short name (last segment) is shown as the bold first line
+  await waitFor(() => {
+    expect(screen.getByText('Waldglück')).toBeInTheDocument()
+  })
+  // And the place (middle segment) is shown as a muted second line
+  expect(screen.getByText('Sankt Englmar')).toBeInTheDocument()
+  // And the full name is available as a tooltip
+  expect(screen.getByTitle('Fewo JoJo - Sankt Englmar - Waldglück')).toBeInTheDocument()
+})
+
+test('the radio input keeps the full apartment name as its accessible name, even though only the short name is visible', async () => {
+  fetchSpy.mockImplementation(
+    withApartments(
+      () => Promise.reject(new Error('Unexpected fetch call')),
+      () => Promise.resolve(jsonResponse(200, { items: DASHED_APARTMENTS, count: DASHED_APARTMENTS.length })),
+    ),
+  )
+
+  render(<ReceiptUpload />)
+
+  // The radio is found by its FULL accessible name, not just "Waldglück"
+  const radio = await screen.findByRole('radio', { name: 'Fewo JoJo - Sankt Englmar - Waldglück' })
+  expect(radio).toBeInTheDocument()
+})
+
+// --- Plural legend, file helper, tips (Commit 1 polish) --------------------
+
+test('the legend pluralizes once 2 or more files are queued', async () => {
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+  expect(screen.getByText('Which apartment is this receipt for?')).toBeInTheDocument()
+
+  fireEvent.change(screen.getByLabelText(/upload receipt/i), {
+    target: { files: [new File(['a'], 'a.jpg', { type: 'image/jpeg' }), new File(['b'], 'b.jpg', { type: 'image/jpeg' })] },
+  })
+
+  await waitFor(() => {
+    expect(screen.getByText('Which apartment are these receipts for?')).toBeInTheDocument()
+  })
+  expect(screen.queryByText('Which apartment is this receipt for?')).not.toBeInTheDocument()
+})
+
+test('choosing an apartment with no file shows "Choose a file to continue." tied to the disabled submit button', async () => {
+  const user = userEvent.setup()
+  render(<ReceiptUpload />)
+
+  await user.click(await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name }))
+
+  const helper = screen.getByText('Choose a file to continue.')
+  expect(helper).toBeInTheDocument()
+  expect(getSubmitButton()).toHaveAttribute('aria-describedby', helper.id)
+  expect(getSubmitButton()).toBeDisabled()
+})
+
+test('"Choose a file to continue." disappears once a file is also selected', async () => {
+  const user = userEvent.setup()
+  render(<ReceiptUpload />)
+  await user.click(await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name }))
+  expect(screen.getByText('Choose a file to continue.')).toBeInTheDocument()
+
+  await selectValidFile(user)
+
+  expect(screen.queryByText('Choose a file to continue.')).not.toBeInTheDocument()
+})
+
+test('collapsible reading tips are shown under the dropzone', async () => {
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+
+  expect(screen.getByText('Tips for better reading')).toBeInTheDocument()
+  const user = userEvent.setup()
+  await user.click(screen.getByText('Tips for better reading'))
+  expect(screen.getByText('Lay the receipt flat.')).toBeInTheDocument()
+  expect(screen.getByText('Use good light.')).toBeInTheDocument()
+  expect(screen.getByText('Keep the whole receipt in frame, including the total.')).toBeInTheDocument()
+  expect(screen.getByText('One receipt per photo.')).toBeInTheDocument()
 })
 
 test('arrow keys work: the options are real native radio inputs sharing one name group', async () => {

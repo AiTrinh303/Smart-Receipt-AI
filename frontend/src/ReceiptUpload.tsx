@@ -13,6 +13,8 @@ import {
 } from './errorMessages'
 import { IMAGE_EXTENSIONS, getExtension, isLikelyValidPdf, isValidFile } from './fileValidation'
 import { navigateTo } from './navigation'
+import { apartmentPlace } from './format/apartmentPlace'
+import { apartmentShortName } from './format/apartmentShortName'
 import { useApartments } from './hooks/useApartments'
 import BatchQueue from './batch/BatchQueue'
 import { useBatchUpload } from './batch/useBatchUpload'
@@ -32,6 +34,7 @@ import { formatFileSize } from './components/ui/formatFileSize'
 const RECEIPT_QUERY_PARAM = 'receipt'
 const HISTORY_RETURN_PARAM = 'from'
 const APARTMENT_HELPER_ID = 'apartment-helper'
+const FILE_HELPER_ID = 'file-helper'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function isValidUuid(value: string): boolean {
@@ -694,9 +697,14 @@ function ReceiptUpload() {
         ) : (
           apartments && (
             <RadioCardGroup
-              legend="Which apartment is this receipt for?"
+              legend={isBatchActive ? 'Which apartment are these receipts for?' : 'Which apartment is this receipt for?'}
               name="apartment"
-              options={apartments.map((apartment) => ({ value: apartment.id, label: apartment.name }))}
+              options={apartments.map((apartment) => ({
+                value: apartment.id,
+                label: apartmentShortName(apartment.name) ?? apartment.name,
+                secondaryLabel: apartmentPlace(apartment.name),
+                accessibleName: apartment.name,
+              }))}
               value={apartmentId}
               onChange={setApartmentId}
               disabled={isInputDisabled}
@@ -771,6 +779,18 @@ function ReceiptUpload() {
         >
           Take photo
         </Button>
+
+        <details className="rounded-md border border-border px-3 py-2 text-sm text-ink-muted">
+          <summary className="cursor-pointer select-none font-medium text-ink">
+            Tips for better reading
+          </summary>
+          <ul className="mt-2 flex flex-col gap-1 pl-4 list-disc">
+            <li>Lay the receipt flat.</li>
+            <li>Use good light.</li>
+            <li>Keep the whole receipt in frame, including the total.</li>
+            <li>One receipt per photo.</li>
+          </ul>
+        </details>
 
         {isBatchActive ? (
           <div className="flex flex-col gap-4">
@@ -903,9 +923,16 @@ function ReceiptUpload() {
           disabled={!file || !apartmentId || isBusy}
           loading={isBusy}
           loadingText={isUploading ? 'Uploading...' : 'Extracting...'}
+          aria-describedby={apartmentId && !file ? FILE_HELPER_ID : undefined}
         >
           Read receipt
         </Button>
+
+        {apartmentId && !file && (
+          <p id={FILE_HELPER_ID} className="text-sm text-ink-muted">
+            Choose a file to continue.
+          </p>
+        )}
 
         <p className="flex items-start gap-1.5 text-sm text-ink-muted">
           <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none">

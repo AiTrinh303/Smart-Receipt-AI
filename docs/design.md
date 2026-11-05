@@ -172,6 +172,58 @@ the full trail of evidence.
 - **`uploadReceipt(file, apartmentId)`** sends `apartment_id` as a second
   `FormData` field alongside `file`.
 
+## Upload screen polish: readable apartment cards, helper text, tips
+
+A follow-up pass after real use (uploading up to 20 receipts at once) found
+the upload form's apartment cards and helper text didn't scale: long
+apartment names wrapped over 3 lines, the legend always said "this
+receipt" even with a dozen files queued, and a disabled "Read receipt"
+button with no file selected gave no explanation.
+
+- **`RadioCardGroup` gained an optional second line.** `RadioCardOption`
+  now accepts `secondaryLabel` (an optional muted second line) and
+  `accessibleName` (overrides the card's accessible name/tooltip, falling
+  back to `label` when omitted) alongside the existing `label`. The `<input
+  type="radio">` always gets an explicit `aria-label={accessibleName ??
+  label}`, so the accessible name never depends on what's actually visible
+  on the card -- necessary once the visible text is a shortened name rather
+  than the full one. `ReceiptApartment.tsx` and the `StyleGuide` samples
+  pass only `label` (no `secondaryLabel`/`accessibleName`), so their
+  behavior is byte-for-byte unchanged.
+- **Apartment cards show `apartmentShortName` (bold) + `apartmentPlace`
+  (muted second line).** `src/format/apartmentPlace.ts` is a new,
+  deliberately narrow sibling to `apartmentShortName`: it returns the
+  *middle* `" - "`-separated segment of a name with **exactly** 3 such
+  segments (e.g. `"Fewo JoJo - Sankt Englmar - Waldglück"` ->
+  `"Sankt Englmar"`), and `null` for anything else (no separator, 2
+  segments, 4+ segments, or a blank middle segment) -- rather than
+  guessing at a "place" that isn't unambiguously there. The upload form's
+  `RadioCardGroup` options are built as `{label: apartmentShortName(name)
+  ?? name, secondaryLabel: apartmentPlace(name), accessibleName: name}`,
+  so the full name is always on the card's `title` (via the wrapping
+  `<label>`'s own `title` attribute) and always the radio's accessible
+  name, even when the two visible lines don't literally concatenate back
+  to it.
+- **Plural legend with 2+ files queued.** The legend reads "Which
+  apartment is this receipt for?" with 0 or 1 file (the single-file flow),
+  and "Which apartment are these receipts for?" the moment a batch is
+  active (2+ files) -- a single-word, purely cosmetic switch keyed off the
+  same `isBatchActive` flag the rest of the batch UI already uses.
+- **"Choose a file to continue." helper.** Mirroring the existing "Choose
+  an apartment to continue." helper (shown when a file is picked but no
+  apartment is chosen), a new helper appears the other way around: once an
+  apartment is chosen but no file (and no batch) is queued, a muted
+  "Choose a file to continue." sits under the disabled "Read receipt"
+  button, tied to it via `aria-describedby`. Both helpers can never show
+  at once, since each requires the other's precondition to be *missing*.
+- **Collapsible reading tips.** A native `<details>`/`<summary>` ("Tips for
+  better reading") sits under the dropzone/camera button, closed by
+  default, listing: lay the receipt flat, use good light, keep the whole
+  receipt in frame including the total, one receipt per photo. Plain
+  `<details>` needs no new dependency or JS state, and starts collapsed so
+  it doesn't push the dropzone further down the page for a returning user
+  who already knows the tips.
+
 ## Changing the apartment on a saved receipt, and the history badge
 
 - **`ReceiptApartment.tsx`**, rendered by the saved-receipt container (the

@@ -1,6 +1,13 @@
 export interface RadioCardOption {
   value: string
+  /** Primary, bold line shown on the card. */
   label: string
+  /** Optional second line, shown muted below the label. */
+  secondaryLabel?: string | null
+  /** Overrides the card's accessible name (and its title tooltip), for when
+   * the visible label/secondaryLabel don't spell out the full name on their
+   * own (e.g. a shortened apartment name). Falls back to `label`. */
+  accessibleName?: string
 }
 
 interface RadioCardGroupProps {
@@ -55,16 +62,25 @@ function RadioCardGroup({
       <div className="flex flex-col gap-2 sm:flex-row">
         {options.map((option) => {
           const checked = value === option.value
+          const accessibleName = option.accessibleName ?? option.label
           return (
             <label
               key={option.value}
+              title={accessibleName}
               className={`flex min-h-[44px] flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand ${
                 checked
                   ? 'border-brand bg-brand-soft font-semibold text-ink'
                   : 'border-border font-normal text-ink'
               } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'}`}
             >
-              <span>{option.label}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{option.label}</span>
+                {option.secondaryLabel && (
+                  <span className="block truncate text-xs font-normal text-ink-muted">
+                    {option.secondaryLabel}
+                  </span>
+                )}
+              </span>
               <input
                 type="radio"
                 name={name}
@@ -72,6 +88,7 @@ function RadioCardGroup({
                 checked={checked}
                 disabled={disabled}
                 onChange={() => onChange(option.value)}
+                aria-label={accessibleName}
                 className="sr-only"
               />
               {checked && <CheckIcon />}

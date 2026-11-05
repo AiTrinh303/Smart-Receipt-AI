@@ -69,9 +69,14 @@ the purchase info, and the result is displayed for review.
   [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md).)
   `ReceiptUpload.tsx` uploads a file then automatically calls extract and
   renders `ReceiptResult.tsx` with the structured result.
-  **Apartment choice (`hooks/useApartments.ts`, `ui/RadioCardGroup.tsx`):**
+  **Apartment choice (`hooks/useApartments.ts`, `ui/RadioCardGroup.tsx`,
+  `format/apartmentPlace.ts`):**
   the upload form shows a `RadioCardGroup` above the dropzone, legend "Which
-  apartment is this receipt for?", nothing preselected. `useApartments`
+  apartment is this receipt for?" (pluralizing to "Which apartment are these
+  receipts for?" the moment `isBatchActive` — 2+ files queued), nothing
+  preselected (confirmed: `apartmentId` is plain `useState(null)` on every
+  mount, with no persistence beyond the session — deliberately not
+  preselected across a real reload). `useApartments`
   fetches `GET /apartments` only while the plain upload form is about to
   render (never while reopening/showing/failing to load a saved receipt by
   id); a *successful* result is cached at module scope (so "Upload another
@@ -79,10 +84,27 @@ the purchase info, and the result is displayed for review.
   `retry()` tries again. States above the dropzone: loading ("Loading
   apartments..." in a `role="status" aria-busy="true"` region with two
   `Skeleton` blocks), failure (`Alert variant="error"` + "Retry", upload
-  impossible either way), or the loaded group. "Read receipt" stays disabled
+  impossible either way), or the loaded group. Each card's two-line label is
+  built as `{label: apartmentShortName(name) ?? name, secondaryLabel:
+  apartmentPlace(name), accessibleName: name}` — `apartmentPlace(name)`
+  returns the *middle* `" - "`-segment only when the name has **exactly** 3
+  such segments (else `null`, no second line). `RadioCardOption`'s
+  `accessibleName` (falling back to `label` when omitted) is applied as an
+  explicit `aria-label` on the `<input type="radio">`, so the accessible
+  name is always the full apartment name regardless of what's visually
+  shown — `ReceiptApartment.tsx` and `StyleGuide.tsx` pass only `label` (no
+  `secondaryLabel`/`accessibleName`), so their cards/behavior are
+  byte-for-byte unchanged. "Read receipt" stays disabled
   until a valid file **and** a chosen apartment are both present; with only
   a file, a muted "Choose an apartment to continue." hint is shown, tied to
-  the group via `aria-describedby`. The chosen `apartmentId` is plain
+  the group via `aria-describedby`; with only an apartment chosen (no file,
+  no batch), a muted "Choose a file to continue." hint is shown instead,
+  tied to the "Read receipt" button the same way (the two helpers can never
+  both show, since each requires the other's precondition to be *missing*).
+  A closed-by-default `<details>`/`<summary>` ("Tips for better reading")
+  under the dropzone/camera button lists: lay the receipt flat, use good
+  light, keep the whole receipt in frame including the total, one receipt
+  per photo. The chosen `apartmentId` is plain
   component state, untouched by `handleRemoveFile`/`processFile`/
   `handleReset`, so it survives Remove, a new file, and "Upload another
   receipt" within the session (never persisted across a real reload).
