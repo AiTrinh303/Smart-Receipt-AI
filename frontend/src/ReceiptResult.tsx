@@ -85,11 +85,10 @@ function AmountRow({ description, amount, currency }: AmountRowProps) {
 
 interface ReceiptResultProps {
   data: ReceiptExtraction
-  onReset: () => void
   onEdit: () => void
 }
 
-function ReceiptResult({ data, onReset, onEdit }: ReceiptResultProps) {
+function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
   const currencyLabel = data.currency ? ` (${data.currency})` : ''
   const isSmallScreen = useMediaQuery('(max-width: 639px)')
 
@@ -237,10 +236,6 @@ function ReceiptResult({ data, onReset, onEdit }: ReceiptResultProps) {
       <p className="border-t border-border pt-3 text-lg font-bold text-ink">
         {`Total: ${formatMoney(data.total, data.currency)}`}
       </p>
-
-      <Button variant="secondary" onClick={onReset} className="w-full sm:w-auto sm:self-start">
-        Upload another receipt
-      </Button>
       </div>
     </div>
   )

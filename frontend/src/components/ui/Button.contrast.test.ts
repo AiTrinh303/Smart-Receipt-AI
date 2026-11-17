@@ -190,3 +190,24 @@ describe('the disabled primary button', () => {
     expect(ratio).toBeGreaterThanOrEqual(4.5)
   })
 })
+
+// --- StatusBadge ("Needs review" / "Approved"), moved into ReviewBar -------
+//
+// Reported as "small and pale" in the saved-receipt-view ticket; measuring
+// the actual built CSS values (not just the config) confirmed the pair
+// already clears 4.5:1 -- the badge's problem was size/placement (fixed by
+// ReviewBar), not color, so no token change was needed here.
+
+describe.each([
+  ['needs review (warning)', 'warning', 'warning-soft'],
+  ['approved (success)', 'success', 'success-soft'],
+] as const)('StatusBadge "%s" text meets 4.5:1 against its own badge background', (_label, text, background) => {
+  test('measured ratio shown below', () => {
+    const textHex = resolveToken(text) as string
+    const backgroundHex = resolveToken(background) as string
+    const ratio = contrastRatio(textHex, backgroundHex)
+    // eslint-disable-next-line no-console
+    console.log(`StatusBadge ${text} (${textHex}) on ${background} (${backgroundHex}) = ${ratio.toFixed(2)}:1`)
+    expect(ratio).toBeGreaterThanOrEqual(4.5)
+  })
+})

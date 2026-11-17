@@ -483,8 +483,14 @@ the purchase info, and the result is displayed for review.
   container (the same `if (result)` branch used right after extraction and
   when reopening `?receipt=<uuid>`) directly above `ReceiptResult` —
   `ReceiptResult.tsx` itself is never touched. The same `RadioCardGroup`,
-  legend "Apartment", with the receipt's `apartment_id` selected (or
-  nothing selected, with no extra message, when it's `null`); it fetches
+  legend "Apartment" — unchanged — with the receipt's `apartment_id`
+  selected (or nothing selected, with no extra message, when it's `null`);
+  options now show `apartmentShortName(name) ?? name` (bold) and
+  `apartmentPlace(name)` (muted second line, only for a three-segment
+  name) exactly like the upload form's own apartment choice, via the same
+  `secondaryLabel`/`accessibleName` props on `RadioCardGroup` — the
+  accessible name and `title` tooltip stay the full name regardless. It
+  fetches
   its own apartment list via `useApartments(true)` (always enabled here,
   since it only mounts in the saved-receipt view), sharing that hook's
   module-level cache with the upload form's. Choosing another card calls
@@ -497,23 +503,42 @@ the purchase info, and the result is displayed for review.
   non-editing branch); calls neither `extractReceipt` nor the plain
   `updateReceipt`/`PUT /receipts/{id}`.
   **Review status on a saved receipt
-  (`ReceiptReviewStatus.tsx`, `ui/StatusBadge.tsx`):** renamed (via `git
-  mv`, mechanical rename only) from `ReceiptClassification.tsx` when the
-  expense-category feature was removed — see
-  [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md)
-  — and now holds only the status control (the category `<select>` and
-  its `useCategories` hook are gone). Rendered next to `ReceiptApartment`
-  in the same non-editing branch (so it's hidden on the same condition,
-  while the edit form is open) — `ReceiptResult.tsx` itself is never
-  touched. A `StatusBadge` shows the current `status`
+  (`ReviewBar.tsx`, `hooks/useReceiptReviewStatus.ts`,
+  `ReceiptReviewStatus.tsx`, `ui/StatusBadge.tsx`):** the status control —
+  previously `ReceiptReviewStatus.tsx`, rendered next to `ReceiptApartment`
+  — now lives in `ReviewBar.tsx`, at the very top of the data column
+  (above `ReceiptApartment`), since reviewing many receipts in a row
+  means this is the main action, not a small control two sections down.
+  The request logic itself (the `PUT /receipts/{id}/status` call, the
+  `describeMissing()` 422-message mapping) was extracted into a shared
+  hook, `useReceiptReviewStatus(receiptId, onUpdated)`, so `ReviewBar` and
+  `ReceiptReviewStatus.tsx` (kept, now unused by the app, for any future
+  standalone use — renamed via `git mv`, mechanical rename only, from
+  `ReceiptClassification.tsx` when the expense-category feature was
+  removed — see
+  [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md))
+  both call the exact same logic rather than duplicating it. `ReviewBar`
+  is `sticky top-20` under the header from `lg` up (scrolling with the
+  data column), or `fixed` to the bottom of the viewport below `lg` (or
+  wherever `window.matchMedia` doesn't exist) via
+  `hooks/useBottomBarVariant.ts` — only one variant is ever mounted, and
+  the surrounding page adds `pb-24` using that same hook so the fixed
+  variant never covers content. Rendered only in the non-editing branch
+  (so it's hidden on the same condition as `ReceiptApartment`, while the
+  edit form is open) — `ReceiptResult.tsx` itself is never touched. A
+  `StatusBadge` shows the current `status`
   ("Needs review"/warning-toned clock icon, or "Approved"/success-toned
-  check icon — never color alone) next to a primary "Mark as approved"
+  check icon — never color alone; `Button.contrast.test.ts` measures the
+  real built CSS values for both and asserts 4.5:1, which already passes
+  at 4.76:1 — no token change was needed, confirming the badge's
+  "small and pale" report was about size/placement, fixed by moving it
+  into `ReviewBar`, not about color) next to a primary "Mark as approved"
   button (shown when `needs_review`) or a secondary "Back to needs review"
   button (shown when `approved`); either calls
   `PUT /receipts/{id}/status`, showing "Saving..." and disabling the
   visible button (not hiding it) while pending. A `422` with
   `{detail: {message, missing}}` is turned into a plain-words
-  `Alert variant="error"` by a local `describeMissing()` mapping each
+  `Alert variant="error"` by `describeMissing()` mapping each
   recognized code (`apartment`/`date` -> "a valid purchase date"/`total`)
   and joining them ("To approve this receipt, also set: apartment,
   a valid purchase date."), appending "You can fix the date with Edit."
@@ -597,6 +622,12 @@ the purchase info, and the result is displayed for review.
   built by concatenating a variable into a class name — since Tailwind's
   JIT only generates CSS for literal class-name text it finds in the
   source.
+  **"Upload another receipt" placement:** a `ghost` `Button` next to the
+  "Back to history"/"Back to items" link, in one row above the two-column
+  layout (`ReceiptDetailLayout`) — moved there from a `secondary` button at
+  the bottom of `ReceiptResult`'s own card (that button, and the `onReset`
+  prop that rendered it, are gone from `ReceiptResult.tsx`). Both links in
+  that row are hidden together while a delete confirmation is open.
   **Deleting (`src/api/deleteReceipt.ts`):** a `danger-ghost` "Delete"
   button, in the surrounding container below `ReceiptResult` (separated
   from it by a divider — destructive and comparatively rare, unlike Edit,

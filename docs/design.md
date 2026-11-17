@@ -1211,6 +1211,68 @@ newest-first), which read as random next to a camera's sequential names.
   a new "Reading tips (collapsible, under the dropzone)" section shows the
   `<details>`/`<summary>` tips element on its own.
 
+## Making approval the clear main action and compact apartment choice
+
+Reviewing many receipts means: open, compare, approve, go back, open the
+next one -- but the "Mark as approved" action sat in the middle of the
+right column, below two stacked sections, and the apartment cards showed
+full names ("Fewo JoJo - Oberaudorf - Bergblick") instead of the short
+name other pages already use.
+
+- **`ReviewBar.tsx`** (new): the saved-receipt view's main action, now at
+  the very top of the data column instead of buried below
+  `ReceiptApartment`. Shows the same `StatusBadge` and primary
+  "Mark as approved" / secondary "Back to needs review" button as before,
+  via a new shared hook, `src/hooks/useReceiptReviewStatus.ts`, which
+  holds the `PUT /receipts/{id}/status` request and the 422
+  plain-words-message logic exactly once; `ReceiptReviewStatus.tsx` now
+  calls that same hook too (kept, unused by the app today, for any future
+  standalone use -- its own behavior is unchanged), so the logic is
+  shared, never duplicated, between the two. From `lg` up, `ReviewBar` is
+  `sticky top-20` under the header, scrolling with the (usually taller)
+  data column; below `lg` -- or wherever `window.matchMedia` doesn't exist
+  -- it is `fixed` to the bottom of the viewport instead, so it is always
+  reachable on a small screen without competing with the receipt image
+  for space. Which variant renders is decided once, in JS
+  (`src/hooks/useBottomBarVariant.ts`), never by CSS alone, so only one is
+  ever mounted; the surrounding page adds bottom padding (`pb-24`) using
+  that same hook whenever the fixed bottom variant is showing, so it never
+  covers content. Hidden while the edit form is open, exactly like the
+  component it replaces in that position.
+- **"Needs review" badge contrast**, checked against this ticket's
+  "small and pale" observation: measuring the actual built CSS values
+  (`.text-warning` `rgb(161 98 7)` on `.bg-warning-soft` `rgb(254 252
+  232)`) gives 4.76:1, already above the 4.5:1 minimum, so no token
+  change was needed -- `Button.contrast.test.ts` gained a `describe.each`
+  block measuring and asserting this (and the "Approved" success/
+  success-soft pair) explicitly, so a future token change that breaks it
+  fails a fast, colorless-jsdom-safe test. The badge's real problem was
+  size and placement, which `ReviewBar` fixes by giving it the top of the
+  column instead of a small line below two other sections.
+- **Two-line apartment options on a saved receipt.** `ReceiptApartment.tsx`
+  now builds its `RadioCardGroup` options the same way the upload form's
+  own apartment choice already does: `label` is
+  `apartmentShortName(name) ?? name` (bold), `secondaryLabel` is
+  `apartmentPlace(name)` (muted, shown only for a name with exactly three
+  `" - "`-separated segments), and `accessibleName` stays the full name
+  (so the radio's accessible name and its `title` tooltip are unchanged).
+  The legend text, "Apartment", and its visibility are untouched.
+- **"Upload another receipt"** moved from the bottom of the data card (a
+  `secondary` button, via a now-removed `onReset` prop on
+  `ReceiptResult.tsx`) to a `ghost` button next to "Back to history"/
+  "Back to items", in a row above the two-column layout -- both are
+  reachable together, before scrolling into the receipt's data, and both
+  are hidden together while a delete confirmation is open (navigating
+  away mid-confirmation would be confusing either way). Delete stays at
+  the bottom of the data column, in its own separated, danger-styled area,
+  unchanged.
+- **Added to `?view=styleguide`:** the existing "Apartment on a saved
+  receipt" section now demonstrates the two-line short-name/place shape
+  instead of the plain full-name label; a new "Review bar" section shows
+  the `lg`-and-up sticky-under-header sample next to the below-`lg`
+  fixed-to-bottom sample, side by side for comparison (in the real app
+  only one is ever mounted for a given screen size).
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

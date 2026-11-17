@@ -36,7 +36,7 @@ const EMPTY_DATA: ReceiptExtraction = {
 test('full data: store, date, every item row, discounts, taxes and total are shown', () => {
   // Given a full receipt extraction result
   // When the result is rendered
-  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
+  render(<ReceiptResult data={FULL_DATA} onEdit={() => {}} />)
 
   // Then the store, date, currency, every item row, discounts, taxes and total are shown
   expect(screen.getByRole('heading', { level: 1, name: 'Corner Store' })).toBeInTheDocument()
@@ -63,7 +63,7 @@ test('full data: store, date, every item row, discounts, taxes and total are sho
 test('nulls and empty lists: "Not detected" shown, no crash, no null/undefined/NaN text', () => {
   // Given a receipt extraction result where every field is null or empty
   // When the result is rendered
-  render(<ReceiptResult data={EMPTY_DATA} onReset={() => {}} onEdit={() => {}} />)
+  render(<ReceiptResult data={EMPTY_DATA} onEdit={() => {}} />)
 
   // Then "Not detected" / "None detected" are shown instead of blank or raw values
   expect(screen.getAllByText('Not detected').length).toBeGreaterThan(0)
@@ -78,7 +78,7 @@ test('nulls and empty lists: "Not detected" shown, no crash, no null/undefined/N
 
 test('Edit is reachable by role and name, and calls onEdit', () => {
   const onEdit = jest.fn()
-  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={onEdit} />)
+  render(<ReceiptResult data={FULL_DATA} onEdit={onEdit} />)
 
   screen.getByRole('button', { name: /^edit$/i }).click()
   expect(onEdit).toHaveBeenCalledTimes(1)
@@ -86,7 +86,7 @@ test('Edit is reachable by role and name, and calls onEdit', () => {
 
 test('a malformed currency code renders without throwing', () => {
   const data = { ...FULL_DATA, currency: 'US$' }
-  expect(() => render(<ReceiptResult data={data} onReset={() => {}} onEdit={() => {}} />)).not.toThrow()
+  expect(() => render(<ReceiptResult data={data} onEdit={() => {}} />)).not.toThrow()
 })
 
 test('warnings are shown with their messages, titled "Check these values"', () => {
@@ -100,7 +100,7 @@ test('warnings are shown with their messages, titled "Check these values"', () =
   }
 
   // When rendered
-  render(<ReceiptResult data={data} onReset={() => {}} onEdit={() => {}} />)
+  render(<ReceiptResult data={data} onEdit={() => {}} />)
 
   // Then a warning panel lists every message
   expect(screen.getByText('Check these values')).toBeInTheDocument()
@@ -110,7 +110,7 @@ test('warnings are shown with their messages, titled "Check these values"', () =
 
 test('no warnings panel when warnings is empty', () => {
   // Given a receipt with no warnings (FULL_DATA)
-  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
+  render(<ReceiptResult data={FULL_DATA} onEdit={() => {}} />)
 
   // Then no warning panel is shown
   expect(screen.queryByText('Check these values')).not.toBeInTheDocument()
@@ -119,7 +119,7 @@ test('no warnings panel when warnings is empty', () => {
 test('the Edited badge shows only when edited is true, with edited_at in its title', () => {
   // Given an edited receipt
   const edited = { ...FULL_DATA, edited: true, edited_at: '2026-01-20T10:00:00+00:00' }
-  render(<ReceiptResult data={edited} onReset={() => {}} onEdit={() => {}} />)
+  render(<ReceiptResult data={edited} onEdit={() => {}} />)
 
   // Then the "Edited" badge is shown with the timestamp in its title
   const badge = screen.getByText('Edited')
@@ -127,7 +127,7 @@ test('the Edited badge shows only when edited is true, with edited_at in its tit
 })
 
 test('no Edited badge when edited is false', () => {
-  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
+  render(<ReceiptResult data={FULL_DATA} onEdit={() => {}} />)
   expect(screen.queryByText('Edited')).not.toBeInTheDocument()
 })
 
@@ -150,7 +150,7 @@ test('small screen (matchMedia matches): items render as cards, not a table', ()
   mockMatchMedia(true)
 
   // When the result is rendered
-  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
+  render(<ReceiptResult data={FULL_DATA} onEdit={() => {}} />)
 
   // Then each item is a labelled list item, not a table row -- two item
   // cards plus the existing discount and tax list items (4 total)
@@ -171,7 +171,7 @@ test('large screen (matchMedia does not match): the table renders, no item cards
   mockMatchMedia(false)
 
   // When the result is rendered
-  render(<ReceiptResult data={FULL_DATA} onReset={() => {}} onEdit={() => {}} />)
+  render(<ReceiptResult data={FULL_DATA} onEdit={() => {}} />)
 
   // Then the table renders, and only the (unrelated) discount/tax list items exist
   expect(screen.getByRole('table')).toBeInTheDocument()
@@ -185,7 +185,7 @@ test('small screen with null item fields: "Not detected" shown, never NaN/null/u
     items: [{ name: null, quantity: null, unit_price: null, line_total: null }],
   }
 
-  render(<ReceiptResult data={data} onReset={() => {}} onEdit={() => {}} />)
+  render(<ReceiptResult data={data} onEdit={() => {}} />)
 
   const card = screen.getAllByRole('listitem')[0]
   expect(card).toHaveTextContent('Not detected')

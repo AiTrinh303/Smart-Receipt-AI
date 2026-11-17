@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { ApiError } from './api/ApiError'
 import { updateReceiptApartment } from './api/updateReceiptApartment'
 import type { SavedReceipt } from './api/getReceipt'
+import { apartmentPlace } from './format/apartmentPlace'
+import { apartmentShortName } from './format/apartmentShortName'
 import { useApartments } from './hooks/useApartments'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
@@ -81,7 +83,12 @@ function ReceiptApartment({ receiptId, apartmentId, onUpdated }: ReceiptApartmen
       <RadioCardGroup
         legend="Apartment"
         name="receipt-apartment"
-        options={apartments.map((apartment) => ({ value: apartment.id, label: apartment.name }))}
+        options={apartments.map((apartment) => ({
+          value: apartment.id,
+          label: apartmentShortName(apartment.name) ?? apartment.name,
+          secondaryLabel: apartmentPlace(apartment.name),
+          accessibleName: apartment.name,
+        }))}
         value={selected}
         onChange={handleChange}
         disabled={isSaving}

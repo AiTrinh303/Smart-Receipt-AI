@@ -29,6 +29,24 @@ const SAMPLE_APARTMENT_OPTIONS = [
   { value: 'sankt-englmar-waldglueck', label: 'Sankt Englmar Waldglück' },
 ]
 
+// The saved-receipt view's apartment choice shows the same two-line
+// short-name/place shape the upload form already uses, so this section
+// demonstrates that shape (not the plain full-name label above).
+const TWO_LINE_APARTMENT_OPTIONS = [
+  {
+    value: 'oberaudorf-bergblick',
+    label: 'Bergblick',
+    secondaryLabel: 'Oberaudorf',
+    accessibleName: 'Fewo JoJo - Oberaudorf - Bergblick',
+  },
+  {
+    value: 'sankt-englmar-waldglueck',
+    label: 'Waldglück',
+    secondaryLabel: 'Sankt Englmar',
+    accessibleName: 'Fewo JoJo - Sankt Englmar - Waldglück',
+  },
+]
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
@@ -420,7 +438,7 @@ function StyleGuide() {
         </div>
       </Section>
 
-      <Section title="Apartment on a saved receipt (ReceiptApartment -- selected / none / saving / saved / error)">
+      <Section title="Apartment on a saved receipt (ReceiptApartment -- two-line short name/place, selected / none / saving / saved / error)">
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => setReceiptApartmentState('selected')}>
             Show selected
@@ -443,8 +461,8 @@ function StyleGuide() {
           <RadioCardGroup
             legend="Apartment"
             name="styleguide-receipt-apartment"
-            options={SAMPLE_APARTMENT_OPTIONS}
-            value={receiptApartmentState === 'none' ? null : SAMPLE_APARTMENT_OPTIONS[0].value}
+            options={TWO_LINE_APARTMENT_OPTIONS}
+            value={receiptApartmentState === 'none' ? null : TWO_LINE_APARTMENT_OPTIONS[0].value}
             onChange={() => {}}
             disabled={receiptApartmentState === 'saving'}
           />
@@ -503,6 +521,39 @@ function StyleGuide() {
             </Alert>
           )}
         </Card>
+      </Section>
+
+      <Section title="Review bar (ReviewBar -- the saved-receipt view's main action, moved to the top of the data column)">
+        <p className="text-sm text-ink-muted">
+          From `lg` up it sticks under the header while the data column scrolls past it (left sample);
+          below `lg` it instead sticks to the bottom of the viewport (right sample). Only one variant is
+          ever mounted for a given screen size -- these two static samples are shown side by side only
+          for comparison here.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold text-ink">`lg` and up: sticky under the header</h3>
+            <div className="rounded-card border border-border-subtle bg-surface px-4 py-3 shadow-card">
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge status="needs_review" />
+                <Button variant="primary" size="sm">
+                  Mark as approved
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold text-ink">Below `lg`: fixed to the bottom of the viewport</h3>
+            <div className="border-t border-border bg-surface px-4 py-3 shadow-popover">
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge status="approved" />
+                <Button variant="secondary" size="sm">
+                  Back to needs review
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       </Section>
 
       <Section title="History row badges (apartment / status)">

@@ -21,10 +21,11 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import BatchQueue from './batch/BatchQueue'
 import { useBatchUpload } from './batch/useBatchUpload'
 import ReceiptApartment from './ReceiptApartment'
-import ReceiptReviewStatus from './ReceiptReviewStatus'
 import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
+import ReviewBar from './ReviewBar'
+import { useBottomBarVariant } from './hooks/useBottomBarVariant'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
@@ -281,6 +282,7 @@ function ReceiptUpload() {
   // DOM. `useMediaQuery` defaults to `false` when `matchMedia` doesn't
   // exist (jsdom's default), which is exactly the below-`lg` variant.
   const isWideScreen = useMediaQuery('(min-width: 1024px)')
+  const useBottomReviewBar = useBottomBarVariant()
 
   const batch = useBatchUpload()
   const isBatchActive = batch.items.length > 0
@@ -645,42 +647,47 @@ function ReceiptUpload() {
   if (result) {
     const backNavigation = getBackNavigation()
     return (
-      <div className="flex flex-col gap-4">
+      <div className={`flex flex-col gap-4 ${useBottomReviewBar ? 'pb-24' : ''}`}>
         {!isConfirmingDelete && (
-          <a
-            href={`/${backNavigation.search}`}
-            onClick={(e) => {
-              e.preventDefault()
-              navigateTo(backNavigation.search)
-            }}
-            className="inline-flex w-fit items-center gap-1.5 rounded-md px-1 py-2 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
-              <path
-                d="M12 15l-5-5 5-5M7.5 10H17"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            {backNavigation.label}
-          </a>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <a
+              href={`/${backNavigation.search}`}
+              onClick={(e) => {
+                e.preventDefault()
+                navigateTo(backNavigation.search)
+              }}
+              className="inline-flex w-fit items-center gap-1.5 rounded-md px-1 py-2 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            >
+              <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+                <path
+                  d="M12 15l-5-5 5-5M7.5 10H17"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {backNavigation.label}
+            </a>
+            <Button variant="ghost" size="sm" onClick={handleReset}>
+              Upload another receipt
+            </Button>
+          </div>
         )}
 
         <ReceiptDetailLayout receiptId={result.receipt_id} fileName={resultFileName} contentType={resultContentType}>
           <div className="flex flex-col gap-4">
+            <ReviewBar
+              receiptId={result.receipt_id}
+              status={result.status}
+              onUpdated={(updated) => setResult(updated)}
+            />
             <ReceiptApartment
               receiptId={result.receipt_id}
               apartmentId={result.apartment_id}
               onUpdated={(updated) => setResult(updated)}
             />
-            <ReceiptReviewStatus
-              receiptId={result.receipt_id}
-              status={result.status}
-              onUpdated={(updated) => setResult(updated)}
-            />
-            <ReceiptResult data={result} onReset={handleReset} onEdit={() => setIsEditing(true)} />
+            <ReceiptResult data={result} onEdit={() => setIsEditing(true)} />
 
             {isConfirmingDelete ? (
               <Alert variant="error">
