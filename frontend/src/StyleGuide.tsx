@@ -556,6 +556,34 @@ function StyleGuide() {
         </div>
       </Section>
 
+      <Section title='Review mode (ReviewBar -- position, Previous/Next and "Approve and next", shown only when opened from a filtered history list)'>
+        <p className="text-sm text-ink-muted">
+          Shown only when the receipt was opened from a history list with a tab/filter active (so a
+          snapshot of up to 200 matching receipts could be fetched) and this receipt is in it; otherwise
+          ReviewBar looks exactly like the sample above with no position/Previous/Next/"Approve and next".
+        </p>
+        <div className="rounded-card border border-border-subtle bg-surface px-4 py-3 shadow-card">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <StatusBadge status="needs_review" />
+              <Button variant="primary" size="sm">
+                Mark as approved
+              </Button>
+              <Button variant="primary" size="sm">
+                Approve and next
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <p role="status" className="text-ink-muted">
+                2 of 5
+              </p>
+              <span className="font-medium text-brand hover:underline">Previous</span>
+              <span className="font-medium text-brand hover:underline">Next</span>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <Section title="History row badges (apartment / status)">
         <ul className="flex max-w-xs flex-col gap-2">
           <li className="rounded border border-gray-200 px-3 py-2 text-sm">

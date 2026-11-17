@@ -4,9 +4,11 @@ import { ApiError } from './api/ApiError'
 import { deleteReceipt } from './api/deleteReceipt'
 import { extractReceipt } from './api/extractReceipt'
 import { getReceipt } from './api/getReceipt'
+import type { SavedReceipt } from './api/getReceipt'
+import { listReceipts } from './api/listReceipts'
 import { resetReceipt } from './api/resetReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
-import type { ReceiptExtraction } from './api/types'
+import type { ReceiptExtraction, ReceiptStatus, ReceiptSummary } from './api/types'
 import {
   EXTRACTION_FAILED_MESSAGE,
   EXTRACTION_NOT_CONFIGURED_MESSAGE,
@@ -25,6 +27,8 @@ import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
 import ReviewBar from './ReviewBar'
+import type { ReviewNavigation } from './ReviewBar'
+import { effectiveStatus, effectiveYear } from './ReceiptFilters'
 import { useBottomBarVariant } from './hooks/useBottomBarVariant'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
@@ -98,6 +102,31 @@ function getBackNavigation(): { search: string; label: string } {
   }
   return { search: '?view=history', label: 'Back to history' }
 }
+
+/** Review mode (position/Previous/Next/"Approve and next") is only ever
+ * offered when this receipt was opened from a filtered/tabbed *history*
+ * list -- never when `from` is missing or points at the items view, which
+ * the caller is expected to simply not request a snapshot for. */
+function getHistoryFromParam(): string | null {
+  const params = new URLSearchParams(window.location.search)
+  const from = params.get(HISTORY_RETURN_PARAM)
+  return from && from.startsWith('?view=history') ? from : null
+}
+
+/** Parses the apartment/year/status filters out of a `from` value produced
+ * by ReceiptHistory.tsx (e.g. "?view=history&apartment=<id>&status=needs_
+ * review"), using the exact same effectiveYear/effectiveStatus rules that
+ * page already validates its own URL params with, so a malformed value
+ * here is dropped exactly as it would be there -- never sent as-is. */
+function parseHistoryFilters(fromSearch: string): { apartmentId?: string; year?: string; status?: ReceiptStatus } {
+  const params = new URLSearchParams(fromSearch.slice(fromSearch.indexOf('?') + 1))
+  const apartmentId = params.get('apartment') ?? undefined
+  const year = effectiveYear(params.get('year')) ?? undefined
+  const status = effectiveStatus(params.get('status')) ?? undefined
+  return { apartmentId, year, status }
+}
+
+const REVIEW_SNAPSHOT_LIMIT = 200
 
 interface UploadSuccess {
   receiptId: string
@@ -263,6 +292,44 @@ function ReceiptUpload() {
   const [notFound, setNotFound] = useState(initialReceipt.invalid)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // Review mode: the `from` value is read once, at mount -- intra-review
+  // navigation (Previous/Next/Approve and next) updates the address bar
+  // via replaceState (see setReceiptIdInUrl) without remounting this
+  // component, so it never changes mid-session. The snapshot itself stays
+  // `null` (showing no review controls at all, same as today's behaviour)
+  // whenever `from` is missing/points at the items view, or the request
+  // fails -- a failure is never surfaced as an Alert, since the receipt
+  // itself must still work without it.
+  const [reviewFromSearch] = useState(getHistoryFromParam)
+  const [reviewSnapshot, setReviewSnapshot] = useState<ReceiptSummary[] | null>(null)
+
+  useEffect(() => {
+    if (!reviewFromSearch) {
+      return
+    }
+    let cancelled = false
+
+    async function loadSnapshot() {
+      try {
+        const { apartmentId, year, status } = parseHistoryFilters(reviewFromSearch as string)
+        const response = await listReceipts({ apartmentId, year, status, limit: REVIEW_SNAPSHOT_LIMIT })
+        if (!cancelled) {
+          setReviewSnapshot(response.items)
+        }
+      } catch {
+        // Silently hidden -- see the comment above.
+      }
+    }
+
+    loadSnapshot()
+    return () => {
+      cancelled = true
+    }
+    // Only ever run once, on mount (reviewFromSearch is itself fixed for
+    // the lifetime of this mount).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // The apartment list is only needed for the plain upload form -- never
   // while reopening, showing, or failing to load a saved receipt by id.
   const showingUploadForm = !result && !isLoadingReceipt && !notFound && !loadError
@@ -374,6 +441,40 @@ function ReceiptUpload() {
     // Only ever run once, on mount, to read the URL's initial state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Moves within the review snapshot (Previous/Next, and after a
+  // successful "Approve and next") without remounting this component --
+  // setReceiptIdInUrl only ever touches the `receipt` param via
+  // replaceState, leaving `from` (and therefore reviewFromSearch and the
+  // snapshot fetched from it) untouched, so the snapshot is truly
+  // fetched only once per review session, never refetched on every move.
+  const navigateToReceiptInSnapshot = (id: string) => {
+    setReceiptIdInUrl(id)
+    loadSavedReceipt(id)
+  }
+
+  const handleReviewUpdated = (updated: SavedReceipt) => {
+    setResult(updated)
+    setReviewSnapshot((prev) =>
+      prev ? prev.map((item) => (item.receipt_id === updated.receipt_id ? { ...item, status: updated.status } : item)) : prev,
+    )
+  }
+
+  const handleApprovedAndNext = (updated: SavedReceipt) => {
+    if (!reviewSnapshot || !reviewFromSearch) {
+      return
+    }
+    const currentIndex = reviewSnapshot.findIndex((item) => item.receipt_id === updated.receipt_id)
+    const nextNeedsReview = reviewSnapshot
+      .slice(currentIndex + 1)
+      .find((item) => item.status === 'needs_review')
+
+    if (nextNeedsReview) {
+      navigateToReceiptInSnapshot(nextNeedsReview.receipt_id)
+    } else {
+      navigateTo(`${reviewFromSearch}&notice=reviewed`)
+    }
+  }
 
   const runExtraction = async (id: string) => {
     setIsExtracting(true)
@@ -646,6 +747,31 @@ function ReceiptUpload() {
 
   if (result) {
     const backNavigation = getBackNavigation()
+
+    const snapshotIndex = reviewSnapshot?.findIndex((item) => item.receipt_id === result.receipt_id) ?? -1
+    const reviewNavigation: ReviewNavigation | undefined =
+      reviewSnapshot && reviewFromSearch && snapshotIndex !== -1
+        ? {
+            position: { index: snapshotIndex, total: reviewSnapshot.length },
+            previous:
+              snapshotIndex > 0
+                ? {
+                    id: reviewSnapshot[snapshotIndex - 1].receipt_id,
+                    href: `/?receipt=${reviewSnapshot[snapshotIndex - 1].receipt_id}&from=${encodeURIComponent(reviewFromSearch)}`,
+                  }
+                : null,
+            next:
+              snapshotIndex < reviewSnapshot.length - 1
+                ? {
+                    id: reviewSnapshot[snapshotIndex + 1].receipt_id,
+                    href: `/?receipt=${reviewSnapshot[snapshotIndex + 1].receipt_id}&from=${encodeURIComponent(reviewFromSearch)}`,
+                  }
+                : null,
+            onNavigate: navigateToReceiptInSnapshot,
+            onApprovedAndNext: handleApprovedAndNext,
+          }
+        : undefined
+
     return (
       <div className={`flex flex-col gap-4 ${useBottomReviewBar ? 'pb-24' : ''}`}>
         {!isConfirmingDelete && (
@@ -680,7 +806,8 @@ function ReceiptUpload() {
             <ReviewBar
               receiptId={result.receipt_id}
               status={result.status}
-              onUpdated={(updated) => setResult(updated)}
+              onUpdated={handleReviewUpdated}
+              reviewNavigation={reviewNavigation}
             />
             <ReceiptApartment
               receiptId={result.receipt_id}

@@ -1273,6 +1273,73 @@ name other pages already use.
   fixed-to-bottom sample, side by side for comparison (in the real app
   only one is ever mounted for a given screen size).
 
+## Review mode: position, previous, next and approve-and-next
+
+Reviewing many receipts from a filtered History list meant: open, compare,
+approve, go back to the list, find the next one, open it -- a full round
+trip per receipt. Review mode keeps the reviewer inside the receipt view
+instead.
+
+- **When it appears.** `ReceiptUpload.tsx` reads the `from` URL param once,
+  at mount (`getHistoryFromParam()`), and only if it starts with
+  `?view=history` (never `?view=items`, and never when it's missing) does
+  it request `listReceipts(...)` with that `from` value's own
+  `apartment`/`year`/`status` filters (parsed the same way
+  `ReceiptHistory.tsx` validates its own URL params, via the exact same
+  `effectiveYear`/`effectiveStatus` helpers from `ReceiptFilters.tsx`, so a
+  malformed value is dropped identically in both places) and `limit: 200`
+  -- a single snapshot, kept in `reviewSnapshot` state. If that request
+  fails, or the current receipt isn't in the 200 returned, `reviewSnapshot`
+  simply never gains review-mode controls: no `Alert`, nothing -- the
+  receipt view itself is completely unaffected either way. Only the first
+  200 receipts of a filter are ever navigable this way; a larger filtered
+  list silently stops offering Previous/Next/position past that point
+  (`reviewSnapshot` just won't contain receipts beyond it).
+- **Staying mounted across moves.** Previous, Next, and "Approve and
+  next" never trigger a remount (which would force a fresh, wasteful
+  snapshot re-fetch) -- `navigateToReceiptInSnapshot(id)` calls the
+  existing `setReceiptIdInUrl(id)` (a plain `replaceState` that only ever
+  touches the `receipt` param, leaving `from` untouched) and then
+  `loadSavedReceipt(id)` directly, the same two steps `ReceiptUpload`
+  already used internally, now reused instead of going through
+  `navigateTo`'s `pushState` + synthetic `popstate` (which `App.tsx`'s
+  `key={locationKey}` would turn into a full remount). The snapshot is
+  therefore genuinely fetched once per review session, exactly as
+  specified, not once per receipt.
+- **`ReviewBar.tsx`'s `reviewNavigation` prop** (optional; `undefined`
+  renders exactly the commit-1 bar) adds, in order: "N of M" (`role=
+  "status"`, 1-based, computed from the snapshot's index of the current
+  receipt), a "Previous"/"Next" pair (real `<a href="/?receipt=<id>&from=
+  <from>">` links when a neighbour exists -- so right-click/"open in new
+  tab" works -- or a plain, non-interactive `<span aria-disabled="true">`
+  at either end of the snapshot), and, only when `status === 'needs_
+  review'`, a second primary "Approve and next" button next to "Mark as
+  approved". "Approve and next" still goes through the exact same
+  `useReceiptReviewStatus` hook/request as "Mark as approved" (one `PUT
+  .../status`, nothing more) -- the only difference is what happens
+  *after* a successful response, which `ReviewBar` delegates back to its
+  caller via `onApprovedAndNext(updated)`, since deciding "which receipt
+  is next" needs the caller's own snapshot.
+- **"Approve and next"'s after-success logic**
+  (`handleApprovedAndNext` in `ReceiptUpload.tsx`): updates the snapshot's
+  matching entry's `status` locally (so revisiting an earlier receipt in
+  the same session shows it correctly, without a re-fetch), then searches
+  the snapshot *forward* from the just-approved receipt's position for
+  the next one still `needs_review` -- skipping any already-approved
+  receipt in between -- and navigates there via the same
+  `navigateToReceiptInSnapshot`. When none is found, it calls `navigateTo`
+  with the original `from` search plus `&notice=reviewed`, landing back on
+  the filtered history list with a new one-shot notice,
+  `"All receipts in this list are reviewed."` (`ReceiptHistory.tsx`'s
+  `getAndClearNotice()` gained the `reviewed` case alongside its existing
+  `deleted`/`gone` ones -- same one-shot, strip-on-read pattern). A `422`
+  from "Approve and next" behaves exactly like one from "Mark as
+  approved" (the same hook, the same plain-words `Alert`) and never
+  navigates anywhere.
+- **Added to `?view=styleguide`:** a new "Review mode" section, next to
+  the existing "Review bar" one, shows the position/Previous/Next/
+  "Approve and next" row as a static sample.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

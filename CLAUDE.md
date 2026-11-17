@@ -547,6 +547,54 @@ the purchase info, and the result is displayed for review.
   shown raw or as "undefined"; the status is left unchanged on this
   failure. Calls neither `extractReceipt` nor the plain `updateReceipt`/
   `PUT /receipts/{id}`.
+  **Review mode (position, Previous/Next, "Approve and next") —
+  `ReceiptUpload.tsx`'s `reviewFromSearch`/`reviewSnapshot` state,
+  `ReviewBar.tsx`'s `reviewNavigation` prop:** only when this receipt was
+  opened from a *history* list with a tab/filter active (`from` starts
+  with `?view=history` — read once at mount via `getHistoryFromParam()`;
+  `?view=items` or a missing `from` both mean no review mode at all) does
+  `ReceiptUpload.tsx` fetch one snapshot —
+  `listReceipts({apartmentId, year, status, limit: 200})` using that same
+  `from` value's own filters, parsed with the exact `effectiveYear`/
+  `effectiveStatus` helpers `ReceiptFilters.tsx` already validates its own
+  URL params with (`parseHistoryFilters()`) — kept in `reviewSnapshot`
+  state. A failed request, or this receipt not being among the (up to)
+  200 returned, leaves `reviewSnapshot` without this receipt and
+  `ReviewBar` renders with no `reviewNavigation` at all — no `Alert`,
+  nothing — exactly like today's behavior; only the first 200 receipts of
+  a filter are ever navigable this way. `ReviewBar`'s `reviewNavigation`
+  prop then adds "N of M" (`role="status"`, 1-based), "Previous"/"Next" —
+  real `<a href="/?receipt=<id>&from=<from>">` links to an existing
+  neighbour (so opening one in a new tab works), or a plain, non-
+  interactive `<span aria-disabled="true">` at either end — and, only
+  when `status === 'needs_review'`, a second primary "Approve and next"
+  button next to "Mark as approved". **Staying mounted across moves:**
+  Previous/Next/"Approve and next" never go through `navigateTo` (whose
+  `pushState` + synthetic `popstate` would trigger `App.tsx`'s
+  `key={locationKey}` remount, forcing a wasteful re-fetch of the same
+  snapshot) — `navigateToReceiptInSnapshot(id)` instead calls the existing
+  `setReceiptIdInUrl(id)` (a `replaceState` that only ever touches the
+  `receipt` param, leaving `from` — and therefore the already-fetched
+  snapshot — untouched) and then `loadSavedReceipt(id)` directly, the
+  same two steps this file already used internally after an upload+
+  extract. "Approve and next" sends the *exact same* one `PUT
+  /receipts/{id}/status` as "Mark as approved", via the same
+  `useReceiptReviewStatus` hook — the only difference is what happens
+  after a successful response, which `ReviewBar` hands back to its caller
+  as `onApprovedAndNext(updated)`, since picking "which receipt is next"
+  needs the caller's own snapshot, not something `ReviewBar` itself
+  tracks. That handler (`handleApprovedAndNext`) updates the snapshot's
+  matching entry's `status` locally (never refetched), searches the
+  snapshot *forward* from the just-approved position for the next
+  `needs_review` entry (silently skipping any already-approved one in
+  between), and navigates there the same way; when none is left, it calls
+  `navigateTo` with the original `from` plus `&notice=reviewed`, landing
+  on the filtered history list with a new one-shot notice
+  (`ReceiptHistory.tsx`'s `getAndClearNotice()` gained this `"reviewed"`
+  case — `"All receipts in this list are reviewed."` — alongside its
+  existing `deleted`/`gone` cases, same strip-on-read pattern). A `422`
+  from "Approve and next" behaves exactly like one from "Mark as
+  approved" and never navigates.
   **Editing (`ReceiptEditForm.tsx`, `src/api/updateReceipt.ts`):** an
   "Edit" button in `ReceiptResult.tsx`'s own header (next to the store
   name, which is the page's `<h1>`) opens a form prefilled from the

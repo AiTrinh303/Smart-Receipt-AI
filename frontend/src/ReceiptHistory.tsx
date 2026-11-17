@@ -80,6 +80,7 @@ function getAndClearNotice(): string | null {
 
   if (notice === 'deleted') return 'Receipt deleted.'
   if (notice === 'gone') return 'This receipt no longer exists.'
+  if (notice === 'reviewed') return 'All receipts in this list are reviewed.'
   return null
 }
 

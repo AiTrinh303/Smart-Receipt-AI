@@ -6,10 +6,35 @@ import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import StatusBadge from './components/ui/StatusBadge'
 
+export interface ReviewNavigationNeighbour {
+  id: string
+  href: string
+}
+
+export interface ReviewNavigation {
+  /** 0-based index of the current receipt within the snapshot, and the
+   * snapshot's total size -- shown as "N of M" (1-based). */
+  position: { index: number; total: number }
+  previous: ReviewNavigationNeighbour | null
+  next: ReviewNavigationNeighbour | null
+  onNavigate: (id: string) => void
+  /** Called only after a successful "Approve and next" request, with the
+   * updated receipt -- deciding where to go next (the snapshot's next
+   * still-needs-review receipt, or back to the list) needs the caller's
+   * own snapshot state, so it stays the caller's job, not ReviewBar's. */
+  onApprovedAndNext: (updated: SavedReceipt) => void
+}
+
 interface ReviewBarProps {
   receiptId: string
   status: ReceiptStatus
   onUpdated: (updated: SavedReceipt) => void
+  /** Present only when this receipt was opened from a filtered/tabbed
+   * history list whose snapshot (up to 200 receipts) was fetched
+   * successfully and contains this receipt -- otherwise every review-mode
+   * control below is simply absent, and ReviewBar behaves exactly as it
+   * did before review mode existed. */
+  reviewNavigation?: ReviewNavigation
 }
 
 /** The saved-receipt view's main action, placed at the top of the data
@@ -21,8 +46,13 @@ interface ReviewBarProps {
  * scrolls past it; below `lg` (or wherever `matchMedia` isn't available)
  * it instead sticks to the bottom of the viewport, so it's always
  * reachable without competing for space with the receipt image on a small
- * screen. Only ever one variant is mounted. */
-function ReviewBar({ receiptId, status, onUpdated }: ReviewBarProps) {
+ * screen. Only ever one variant is mounted.
+ *
+ * When `reviewNavigation` is given, also shows where this receipt sits in
+ * the list it was opened from ("N of M"), Previous/Next links to its
+ * neighbours, and a second "Approve and next" button next to "Mark as
+ * approved". */
+function ReviewBar({ receiptId, status, onUpdated, reviewNavigation }: ReviewBarProps) {
   const { isSavingStatus, statusError, handleStatusChange } = useReceiptReviewStatus(receiptId, onUpdated)
   const useBottomVariant = useBottomBarVariant()
 
@@ -30,30 +60,56 @@ function ReviewBar({ receiptId, status, onUpdated }: ReviewBarProps) {
     ? 'fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface px-4 py-3 shadow-popover'
     : 'sticky top-20 z-10 rounded-card border border-border-subtle bg-surface px-4 py-3 shadow-card'
 
+  const handleApproveAndNext = async () => {
+    const updated = await handleStatusChange('approved')
+    if (updated) {
+      reviewNavigation?.onApprovedAndNext(updated)
+    }
+  }
+
   return (
     <div className={barClassName}>
-      <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3">
-        <StatusBadge status={status} />
-        {status === 'needs_review' ? (
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={isSavingStatus}
-            onClick={() => handleStatusChange('approved')}
-          >
-            Mark as approved
-          </Button>
-        ) : (
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={isSavingStatus}
-            onClick={() => handleStatusChange('needs_review')}
-          >
-            Back to needs review
-          </Button>
+      <div className="mx-auto flex max-w-4xl flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusBadge status={status} />
+          {status === 'needs_review' ? (
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={isSavingStatus}
+                onClick={() => handleStatusChange('approved')}
+              >
+                Mark as approved
+              </Button>
+              {reviewNavigation && (
+                <Button variant="primary" size="sm" disabled={isSavingStatus} onClick={handleApproveAndNext}>
+                  Approve and next
+                </Button>
+              )}
+            </>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isSavingStatus}
+              onClick={() => handleStatusChange('needs_review')}
+            >
+              Back to needs review
+            </Button>
+          )}
+          {isSavingStatus && <p className="text-sm text-ink-muted">Saving...</p>}
+        </div>
+
+        {reviewNavigation && (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <p role="status" className="text-ink-muted">
+              {reviewNavigation.position.index + 1} of {reviewNavigation.position.total}
+            </p>
+            <ReviewNavLink label="Previous" neighbour={reviewNavigation.previous} onNavigate={reviewNavigation.onNavigate} />
+            <ReviewNavLink label="Next" neighbour={reviewNavigation.next} onNavigate={reviewNavigation.onNavigate} />
+          </div>
         )}
-        {isSavingStatus && <p className="text-sm text-ink-muted">Saving...</p>}
       </div>
       {statusError && (
         <div className="mx-auto mt-2 max-w-4xl">
@@ -61,6 +117,37 @@ function ReviewBar({ receiptId, status, onUpdated }: ReviewBarProps) {
         </div>
       )}
     </div>
+  )
+}
+
+function ReviewNavLink({
+  label,
+  neighbour,
+  onNavigate,
+}: {
+  label: string
+  neighbour: ReviewNavigationNeighbour | null
+  onNavigate: (id: string) => void
+}) {
+  if (!neighbour) {
+    return (
+      <span aria-disabled="true" className="font-medium text-ink-muted/50">
+        {label}
+      </span>
+    )
+  }
+
+  return (
+    <a
+      href={neighbour.href}
+      onClick={(e) => {
+        e.preventDefault()
+        onNavigate(neighbour.id)
+      }}
+      className="font-medium text-brand hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+    >
+      {label}
+    </a>
   )
 }
 
