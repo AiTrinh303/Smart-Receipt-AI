@@ -65,22 +65,65 @@ _LEADING_ISO_DATE_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2})([ T,][^\s]*)?$")
 # explicitly out of scope).
 _LEADING_DOTTED_DATE_PATTERN = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ ,].*)?$")
 
+# A month-name date, "D[.]? Month YYYY" / "DD[.]? Month YYYY" (1-2 digit day,
+# optional dot right after the day, one or more spaces, a month word, exactly
+# 4-digit year), optionally followed by one separator (space or comma) and
+# arbitrary extra text -- same trailing-text convention as the dotted and ISO
+# patterns above. The month word itself is matched loosely (letters only,
+# with an optional trailing dot for an abbreviation like "Mrz.") and resolved
+# against MONTH_NAMES_BY_WORD below; an unknown word simply fails that
+# lookup, returning None rather than guessing.
+_LEADING_MONTH_NAME_DATE_PATTERN = re.compile(
+    r"^(\d{1,2})\.?\s+([A-Za-zÄÖÜäöüß]+)\.?\s+(\d{4})(?:[ ,].*)?$"
+)
+
+# German and English month names, full and abbreviated, lowercased (matched
+# via .casefold() so any input casing works). A handful of abbreviations
+# ("jun", "jul", "aug", "sep", "sept", "nov") are identical in both languages
+# and already map to the same month number either way, so one combined table
+# is all that's needed -- no per-language branching. Kept as a module-level
+# constant (not a nested dict/closure) so it's reusable and inspectable.
+MONTH_NAMES_BY_WORD = {
+    # German full names (both "märz" and the ASCII "maerz" spelling)
+    "januar": 1, "februar": 2, "märz": 3, "maerz": 3, "april": 4, "mai": 5,
+    "juni": 6, "juli": 7, "august": 8, "september": 9, "oktober": 10,
+    "november": 11, "dezember": 12,
+    # German abbreviations
+    "jan": 1, "feb": 2, "mär": 3, "mrz": 3, "apr": 4, "jun": 6, "jul": 7,
+    "aug": 8, "sep": 9, "sept": 9, "okt": 10, "nov": 11, "dez": 12,
+    # English full names (september/october/december share the German full
+    # names' spelling and value above, so are not repeated here)
+    "january": 1, "february": 2, "march": 3, "may": 5, "june": 6, "july": 7,
+    # English abbreviations not already covered above
+    "mar": 3, "oct": 10,
+}
+
 TOTAL_TOLERANCE = Decimal("0.05")
 FUTURE_DATE_GRACE_DAYS = 1
+
+# Net-unit-price-vs-gross-line-total tolerance: some German receipts print an
+# item's unit price excluding VAT but its line total including VAT (e.g. a
+# net 2.23 unit price next to a gross 2.39 line total at 19% VAT). This is a
+# second, OR'd allowance alongside TOTAL_TOLERANCE's plain quantity x
+# unit_price check -- a real mismatch still warns.
+GERMAN_VAT_RATES = (Decimal("0.07"), Decimal("0.19"))
+VAT_LINE_TOTAL_TOLERANCE = Decimal("0.02")
 
 
 def normalize_purchase_date(raw: str | None) -> str | None:
     """Extracts a valid date from the start of a raw AI-extracted date
-    string, in one of two accepted shapes: an ISO date (YYYY-MM-DD) or a
-    dotted German date (D.M.YYYY / DD.MM.YYYY) -- see the two patterns
-    above. Never guesses day/month order for an ambiguous format like
-    "26/06/2025" -- that, slash dates, 2-digit years, month names, and any
-    other text that doesn't start with one of the two accepted shapes (or
-    has more than one trailing stray token, for the ISO shape) all return
-    None rather than a guess. Both shapes are validated against a real
-    calendar (leap years included, via the `date` constructor itself, which
-    raises on an out-of-range day/month rather than silently rolling over).
-    Never raises."""
+    string, in one of three accepted shapes: an ISO date (YYYY-MM-DD), a
+    dotted German date (D.M.YYYY / DD.MM.YYYY), or a month-name date
+    (D[.]? Month YYYY, German or English, full or abbreviated,
+    case-insensitive) -- see the patterns above. Never guesses day/month
+    order for an ambiguous format like "26/06/2025" -- that, slash dates,
+    2-digit years, unknown month words, and any other text that doesn't
+    start with one of the three accepted shapes (or has more than one
+    trailing stray token, for the ISO shape) all return None rather than a
+    guess. Every shape is validated against a real calendar (leap years
+    included, via the `date` constructor itself, which raises on an
+    out-of-range day/month rather than silently rolling over). Never
+    raises."""
     if raw is None:
         return None
 
@@ -98,6 +141,17 @@ def normalize_purchase_date(raw: str | None) -> str | None:
         day, month, year = (int(group) for group in dotted_match.groups())
         try:
             return date(year, month, day).isoformat()
+        except ValueError:
+            return None
+
+    month_name_match = _LEADING_MONTH_NAME_DATE_PATTERN.match(raw)
+    if month_name_match:
+        day_text, month_word, year_text = month_name_match.groups()
+        month = MONTH_NAMES_BY_WORD.get(month_word.casefold())
+        if month is None:
+            return None
+        try:
+            return date(int(year_text), month, int(day_text)).isoformat()
         except ValueError:
             return None
 
@@ -231,7 +285,15 @@ def check_receipt(data: ReceiptData, today: date) -> list[ReceiptWarning]:
             continue
         expected = _to_decimal(item.quantity) * _to_decimal(item.unit_price)
         actual = _to_decimal(item.line_total)
-        if abs(expected - actual) > TOTAL_TOLERANCE:
+        matches_plain = abs(expected - actual) <= TOTAL_TOLERANCE
+        # Some German receipts print a net unit price (excluding VAT) next
+        # to a gross line total (including VAT) -- e.g. a 2.23 unit price
+        # with a 2.39 line total at 19% VAT. Treat that as consistent too,
+        # in addition to the plain match above; a real mismatch still warns.
+        matches_vat = any(
+            abs(expected * (1 + rate) - actual) <= VAT_LINE_TOTAL_TOLERANCE for rate in GERMAN_VAT_RATES
+        )
+        if not matches_plain and not matches_vat:
             warnings.append(
                 ReceiptWarning(
                     code="LINE_MISMATCH",

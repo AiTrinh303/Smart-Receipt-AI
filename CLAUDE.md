@@ -908,28 +908,51 @@ the purchase info, and the result is displayed for review.
     `"02.06.2026 11:04"` -> `"2026-06-02"`, via
     `_LEADING_DOTTED_DATE_PATTERN` — 1-2 digit day/month, exactly 4-digit
     year, dots only, optionally one trailing space/comma + arbitrary
-    extra text), and
+    extra text) **or** a leading month-name date, `D[.]? Month YYYY`
+    (`"02 Juni 2026"`/`"2. Dezember 2025"`/`"15 Mär 2026"`/
+    `"1 March 2026"` -> `"2026-06-02"`/`"2025-12-02"`/`"2026-03-15"`/
+    `"2026-03-01"`, via `_LEADING_MONTH_NAME_DATE_PATTERN` — 1-2 digit
+    day, optional dot right after the day, one or more spaces, a German or
+    English month name (full or abbreviated, case-insensitive via
+    `.casefold()`, optional trailing dot on an abbreviation), exactly
+    4-digit year, optionally one trailing space/comma + arbitrary extra
+    text, same convention as the other two shapes). The month word is
+    resolved against `MONTH_NAMES_BY_WORD`, a module-level constant
+    mapping every accepted German and English spelling (full and
+    abbreviated) to its month number — an unrecognized word simply fails
+    that lookup, returning `None`, and
     returns `None` for anything else (never guesses day/month order for
-    `"26/06/2025"`, and deliberately never recognizes slash dates,
-    2-digit years, or month names — all explicitly out of scope). Both
-    shapes are validated against a real calendar by constructing a
+    `"26/06/2025"`, and deliberately never recognizes slash dates or
+    2-digit years — both still explicitly out of scope). Every
+    shape is validated against a real calendar by constructing a
     `date(year, month, day)` and catching the `ValueError` it raises for
-    an out-of-range day/month (e.g. `"31.04.2026"` or a non-leap-year
-    `"29.02.2025"`) — never a hand-rolled day-count table, and never
+    an out-of-range day/month (e.g. `"31.04.2026"`, a non-leap-year
+    `"29.02.2025"`, or `"31 Februar 2026"`) — never a hand-rolled day-count
+    table, and never
     raises itself. Since every call site that normalizes a date for
     display/filtering/sorting (`get_receipt`, the year filter,
-    `has_undated`, `flatten_line_items`, and — indirectly, since it's
+    `has_undated`, `flatten_line_items`, `sort_line_items`, and — indirectly, since it's
     always handed an already-normalized value — `check_receipt`'s
-    `DATE_NOT_STANDARD` check) funnels through this one function, teaching
-    it the dotted format was the *only* code change needed to make a
-    legacy row whose stored text is a dotted date behave as fully dated
+    `DATE_NOT_STANDARD` check, and the status-PUT approval gate's
+    `_missing_approval_fields`) funnels through this one function, teaching
+    it the dotted format, and later the month-name format, was each time
+    the *only* code change needed to make a
+    legacy row whose stored text is that format behave as fully dated
     everywhere, with its stored row never rewritten; `check_receipt(data, today)` — `today`
     is an injected parameter so callers/tests are deterministic — returns
     `MISSING_STORE`/`MISSING_DATE`/`DATE_NOT_STANDARD`/`FUTURE_DATE`
     (1-day grace)/`MISSING_TOTAL`/`TOTAL_MISMATCH` (skipped unless every
     item has a usable amount; tolerant of either tax-added-on-top or
     tax-already-included, tolerance `0.05`)/`LINE_MISMATCH` (per
-    `Decimal(str(value))` math, never raw floats); raises domain
+    `Decimal(str(value))` math, never raw floats — raised only when the
+    line total matches *neither* the plain `quantity x unit_price` check
+    within `TOTAL_TOLERANCE` (`0.05`) *nor* `quantity x unit_price x (1 +
+    rate)` within `VAT_LINE_TOTAL_TOLERANCE` (`0.02`) for a `rate` in
+    `GERMAN_VAT_RATES = (0.07, 0.19)` — the latter covers a German receipt
+    that prints an item's unit price net of VAT next to a line total
+    gross of VAT, e.g. a 2.23 net unit price next to a 2.39 gross line
+    total at 19% VAT; a real mismatch, explained by neither check, still
+    warns); raises domain
     exceptions, no HTTP/FastAPI/file I/O; `flatten_line_items(saved_receipt)`
     — pure, no I/O — turns one `SavedReceipt`'s `items` into `LineItemRow`s
     in their original order (`line_index` 0, 1, 2, ...), normalizing
@@ -993,7 +1016,12 @@ the purchase info, and the result is displayed for review.
     OpenAI API call — maps `AuthenticationError`/`PermissionDeniedError`/
     `NotFoundError`/`RateLimitError` to `ExtractionUnavailableError`,
     everything else to `ExtractionError`, always via `raise ... from exc`
-    so the real cause is still logged), `file_storage.py` (saving/finding
+    so the real cause is still logged; `EXTRACTION_INSTRUCTIONS` includes
+    one rule for `purchase_date` — return `YYYY-MM-DD`, converting German
+    month names and dotted dates (day first), null if unsure — matching
+    `domain.rules.normalize_purchase_date`'s own accepted shapes, so the AI
+    is nudged toward a format this app can already parse even before
+    `normalize_purchase_date` runs server-side as a fallback), `file_storage.py` (saving/finding
     files in `uploads/` by UUID filename; `delete_file` looks up the file
     the same way `find_file` does — by the validated UUID, inside
     `UPLOAD_DIR` only, never a client-supplied path — and treats an

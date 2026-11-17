@@ -35,7 +35,10 @@ EXTRACTION_INSTRUCTIONS = (
     "that is visibly printed on the receipt image or document provided. "
     "If a field is not visible on the receipt or you are not sure about its "
     "value, set it to null (or an empty list for the items/discounts/taxes "
-    "lists). Never guess or invent values that are not present on the receipt."
+    "lists). Never guess or invent values that are not present on the receipt. "
+    "For purchase_date, return it as YYYY-MM-DD; convert German month names "
+    "and dotted dates (day first: \"02.06.2026\" is 2 June 2026); if unsure, "
+    "set it to null."
 )
 
 

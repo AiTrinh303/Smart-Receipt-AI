@@ -85,6 +85,20 @@ def mk_item(name="Item", quantity=1.0, unit_price=10.0, line_total=10.0):
         ("02/06/2026", None),  # slash dates stay out of scope
         ("02.06.26", None),  # 2-digit years stay out of scope
         ("2026.06.02", None),  # year-first dotted order is not recognized
+        # Month-name dates (German/English, full/abbreviated), added for
+        # Issue "recognize month-name dates":
+        ("02 Juni 2026", "2026-06-02"),
+        ("2. Dezember 2025", "2025-12-02"),
+        ("15 Mär 2026", "2026-03-15"),
+        ("15. Mrz. 2026", "2026-03-15"),
+        ("3 MAI 2026", "2026-05-03"),
+        ("1 March 2026", "2026-03-01"),
+        ("02 Juni 2026 11:04", "2026-06-02"),
+        ("02 Junix 2026", None),  # unknown month word
+        ("31 Februar 2026", None),  # February has no 31st
+        ("02 Juni 26", None),  # 2-digit years stay out of scope
+        ("Juni 2026", None),  # no day
+        ("02/06/2026", None),  # slash dates stay out of scope (month names too)
     ],
 )
 def test_normalize_purchase_date(raw, expected):
@@ -217,6 +231,59 @@ def test_line_mismatch_reports_the_item_index():
     line_mismatches = [w for w in warnings if w.code == "LINE_MISMATCH"]
     assert len(line_mismatches) == 1
     assert line_mismatches[0].details["index"] == "1"
+
+
+@pytest.mark.parametrize(
+    "quantity, unit_price, line_total, expect_warning",
+    [
+        # Net unit price vs. gross line total at German VAT rates -- no warning
+        (1, 2.23, 2.39, False),
+        (1, 9.80, 11.66, False),
+        (1, 16.80, 19.99, False),
+        (1, 1.86, 1.99, False),
+        (2, 3.50, 7.49, False),
+        # A real mismatch, not explained by either VAT rate -- still warns
+        (1, 2.23, 2.60, True),
+    ],
+)
+def test_line_mismatch_vat_tolerance(quantity, unit_price, line_total, expect_warning):
+    # Given one item at the given quantity/unit_price/line_total
+    data = ReceiptData(
+        store_name="Store",
+        purchase_date="2026-01-15",
+        currency="EUR",
+        items=[mk_item(quantity=quantity, unit_price=unit_price, line_total=line_total)],
+        discounts=[],
+        taxes=[],
+        total=None,
+    )
+
+    # When checked
+    warnings = check_receipt(data, date(2026, 1, 20))
+
+    # Then LINE_MISMATCH is raised only when expected
+    codes = [w.code for w in warnings]
+    assert ("LINE_MISMATCH" in codes) == expect_warning
+
+
+def test_line_mismatch_with_null_quantity_is_unaffected_by_vat_tolerance():
+    # Given an item with a null quantity (existing behaviour: LINE_MISMATCH
+    # is never computed at all when quantity is missing)
+    data = ReceiptData(
+        store_name="Store",
+        purchase_date="2026-01-15",
+        currency="EUR",
+        items=[LineItem(name="Item", quantity=None, unit_price=2.23, line_total=2.39)],
+        discounts=[],
+        taxes=[],
+        total=None,
+    )
+
+    # When checked
+    warnings = check_receipt(data, date(2026, 1, 20))
+
+    # Then no LINE_MISMATCH warning is raised (quantity is null, skipped)
+    assert all(w.code != "LINE_MISMATCH" for w in warnings)
 
 
 def test_future_date_warning_with_injected_today():
