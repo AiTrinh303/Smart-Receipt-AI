@@ -233,7 +233,7 @@ function ReceiptHistory() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
         <PageHeader title="History" description={HISTORY_DESCRIPTION} />
         {noticeBanner}
         <div
@@ -252,7 +252,7 @@ function ReceiptHistory() {
 
   if (error) {
     return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
         <PageHeader title="History" description={HISTORY_DESCRIPTION} />
         <div className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface p-6 shadow-card">
           {noticeBanner}
@@ -270,7 +270,7 @@ function ReceiptHistory() {
   const isUnfiltered = effectiveApartmentId === null && !anyFilterActive
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+    <div className="flex w-full flex-col gap-4">
       <PageHeader title="History" description={HISTORY_DESCRIPTION} />
       {noticeBanner}
 

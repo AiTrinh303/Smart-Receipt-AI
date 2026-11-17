@@ -432,7 +432,7 @@ function ReceiptItems() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto flex max-w-4xl flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
         <PageHeader title="Items" description={ITEMS_DESCRIPTION} />
         <div
           role="status"
@@ -450,7 +450,7 @@ function ReceiptItems() {
 
   if (error) {
     return (
-      <div className="mx-auto flex max-w-4xl flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
         <PageHeader title="Items" description={ITEMS_DESCRIPTION} />
         <div className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface p-6 shadow-card">
           <p role="alert" className="text-sm text-danger">
@@ -518,7 +518,7 @@ function ReceiptItems() {
   )
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-4">
+    <div className="flex w-full flex-col gap-4">
       <PageHeader title="Items" description={ITEMS_DESCRIPTION} />
       <ReceiptFilters
         tabs={tabs}

@@ -85,9 +85,15 @@ professional look; see the Changelog for what prompted it).
   for).
 - **Shadows.** `shadow-card` (a soft, ink-tinted two-layer shadow --
   `rgb(15 23 42 / …)` rather than pure black, for a calmer look) for
-  `Card`, and `shadow-popover` (a larger, more pronounced version) for an
-  elevated panel that should read as sitting above the page (the Upload
-  screen's help panel -- see "Upload page layout" below).
+  `Card` and every panel that sits *alongside* other content as its
+  visual equal -- including the Upload screen's help panel (see "Upload
+  page layout" below), which originally used the stronger
+  `shadow-popover` and, as a result, read as a floating popup rather than
+  a panel belonging next to the form card; that was a misuse of the
+  token, corrected to the standard `shadow-card`. `shadow-popover` (a
+  larger, more pronounced version) is reserved for a genuinely elevated
+  overlay -- something that visually floats *above* the page, like a real
+  popover or menu -- not yet used anywhere in this app.
 - **`border` vs. `border-subtle` -- the rule that matters most here:**
   `border` (`#64748b`, 4.76:1) is the **control** border -- every
   interactive element (`Button`, every `RadioCardGroup` card whether
@@ -221,7 +227,50 @@ card never visually aligned.
   required 56-64px range) instead of padding-driven sizing, and its
   bottom border moved from `border-border` to `border-border-subtle`
   (the header bar is a decorative structural divider, not an interactive
-  control).
+  control). **Correction (a follow-up visual audit found the header and
+  the page still didn't line up):** giving the header and `<main>` the
+  same `Container` `size` was necessary but not sufficient -- `main`'s
+  `Container` already centers and constrains its content once, but every
+  view's own root element then added a *second*, different
+  `mx-auto`/`max-w-*` of its own nested inside it (`ReceiptUpload.tsx`:
+  `max-w-5xl` inside the shell's `xl` (`max-w-6xl`) `Container`;
+  `ReceiptHistory.tsx`: `max-w-2xl` inside `lg`; `ReceiptItems.tsx`:
+  `max-w-4xl` inside `xl`), re-centering within an already-centered box
+  and shifting its edges inward from the header's by however much
+  narrower that second value was (on the Upload view at ~1230px, this
+  came out to ~48px per side -- matching the ~47px the screenshot that
+  prompted this fix actually measured). See "One container per view" just
+  below for the actual rule and fix.
+
+### One container per view
+
+A page's content must go through exactly **one** `Container` (or
+width-constraining element) per view -- never a second one nested inside
+it. `Container.tsx` exports `CONTAINER_SIZE_CLASSES` (`{md, lg, xl} ->
+'max-w-*'`), the single source of truth for a size's max-width (and,
+inside `Container` itself, its horizontal padding, always `px-4` at every
+size) -- `App.tsx`'s header and `<main>` both render a `Container` with
+the same `size={mainSize}` prop, so they already share this one source at
+the outer level. The three view components (`ReceiptUpload.tsx`,
+`ReceiptHistory.tsx`, `ReceiptItems.tsx`) each render a root element
+inside that `Container` that must now be `w-full` with **no** `max-w-*`
+or `mx-auto` of its own -- filling exactly the width `Container` already
+gave it, so the view's rendered edges are always identical to the
+header's. (The receipt-detail view, via `ReceiptDetailLayout.tsx`, was
+already `w-full` with no second constraint -- the one view that never had
+this bug.) If a view ever genuinely needs a *narrower* reading column
+than its `Container`'s own size, that narrower width must come from
+choosing a different `Container` `size` for that view in `App.tsx` (one
+of the three values `CONTAINER_SIZE_CLASSES` actually defines) -- passed
+to **both** the header's and `<main>`'s `Container` -- never from a
+second, hand-picked `max-w-*` value nested inside an existing `Container`,
+which is exactly the mistake that caused this bug. `App.test.tsx` asserts
+this mechanically: the header's and `<main>`'s rendered `Container`
+elements carry the identical `CONTAINER_SIZE_CLASSES[size]` class for
+whatever view is showing, and the view's own root element's class list
+contains no `max-w-` at all (jsdom can't measure pixels, but it can prove
+there is only one source of width in the rendered class list, which is
+what actually guarantees alignment in a real browser).
 - **Logo mark.** `AppMark` (in `App.tsx`) is now a receipt shape -- a
   white rectangle with a zigzag bottom edge (the torn-paper look of a
   real receipt) and two short horizontal lines standing in for printed
@@ -274,6 +323,17 @@ through the form, and buried its reading tips behind a heavy bordered box.
   lg:items-start` gives the form card `lg:col-span-7` and the help panel
   `lg:col-span-5` (both plain CSS, collapsing to a single stacked column
   below `lg` automatically).
+- **The help panel uses the standard `Card` elevation and stays in view
+  while you scroll.** `HelpPanel` originally set `shadow-popover` on top
+  of `Card`'s own `shadow-card`, which (since both set the same
+  `box-shadow` property) visually read as a floating popup sitting above
+  the form rather than a panel beside it -- removed, so it now gets
+  exactly the same elevation as the form `Card` next to it, as a visual
+  equal. From `lg` up it's also `lg:sticky lg:top-20 lg:self-start`
+  (`top-20` = 80px, clearing the shell's `h-16` header with 16px to
+  spare) -- since the form card is usually taller (a longer batch queue,
+  an extraction in progress, etc.), the panel now follows as the page
+  scrolls instead of disappearing above the fold.
 - **The help panel is a presence decision, not a CSS one.** `isWideScreen
   = useMediaQuery('(min-width: 1024px)')` decides, in JavaScript, whether
   to render `HelpPanel` (static "How it works" -- three steps: choose the
@@ -1177,9 +1237,13 @@ newest-first), which read as random next to a camera's sequential names.
   screens.
 - **`Card`** — a bordered, padded, white surface for grouping content (forms,
   dropzones, confirmation panels).
-- **`Container`** — `size` `md` (`max-w-md`), `lg` (`max-w-3xl`, the app
-  shell's default), or `xl` (`max-w-6xl`, used for the two-column receipt
-  view).
+- **`Container`** — `size` `md` (`max-w-md`), `lg` (`max-w-3xl`, History's
+  size), or `xl` (`max-w-6xl`, Upload/Items/the receipt-detail view).
+  Exports `CONTAINER_SIZE_CLASSES` (`{size: 'max-w-*'}`), the single
+  source of truth both the app shell's header and a view's content must
+  go through for a given size — see "One container per view" above. A
+  view's own content must never nest a second `max-w-*`/`mx-auto` inside
+  an existing `Container`.
 - **`formatMoney(value, currency, { includeCurrency })`** —
   `Intl.NumberFormat`-based: a valid ISO 4217 code gets that currency's own
   decimal precision; a malformed code (`Intl` throws a `RangeError`) falls

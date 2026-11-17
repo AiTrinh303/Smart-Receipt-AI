@@ -62,6 +62,18 @@ test('the form has two numbered sections, "Apartment" and "Receipts", with aria-
   expect(screen.getByRole('radiogroup', { name: 'Which apartment is this receipt for?' })).toBeInTheDocument()
 })
 
+test('the help panel uses the standard Card elevation (never a stronger one) and is sticky from lg', async () => {
+  mockMatchMedia(true)
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+
+  const panelHeading = screen.getByRole('heading', { level: 2, name: 'How it works' })
+  const panelCard = panelHeading.closest('div') as HTMLElement
+  expect(panelCard.className).not.toContain('shadow-popover')
+  expect(panelCard.className).toContain('shadow-card')
+  expect(panelCard.className).toContain('lg:sticky')
+})
+
 test('at a wide (lg) screen, the static help panel is shown and the collapsible tips are not', async () => {
   mockMatchMedia(true)
   render(<ReceiptUpload />)

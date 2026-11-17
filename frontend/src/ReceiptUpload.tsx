@@ -188,10 +188,14 @@ function TipsDetails() {
 
 /** Static "How it works" + reading tips, shown instead of the collapsible
  * tips from `lg` up -- no fetch, no state, just reference content next to
- * the form. */
+ * the form. Uses the standard `Card` elevation (never a stronger one --
+ * a panel sitting flush next to the form card should read as its equal,
+ * not as a popup floating above it) and, from `lg` up, stays in view via
+ * `sticky` while the (usually taller) form scrolls past it; `top-20`
+ * (80px) clears the shell's `h-16` (64px) header with 16px to spare. */
 function HelpPanel() {
   return (
-    <Card className="flex flex-col gap-4 shadow-popover">
+    <Card className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
       <h2 className="text-base font-semibold text-ink">How it works</h2>
       <ol className="flex flex-col gap-3">
         {HOW_IT_WORKS_STEPS.map((step, index) => (
@@ -801,7 +805,7 @@ function ReceiptUpload() {
   const isInputDisabled = isBusy || batch.running
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <div className="flex w-full flex-col gap-6">
       <PageHeader title="Upload receipts" description={UPLOAD_DESCRIPTION} />
 
       <div className="grid gap-6 lg:grid-cols-12 lg:items-start">

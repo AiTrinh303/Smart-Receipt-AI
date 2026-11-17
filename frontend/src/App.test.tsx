@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
+import { CONTAINER_SIZE_CLASSES } from './components/ui/Container'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -16,6 +17,83 @@ test('renders the Smart Receipt AI brand name in the header', () => {
   // name on a saved receipt), so this is no longer a heading role.
   render(<App />)
   expect(screen.getByText('Smart Receipt AI')).toBeInTheDocument()
+})
+
+// --- Header/main alignment: one shared container size per view ------------
+//
+// jsdom cannot measure real pixel alignment, so this asserts the one fact
+// that actually guarantees it: the header's own Container and <main>'s
+// Container render the exact same CONTAINER_SIZE_CLASSES[size] class for
+// whatever view is showing -- the single shared source of truth for width
+// and horizontal padding (see Container.tsx).
+
+function getHeaderContainer(): HTMLElement {
+  return document.querySelector('header > div') as HTMLElement
+}
+
+function getMainContainer(): HTMLElement {
+  return document.querySelector('main > div') as HTMLElement
+}
+
+test('on the Upload view (xl), the header and main containers share the same max-width class', async () => {
+  const fetchSpy = jest.fn().mockResolvedValue(jsonResponse(200, { items: [], count: 0 }))
+  global.fetch = fetchSpy as unknown as typeof fetch
+
+  render(<App />)
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { level: 1, name: 'Upload receipts' })).toBeInTheDocument()
+  })
+
+  expect(getHeaderContainer().className).toContain(CONTAINER_SIZE_CLASSES.xl)
+  expect(getMainContainer().className).toContain(CONTAINER_SIZE_CLASSES.xl)
+
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
+})
+
+test('on the History view (lg), the header and main containers share the same max-width class', async () => {
+  window.history.replaceState({}, '', '/?view=history')
+  const fetchSpy = jest.fn().mockImplementation((url: unknown) => {
+    const urlString = String(url)
+    if (urlString.includes('/receipts/facets')) {
+      return Promise.resolve(jsonResponse(200, { apartments: [], total: 0, years: [], has_undated: false }))
+    }
+    return Promise.resolve(jsonResponse(200, { items: [], count: 0 }))
+  })
+  global.fetch = fetchSpy as unknown as typeof fetch
+
+  render(<App />)
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { level: 1, name: 'History' })).toBeInTheDocument()
+  })
+
+  expect(getHeaderContainer().className).toContain(CONTAINER_SIZE_CLASSES.lg)
+  expect(getMainContainer().className).toContain(CONTAINER_SIZE_CLASSES.lg)
+  // And confirm the two sizes genuinely differ, so this test isn't
+  // vacuously true because both tokens happen to be the same string.
+  expect(CONTAINER_SIZE_CLASSES.lg).not.toBe(CONTAINER_SIZE_CLASSES.xl)
+
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
+})
+
+test('the Upload view\'s content fills its Container -- no second, narrower max-width nested inside it', async () => {
+  const fetchSpy = jest.fn().mockResolvedValue(jsonResponse(200, { items: [], count: 0 }))
+  global.fetch = fetchSpy as unknown as typeof fetch
+
+  render(<App />)
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { level: 1, name: 'Upload receipts' })).toBeInTheDocument()
+  })
+
+  // The view's own root element (direct child of main's Container) must
+  // not re-narrow with its own max-w-* -- that's exactly what shifted the
+  // content's edges away from the header's before this fix.
+  const viewRoot = getMainContainer().firstElementChild as HTMLElement
+  expect(viewRoot.className).not.toMatch(/\bmax-w-/)
+
+  // @ts-expect-error cleaning up the test-only global fetch stub
+  delete global.fetch
 })
 
 // --- Exactly one <h1> per view (PageHeader / saved-receipt store name) ----
