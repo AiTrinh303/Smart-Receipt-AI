@@ -450,6 +450,23 @@ plain text rather than an obvious control.
   (`disabled primary: slate-700 (#334155) on slate-300 (#cbd5e1) =
   6.97:1`) rather than only asserting pass/fail.
 
+## Removing the single-file OpenAI note
+
+The single-file submit area's muted note -- "The file is sent to OpenAI to
+read it. The extracted data is saved in this app." (with its small info
+icon) -- was removed from `ReceiptUpload.tsx` entirely, along with the
+`<p>` that held it. It had no `id` of its own, so nothing had an
+`aria-describedby` pointing at it; removing it left no empty wrapper or
+gap, since it sat as a plain sibling in the section's existing
+`flex flex-col gap-4` (CSS `gap` only ever applies *between* children,
+never after the last one). The equivalent batch-mode note, "Each receipt
+is sent to OpenAI to read it (N requests).", is a **separate** piece of
+markup (its own inline icon, inside the sticky action bar -- see "A
+sticky action bar, not an inline block" above) and was not touched. The
+style guide never had a sample of the single-file note to begin with, so
+nothing needed removing there either -- only the Dropzone section's
+Changelog entry above was updated to note the removal.
+
 ## Mobile-friendly patterns
 
 - **Items as cards below `sm`.** `ReceiptResult` renders the items table from
@@ -1251,7 +1268,12 @@ newest-first), which read as random next to a camera's sequential names.
   already used a brand-colored icon and `border-brand`/`bg-brand-soft` on
   drag-over); the OpenAI/local-storage note moved inside the upload
   `Card`, under the submit button, with a small info icon, instead of
-  sitting below the card as unstyled body text.
+  sitting below the card as unstyled body text. (This single-file note --
+  "The file is sent to OpenAI to read it. The extracted data is saved in
+  this app." -- was later removed entirely; see "Removing the single-file
+  OpenAI note" below. The equivalent batch-mode note, "Each receipt is
+  sent to OpenAI to read it (N requests).", was never touched and still
+  exists.)
 
 ## Decisions: receipt view
 

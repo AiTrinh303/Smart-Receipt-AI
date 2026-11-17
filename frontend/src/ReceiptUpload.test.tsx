@@ -207,6 +207,29 @@ test('invalid PDF: name ends in .pdf but content is not "%PDF-" -> inline error 
   expect(screen.queryByText('Selected file: receipt.pdf')).not.toBeInTheDocument()
 })
 
+test('the single-file form no longer shows the "sent to OpenAI" note, but the batch note still shows the correct request count', async () => {
+  // Given a single valid file and an apartment are chosen
+  const user = userEvent.setup()
+  render(<ReceiptUpload />)
+  const validFile = new File(['dummy'], 'receipt.jpg', { type: 'image/jpeg' })
+  await user.upload(getFileInput(), validFile)
+  await chooseApartment(user)
+
+  // Then the removed single-file note is nowhere on the page
+  expect(screen.queryByText(/sent to OpenAI/i)).not.toBeInTheDocument()
+  expect(
+    screen.queryByText('The file is sent to OpenAI to read it. The extracted data is saved in this app.'),
+  ).not.toBeInTheDocument()
+
+  // When the user instead picks 2+ files, switching to batch mode
+  const first = new File(['a'], 'a.jpg', { type: 'image/jpeg' })
+  const second = new File(['b'], 'b.jpg', { type: 'image/jpeg' })
+  await user.upload(getFileInput(), [first, second])
+
+  // Then the batch note is shown, unaffected, with the correct request count
+  expect(screen.getByText('Each receipt is sent to OpenAI to read it (2 requests).')).toBeInTheDocument()
+})
+
 describe('submitting to the backend', () => {
   test('valid file + server returns 400 with detail -> server error message shown', async () => {
     // Given a valid file is selected and the server rejects the upload with a 400 and a detail message
