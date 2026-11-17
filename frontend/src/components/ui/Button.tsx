@@ -23,7 +23,7 @@ const SIZE_CLASSES: Record<Size, string> = {
 }
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: 'bg-brand text-white hover:bg-brand-hover disabled:bg-slate-300 disabled:text-slate-600',
+  primary: 'bg-brand text-white hover:bg-brand-hover disabled:bg-slate-300 disabled:text-slate-700',
   secondary:
     'bg-white text-ink border border-border hover:bg-slate-50 disabled:text-slate-400 disabled:bg-slate-100',
   danger: 'bg-danger text-white hover:bg-red-800 disabled:bg-slate-300 disabled:text-slate-600',
@@ -56,6 +56,16 @@ export const VARIANT_COLOR_TOKENS: Record<Variant, VariantColorTokens> = {
   danger: { background: 'danger', text: 'white' },
   ghost: { background: null, text: 'brand', border: 'brand' },
   'danger-ghost': { background: null, text: 'danger', border: 'danger' },
+}
+
+/** The primary button's *disabled*-state color tokens (`VARIANT_CLASSES.
+ * primary`'s `disabled:bg-*`/`disabled:text-*`) -- the pair a user
+ * actually reads while an apartment and/or file is still missing, so it
+ * needs the same 4.5:1 floor as any other normal text, not just the
+ * enabled-state pairs `VARIANT_COLOR_TOKENS` already covers. */
+export const PRIMARY_DISABLED_COLOR_TOKENS: VariantColorTokens = {
+  background: 'slate-300',
+  text: 'slate-700',
 }
 
 function Button({

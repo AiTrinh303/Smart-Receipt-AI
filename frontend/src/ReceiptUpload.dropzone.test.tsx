@@ -129,6 +129,19 @@ test('Remove clears the selected file and any error', async () => {
   expect(getSubmitButton()).toBeDisabled()
 })
 
+test('the visible "Browse files" button inside the dropzone triggers the hidden file input', () => {
+  // Given the upload form is rendered
+  render(<ReceiptUpload />)
+  const clickSpy = jest.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
+
+  // When the user clicks the "Browse files" button
+  fireEvent.click(screen.getByRole('button', { name: 'Browse files' }))
+
+  // Then the file input's picker is opened (same mechanism as clicking the zone itself)
+  expect(clickSpy).toHaveBeenCalled()
+  clickSpy.mockRestore()
+})
+
 test('Enter on the zone triggers the hidden file input', () => {
   // Given the upload form is rendered
   render(<ReceiptUpload />)

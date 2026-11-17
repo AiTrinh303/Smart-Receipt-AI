@@ -150,6 +150,7 @@ const SAMPLE_BATCH_REJECTED: RejectedFile[] = [
 
 function StyleGuide() {
   const [dropzoneState, setDropzoneState] = useState<'idle' | 'drag-over' | 'file-selected'>('idle')
+  const [uploadHelperState, setUploadHelperState] = useState<'neither' | 'file-only' | 'apartment-only'>('neither')
   const [apartmentChoice, setApartmentChoice] = useState<string | null>(null)
   const [receiptApartmentState, setReceiptApartmentState] = useState<ReceiptApartmentState>('selected')
   const [receiptStatusState, setReceiptStatusState] = useState<ReceiptStatusState>('needs_review')
@@ -204,6 +205,9 @@ function StyleGuide() {
               1
             </span>
             <h2 className="text-base font-semibold text-ink">Apartment</h2>
+            <span className="rounded-full border border-border-subtle px-2 py-0.5 text-xs font-medium text-ink-muted">
+              Required
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <span
@@ -217,9 +221,9 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Upload help panel (static, from lg up -- replaces the collapsible tips)">
+      <Section title="Upload help panel (static, from lg up -- replaces the collapsible tips; standard Card elevation, sticky on scroll)">
         <div className="max-w-sm">
-          <Card className="flex flex-col gap-4 shadow-popover">
+          <Card className="flex flex-col gap-4">
             <h2 className="text-base font-semibold text-ink">How it works</h2>
             <ol className="flex flex-col gap-3">
               {[
@@ -630,8 +634,8 @@ function StyleGuide() {
 
         <Card className="flex flex-col gap-4">
           <div
-            className={`flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 text-center ${
-              dropzoneState === 'drag-over' ? 'border-brand bg-brand-soft' : 'border-border'
+            className={`flex flex-col items-center gap-2 rounded-control border-2 border-dashed p-8 text-center ${
+              dropzoneState === 'drag-over' ? 'border-brand bg-brand-subtle' : 'border-border bg-brand-soft'
             }`}
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-brand" fill="none">
@@ -643,7 +647,10 @@ function StyleGuide() {
                 strokeLinejoin="round"
               />
             </svg>
-            <p className="text-sm font-medium text-ink">Drag a receipt here, or choose a file</p>
+            <p className="text-sm font-medium text-ink">Drag a receipt here, or</p>
+            <Button variant="secondary" size="sm">
+              Browse files
+            </Button>
             <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB</p>
           </div>
 
@@ -656,6 +663,32 @@ function StyleGuide() {
                 Remove
               </Button>
             </div>
+          )}
+        </Card>
+      </Section>
+
+      <Section title="Upload form status line (neither / only file / only apartment missing -- aria-describedby on the submit button)">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setUploadHelperState('neither')}>
+            Show: neither chosen
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setUploadHelperState('file-only')}>
+            Show: apartment chosen, no file
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setUploadHelperState('apartment-only')}>
+            Show: file chosen, no apartment
+          </Button>
+        </div>
+        <Card className="flex flex-col gap-2">
+          <Button disabled>Read receipt</Button>
+          {uploadHelperState === 'neither' && (
+            <p className="text-sm text-ink-muted">Choose an apartment and add a receipt to continue.</p>
+          )}
+          {uploadHelperState === 'file-only' && (
+            <p className="text-sm text-ink-muted">Choose a file to continue.</p>
+          )}
+          {uploadHelperState === 'apartment-only' && (
+            <p className="text-sm text-ink-muted">Choose an apartment to continue.</p>
           )}
         </Card>
       </Section>

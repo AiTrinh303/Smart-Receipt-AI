@@ -144,8 +144,18 @@ const HOW_IT_WORKS_STEPS = [
 
 /** A numbered section heading inside the upload form card -- the number is
  * a decorative badge (`aria-hidden`), so the heading's own accessible name
- * is just the word (e.g. "Apartment"), never "1 Apartment". */
-function SectionHeading({ number, children }: { number: number; children: ReactNode }) {
+ * is just the word (e.g. "Apartment"), never "1 Apartment". `required`
+ * adds a small text tag (never color alone) marking that section as
+ * required to proceed. */
+function SectionHeading({
+  number,
+  required = false,
+  children,
+}: {
+  number: number
+  required?: boolean
+  children: ReactNode
+}) {
   return (
     <div className="flex items-center gap-2">
       <span
@@ -155,6 +165,11 @@ function SectionHeading({ number, children }: { number: number; children: ReactN
         {number}
       </span>
       <h2 className="text-base font-semibold text-ink">{children}</h2>
+      {required && (
+        <span className="rounded-full border border-border-subtle px-2 py-0.5 text-xs font-medium text-ink-muted">
+          Required
+        </span>
+      )}
     </div>
   )
 }
@@ -812,7 +827,9 @@ function ReceiptUpload() {
         <div className="flex flex-col gap-4 lg:col-span-7">
           <Card className="flex flex-col gap-6">
             <div className="flex flex-col gap-3">
-              <SectionHeading number={1}>Apartment</SectionHeading>
+              <SectionHeading number={1} required>
+                Apartment
+              </SectionHeading>
 
               {apartmentsError ? (
                 <div className="flex flex-col gap-2">
@@ -848,6 +865,7 @@ function ReceiptUpload() {
                     onChange={setApartmentId}
                     disabled={isInputDisabled}
                     describedBy={(file || isBatchActive) && !apartmentId ? APARTMENT_HELPER_ID : undefined}
+                    hideLegend
                   />
                 )
               )}
@@ -897,9 +915,9 @@ function ReceiptUpload() {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`flex items-center justify-center gap-2 rounded-control border-2 border-dashed bg-brand-subtle p-3 text-center transition-colors duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-                    isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'
-                  } ${isDragOver ? 'border-brand' : 'border-border'}`}
+                  className={`flex items-center justify-center gap-2 rounded-control border-2 border-dashed bg-brand-soft p-3 text-center transition-colors duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                    isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-subtle'
+                  } ${isDragOver ? 'border-brand bg-brand-subtle' : 'border-border'}`}
                 >
                   <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 flex-shrink-0 text-brand" fill="none">
                     <path
@@ -922,9 +940,9 @@ function ReceiptUpload() {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`flex flex-col items-center gap-2 rounded-control border-2 border-dashed bg-brand-subtle p-8 text-center transition-colors duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-                    isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'
-                  } ${isDragOver ? 'border-brand' : 'border-border'}`}
+                  className={`flex flex-col items-center gap-2 rounded-control border-2 border-dashed bg-brand-soft p-8 text-center transition-colors duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                    isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-subtle'
+                  } ${isDragOver ? 'border-brand bg-brand-subtle' : 'border-border'}`}
                 >
                   <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-brand" fill="none">
                     <path
@@ -935,7 +953,18 @@ function ReceiptUpload() {
                       strokeLinejoin="round"
                     />
                   </svg>
-                  <p className="text-sm font-medium text-ink">Drag a receipt here, or choose a file</p>
+                  <p className="text-sm font-medium text-ink">Drag a receipt here, or</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={isInputDisabled}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openFilePicker()
+                    }}
+                  >
+                    Browse files
+                  </Button>
                   <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB</p>
                 </div>
               )}
@@ -1114,11 +1143,16 @@ function ReceiptUpload() {
                     disabled={!file || !apartmentId || isBusy}
                     loading={isBusy}
                     loadingText={isUploading ? 'Uploading...' : 'Extracting...'}
-                    aria-describedby={apartmentId && !file ? FILE_HELPER_ID : undefined}
+                    aria-describedby={!file ? FILE_HELPER_ID : undefined}
                   >
                     Read receipt
                   </Button>
 
+                  {!apartmentId && !file && (
+                    <p id={FILE_HELPER_ID} className="text-sm text-ink-muted">
+                      Choose an apartment and add a receipt to continue.
+                    </p>
+                  )}
                   {apartmentId && !file && (
                     <p id={FILE_HELPER_ID} className="text-sm text-ink-muted">
                       Choose a file to continue.

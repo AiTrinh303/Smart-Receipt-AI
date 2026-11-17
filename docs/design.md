@@ -369,6 +369,16 @@ through the form, and buried its reading tips behind a heavy bordered box.
   radius as `Button`/`RadioCardGroup`), and a
   `transition-colors duration-150 motion-reduce:transition-none` was
   added for the hover/drag-over color change (previously instant).
+  **Correction (a follow-up pass found the idle dropzone was the single
+  most saturated block on the page):** `bg-brand-subtle` was too strong
+  for an *idle* state -- it's now the **hover/drag-over** fill only,
+  one step more saturated than idle, exactly so the engaged states still
+  read as "clearly stronger than idle" per the design rules. Idle now
+  uses `bg-brand-soft` (the existing lighter sibling token, not a new
+  one), so the three states step up in saturation in order:
+  `brand-soft` (idle) -> `brand-subtle` (hover **and** drag-over, treated
+  as the same "engaged" strength) -- `border-border`/`border-brand`
+  (unchanged either way).
 - **The batch queue and sticky action bar are unchanged in behavior** --
   only their surrounding column got narrower (`lg:col-span-7` instead of
   the full page). The sticky bar's own `-mx-6 -mb-6` escape-the-card-
@@ -376,6 +386,69 @@ through the form, and buried its reading tips behind a heavy bordered box.
   keeps working exactly as before regardless of the column width around
   it (confirmed by the existing batch tests passing unchanged, and noted
   for the manual browser check below).
+
+## Making what's required and the next action clear on the upload form
+
+A follow-up pass found three remaining gaps: nothing marked the apartment
+choice as required, a user with *neither* an apartment nor a file chosen
+saw no guidance at all (the two existing helper texts only ever covered
+"one of the two is missing"), and "choose a file" inside the dropzone was
+plain text rather than an obvious control.
+
+- **A "Required" tag, by text, not color.** `SectionHeading` gained an
+  optional `required` prop; only section 1 ("Apartment") passes it. It
+  renders a small neutral pill reading the word "Required" next to the
+  heading -- the word itself is what conveys the meaning, not a color, so
+  it reads the same for a screen reader, a colorblind user, or a printed
+  screenshot.
+- **The `RadioCardGroup` legend is now optionally hidden.** A new
+  `hideLegend` prop (default `false`, so every other caller --
+  `ReceiptApartment.tsx`, `StyleGuide.tsx` -- is unaffected) makes the
+  `<legend>` `sr-only` instead of visible, **without changing its text or
+  removing it from the DOM**: the upload form's `RadioCardGroup` still
+  gets the exact legend string ("Which apartment is this receipt for?",
+  pluralizing to "...these receipts for?" once `isBatchActive`) --
+  `SectionHeading`'s plain "Apartment" is now the one *visible* heading,
+  so the two no longer repeat each other on screen, while the legend
+  stays the fieldset's `aria-label` (unaffected either way) and is still
+  found by `screen.getByText(...)` in every existing test that looks for
+  it.
+- **A third status line for "neither chosen" -- the other two kept
+  exactly as they were.** Previously, with no file *and* no apartment
+  chosen, the disabled "Read receipt" button had no explanation at all
+  (each existing helper text requires the *other* thing to already be
+  chosen as its own precondition). A new line, "Choose an apartment and
+  add a receipt to continue.", fills exactly that gap -- rendered in the
+  same `#file-helper` slot the file-only case already used (the two
+  conditions, `!apartmentId && !file` and `apartmentId && !file`, are
+  mutually exclusive, so reusing one `id` is safe), with the button's
+  `aria-describedby` simplified to just `!file` (true for both of this
+  slot's cases, and only this slot's cases -- the apartment-only case
+  keeps its own separate helper and wiring next to the `RadioCardGroup`,
+  completely untouched).
+- **A visible "Browse files" button inside the dropzone.** The
+  instructional text changed from "Drag a receipt here, or choose a
+  file" (where "choose a file" read as plain text, not a control) to
+  "Drag a receipt here, or" followed by a real secondary `Button` reading
+  "Browse files", then the size/type line. The button calls
+  `e.stopPropagation()` before `openFilePicker()` -- it sits nested
+  inside the dropzone's own `role="button"` `<div>` (which already opens
+  the picker on any click), so without stopping propagation the click
+  would bubble up and trigger the same handler a second time. Same
+  validation, same disabled-while-a-batch-runs rule, same hidden
+  `<input>` -- this is a second way to trigger the exact same thing, not
+  a second code path.
+- **Disabled primary button text: `slate-700`, not `slate-600`.**
+  `slate-600` on `slate-300` already measured 5.10:1 (technically above
+  the 4.5:1 floor), but still read as pale against the lighter `slate-300`
+  fill -- bumped one step darker to `slate-700` (6.97:1), comfortably
+  past the floor and visibly less washed out. `Button.contrast.test.ts`
+  now has a dedicated `describe('the disabled primary button', ...)`
+  block (`PRIMARY_DISABLED_COLOR_TOKENS`, exported from `Button.tsx`
+  alongside `VARIANT_COLOR_TOKENS`) that resolves both tokens against the
+  real merged theme and prints the measured ratio
+  (`disabled primary: slate-700 (#334155) on slate-300 (#cbd5e1) =
+  6.97:1`) rather than only asserting pass/fail.
 
 ## Mobile-friendly patterns
 
@@ -1234,7 +1307,10 @@ newest-first), which read as random next to a camera's sequential names.
   shouldn't compete visually with the primary action). Supports `size`
   (`sm`/`md`), `loading` (shows `Spinner` + optional `loadingText`), and
   standard `disabled`. All sizes keep a 44px minimum touch target on small
-  screens.
+  screens. Exports `VARIANT_COLOR_TOKENS` (enabled-state) and
+  `PRIMARY_DISABLED_COLOR_TOKENS` (`primary`'s disabled
+  `background`/`text`, currently `slate-300`/`slate-700`) for
+  `Button.contrast.test.ts` to resolve against the real theme and check.
 - **`Card`** — a bordered, padded, white surface for grouping content (forms,
   dropzones, confirmation panels).
 - **`Container`** — `size` `md` (`max-w-md`), `lg` (`max-w-3xl`, History's
@@ -1270,6 +1346,11 @@ newest-first), which read as random next to a camera's sequential names.
   marked by color alone: a check icon and `font-semibold` go with the
   stronger `border-brand`. Stacked below `sm`, side by side from it. Used by
   the upload form's apartment choice (see "Apartment choice" below).
+  `hideLegend` (default `false`) makes the `<legend>` `sr-only` without
+  changing its text or the fieldset's `aria-label` — for a caller (the
+  upload form) that already shows its own visible heading above the
+  group and would otherwise repeat the legend's text; every other caller
+  omits it and keeps the legend visible, as before.
 - **`formatFileSize`** — formats a byte count as `B`/`KB`/`MB`/`GB` for
   display next to a selected file.
 - **`PageHeader`** — `title` (rendered as the view's one `<h1>`,

@@ -87,9 +87,17 @@ the purchase info, and the result is displayed for review.
   renders `ReceiptResult.tsx` with the structured result.
   **Apartment choice (`hooks/useApartments.ts`, `ui/RadioCardGroup.tsx`,
   `format/apartmentPlace.ts`):**
-  the upload form shows a `RadioCardGroup` above the dropzone, legend "Which
+  the upload form shows a `RadioCardGroup` above the dropzone inside the
+  "Apartment" section (`SectionHeading number={1} required`, the only
+  section with the "Required" tag), legend "Which
   apartment is this receipt for?" (pluralizing to "Which apartment are these
-  receipts for?" the moment `isBatchActive` — 2+ files queued), nothing
+  receipts for?" the moment `isBatchActive` — 2+ files queued) — passed
+  with `hideLegend` here, so it's `sr-only` (the `SectionHeading`'s plain
+  "Apartment" is the one *visible* heading now, avoiding the repetition
+  "1 Apartment" / "Which apartment is this receipt for?" used to read as);
+  the legend's full text is unchanged and still the fieldset's
+  `aria-label`, still found by `getByText` in every test that looks for
+  it. Nothing
   preselected (confirmed: `apartmentId` is plain `useState(null)` on every
   mount, with no persistence beyond the session — deliberately not
   preselected across a real reload). `useApartments`
@@ -109,14 +117,21 @@ the purchase info, and the result is displayed for review.
   explicit `aria-label` on the `<input type="radio">`, so the accessible
   name is always the full apartment name regardless of what's visually
   shown — `ReceiptApartment.tsx` and `StyleGuide.tsx` pass only `label` (no
-  `secondaryLabel`/`accessibleName`), so their cards/behavior are
+  `secondaryLabel`/`accessibleName`/`hideLegend`), so their cards/behavior
+  are
   byte-for-byte unchanged. "Read receipt" stays disabled
-  until a valid file **and** a chosen apartment are both present; with only
-  a file, a muted "Choose an apartment to continue." hint is shown, tied to
-  the group via `aria-describedby`; with only an apartment chosen (no file,
-  no batch), a muted "Choose a file to continue." hint is shown instead,
-  tied to the "Read receipt" button the same way (the two helpers can never
-  both show, since each requires the other's precondition to be *missing*).
+  until a valid file **and** a chosen apartment are both present. Three
+  mutually exclusive status lines cover every combination: with a file but
+  no apartment, a muted "Choose an apartment to continue." hint is shown
+  next to the `RadioCardGroup`, tied to it via `aria-describedby`
+  (unchanged); with an apartment but no file, a muted "Choose a file to
+  continue." hint is shown under the "Read receipt" button, tied to it via
+  `aria-describedby`; with **neither** chosen, a muted "Choose an
+  apartment and add a receipt to continue." hint fills that same slot
+  instead (same `id` reused — `apartmentId && !file` and `!apartmentId &&
+  !file` can never both be true at once). The button's `aria-describedby`
+  is simply `!file ? FILE_HELPER_ID : undefined` — true for exactly those
+  two under-the-button cases, never the apartment-only one.
   A closed-by-default `<details>`/`<summary>` ("Tips for better reading",
   styled as a text-style control — no box, `list-none` +
   `[&::-webkit-details-marker]:hidden` to remove the native disclosure
@@ -153,13 +168,31 @@ the purchase info, and the result is displayed for review.
   default) renders `TipsDetails` and skips `HelpPanel` — **never both**,
   since both show the identical tips text and a CSS-only
   show/hide-one-of-two approach would leave that text in the DOM twice at
-  once. The idle dropzone (both the full and the compact "Add more files"
-  variants) now has `bg-brand-subtle` as its resting background (not just
-  on hover/drag-over), `rounded-control` (was `rounded-lg`), and
+  once. `HelpPanel` uses the plain `Card` elevation (`shadow-card`, no
+  override — it originally added `shadow-popover` on top, which read as
+  a floating popup rather than a panel beside the form) and, from `lg`
+  up, `lg:sticky lg:top-20 lg:self-start` (80px clears the shell's `h-16`
+  header with 16px to spare), so it stays in view while the (usually
+  taller) form scrolls. The dropzone (both the full and the compact "Add
+  more files"
+  variants) has `rounded-control` (was `rounded-lg`) and
   `transition-colors duration-150 motion-reduce:transition-none` for the
   hover/drag-over change — its `border-border` dashed border is unchanged
   (a dropzone is `role="button"`, an interactive control, so it keeps the
-  stronger border, never `border-subtle`). The batch queue and sticky
+  stronger border, never `border-subtle`). **Idle vs. engaged fill:**
+  idle is `bg-brand-soft` (the lighter sibling token — a first pass used
+  `bg-brand-subtle` at idle too, which made the dropzone the single most
+  saturated block on the page; corrected), hover **and** drag-over both
+  step up to `bg-brand-subtle` plus `border-brand` (treated as the same
+  "engaged" strength, one step stronger than idle either way). The full
+  variant's instructional text is now "Drag a receipt here, or" followed
+  by a real secondary `Button` reading "Browse files" (`onClick` calls
+  `e.stopPropagation()` before `openFilePicker()`, since the button sits
+  nested inside the dropzone's own `role="button"` `<div>` which already
+  opens the picker on any click — without stopping propagation the click
+  bubbles up and double-fires it) then the size/type line — replacing the
+  previous plain-text "...or choose a file", which read as inert text
+  rather than an obvious control. The batch queue and sticky
   action bar are functionally untouched — only their column got
   narrower; the sticky bar's `-mx-6 -mb-6` trick is relative to its own
   `Card`, unaffected by the surrounding grid.
@@ -212,9 +245,24 @@ the purchase info, and the result is displayed for review.
   role query to a plain text query, a deliberate, listed change). The
   header's inner `Container` now uses the same `size` `App.tsx` already
   computes for `<main>` per view (`mainSize`) instead of a hardcoded
-  `'lg'`, so the header and the page content share the same max-width and
-  edges; header height is a fixed `h-16` (64px), bottom border
-  `border-border-subtle` (decorative, not interactive). `AppMark` is a
+  `'lg'`; header height is a fixed `h-16` (64px), bottom border
+  `border-border-subtle` (decorative, not interactive). **Correction:**
+  matching `Container` `size` between header and `<main>` alone did not
+  actually align them — every view's own root element nested a *second*,
+  different `max-w-*`/`mx-auto` inside `<main>`'s already-centered
+  `Container` (`ReceiptUpload.tsx` `max-w-5xl`, `ReceiptHistory.tsx`
+  `max-w-2xl`, `ReceiptItems.tsx` `max-w-4xl`), re-centering within an
+  already-centered box and shifting that view's edges inward from the
+  header's. Fixed by removing that second constraint from all three (now
+  plain `w-full`, no `max-w-*`/`mx-auto` of their own — `ReceiptDetailLayout.tsx`
+  was already `w-full` and never had this bug); see "One container per
+  view" in `docs/design.md` for the rule this established
+  (`Container.tsx`'s exported `CONTAINER_SIZE_CLASSES` is the one source
+  of truth a view's content and the header must both go through, never a
+  second one nested inside it) and `App.test.tsx` for the tests that
+  check it mechanically (matching classes on the header's and `<main>`'s
+  `Container`, and no stray `max-w-` on the view's own root element).
+  `AppMark` is a
   receipt-shaped inline SVG (white rectangle, zigzag bottom edge, two
   text lines via `stroke-brand`) on the brand square, duplicated
   byte-for-byte (as literal hex, the one unavoidable exception to
@@ -772,10 +820,16 @@ the purchase info, and the result is displayed for review.
   two static `PageHeader` samples (one with just a description, one with
   an `actions` button, demonstrating the one-`<h1>`-per-view component),
   a "Numbered section headings" section showing the `SectionHeading`
-  number-badge pattern standalone, an "Upload help panel" section showing
+  number-badge pattern standalone (including the "Required" tag on
+  section 1), an "Upload help panel" section showing
   the static `HelpPanel` content (three "How it works" steps plus the
-  expanded tips) exactly as it renders at `lg` and up, the dropzone's
-  idle/drag-over/file-selected states, a `Skeleton` sample, the
+  expanded tips) exactly as it renders at `lg` and up, an "Upload form
+  status line" section toggling between the three mutually exclusive
+  helper texts (neither chosen / file-only / apartment-only) above a
+  disabled "Read receipt" sample, the dropzone's
+  idle/drag-over/file-selected states (idle `bg-brand-soft`, drag-over
+  `bg-brand-subtle` + `border-brand`, a visible "Browse files" button
+  inside it), a `Skeleton` sample, the
   card-variant items list, the warnings panel/Edited badge/reset
   confirmation, a `BatchQueue` sample (compact rows, one per status, plus
   rejected files — reflecting the same component the real batch flow

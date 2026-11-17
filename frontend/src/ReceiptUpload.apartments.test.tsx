@@ -292,6 +292,28 @@ test('the legend pluralizes once 2 or more files are queued', async () => {
   expect(screen.queryByText('Which apartment is this receipt for?')).not.toBeInTheDocument()
 })
 
+test('the "Apartment" section heading carries a "Required" tag', async () => {
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+
+  const heading = screen.getByRole('heading', { level: 2, name: 'Apartment' })
+  expect(heading).toBeInTheDocument()
+  expect(screen.getByText('Required')).toBeInTheDocument()
+})
+
+test('with neither an apartment nor a file chosen, a combined status line is shown, tied to the disabled submit button', async () => {
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+
+  const helper = screen.getByText('Choose an apartment and add a receipt to continue.')
+  expect(helper).toBeInTheDocument()
+  expect(getSubmitButton()).toHaveAttribute('aria-describedby', helper.id)
+  expect(getSubmitButton()).toBeDisabled()
+  // Neither of the other two helper texts is shown at the same time.
+  expect(screen.queryByText('Choose an apartment to continue.')).not.toBeInTheDocument()
+  expect(screen.queryByText('Choose a file to continue.')).not.toBeInTheDocument()
+})
+
 test('choosing an apartment with no file shows "Choose a file to continue." tied to the disabled submit button', async () => {
   const user = userEvent.setup()
   render(<ReceiptUpload />)

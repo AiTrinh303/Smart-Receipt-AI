@@ -1,6 +1,6 @@
 import resolveConfig from 'tailwindcss/resolveConfig'
 import tailwindConfig from '../../../tailwind.config.js'
-import { VARIANT_COLOR_TOKENS } from './Button'
+import { PRIMARY_DISABLED_COLOR_TOKENS, VARIANT_COLOR_TOKENS } from './Button'
 
 const HEX_PATTERN = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
 
@@ -159,4 +159,34 @@ test('the brand border on a selected RadioCardGroup card meets 3:1 against its o
 
 test('border-subtle is a valid color but is NOT required to meet any contrast minimum -- decorative containers only, never an interactive control, a selectable card, or a dropzone', () => {
   expect(resolveToken('border-subtle')).toMatch(HEX_PATTERN)
+})
+
+// --- Disabled primary button (e.g. the Upload form's "Read receipt") ------
+//
+// A disabled button's text is still read by the user while they work out
+// what's missing (an apartment, a file, or both) -- it needs the same
+// 4.5:1 floor as any other normal text, not a pass given "it's disabled
+// anyway."
+
+describe('the disabled primary button', () => {
+  const backgroundHex = resolveToken(PRIMARY_DISABLED_COLOR_TOKENS.background as string) as string
+  const textHex = resolveToken(PRIMARY_DISABLED_COLOR_TOKENS.text) as string
+
+  test('both tokens resolve to valid colors', () => {
+    expect(backgroundHex).toMatch(HEX_PATTERN)
+    expect(textHex).toMatch(HEX_PATTERN)
+  })
+
+  test('text meets 4.5:1 against its background -- measured ratio shown below', () => {
+    const ratio = contrastRatio(textHex, backgroundHex)
+    // Printed so a real run's output shows the actual measured value, not
+    // just a pass/fail -- e.g. "disabled primary: slate-700 (#334155) on
+    // slate-300 (#cbd5e1) = 6.97:1".
+    // eslint-disable-next-line no-console
+    console.log(
+      `disabled primary: ${PRIMARY_DISABLED_COLOR_TOKENS.text} (${textHex}) on ` +
+        `${PRIMARY_DISABLED_COLOR_TOKENS.background} (${backgroundHex}) = ${ratio.toFixed(2)}:1`,
+    )
+    expect(ratio).toBeGreaterThanOrEqual(4.5)
+  })
 })

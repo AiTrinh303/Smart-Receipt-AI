@@ -18,6 +18,14 @@ interface RadioCardGroupProps {
   onChange: (value: string) => void
   disabled?: boolean
   describedBy?: string
+  /** Visually hides the `<legend>` (still in the DOM, still the
+   * fieldset's `aria-label`) when a caller already shows its own visible
+   * heading above this group -- e.g. the upload form's "Apartment"
+   * section heading, which would otherwise repeat `legend`'s text.
+   * Defaults to visible, since most callers (e.g. `ReceiptApartment.tsx`)
+   * have no heading of their own and rely on this legend being the one
+   * visible label. */
+  hideLegend?: boolean
 }
 
 function CheckIcon() {
@@ -49,6 +57,7 @@ function RadioCardGroup({
   onChange,
   disabled = false,
   describedBy,
+  hideLegend = false,
 }: RadioCardGroupProps) {
   return (
     <fieldset
@@ -58,7 +67,7 @@ function RadioCardGroup({
       aria-label={legend}
       className="flex flex-col gap-2"
     >
-      <legend className="text-sm font-medium text-ink">{legend}</legend>
+      <legend className={hideLegend ? 'sr-only' : 'text-sm font-medium text-ink'}>{legend}</legend>
       <div className="flex flex-col gap-2 sm:flex-row">
         {options.map((option) => {
           const checked = value === option.value
