@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError } from './api/ApiError'
 import { updateReceipt } from './api/updateReceipt'
 import type { ReceiptEditableAmount, ReceiptEditableFields, ReceiptEditableItem } from './api/updateReceipt'
@@ -80,9 +80,13 @@ interface ReceiptEditFormProps {
   data: ReceiptExtraction
   onSave: (updated: ReceiptExtraction) => void
   onCancel: () => void
+  /** Set by "Fix in Edit" (ReceiptResult.tsx's warnings panel) so the
+   * relevant field is focused once this form has mounted, instead of
+   * leaving the user to find it themselves. */
+  focusField?: 'purchase_date' | 'total' | null
 }
 
-function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormProps) {
+function ReceiptEditForm({ receiptId, data, onSave, onCancel, focusField = null }: ReceiptEditFormProps) {
   const originalDate = data.purchase_date
   const isOriginalDateIso = originalDate === null || ISO_DATE_PATTERN.test(originalDate)
   // A stored value like "2025-06-26 11" isn't itself a valid ISO date, but
@@ -106,6 +110,19 @@ function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormP
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+
+  const dateInputRef = useRef<HTMLInputElement>(null)
+  const totalInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (focusField === 'purchase_date') {
+      dateInputRef.current?.focus()
+    } else if (focusField === 'total') {
+      totalInputRef.current?.focus()
+    }
+    // Focus only once, right after this form mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const updateItem = (index: number, field: keyof ItemRow, value: string) => {
     setItems((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
@@ -217,6 +234,7 @@ function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormP
         Purchase date
         {canUseDateInput ? (
           <input
+            ref={dateInputRef}
             type="date"
             value={purchaseDate}
             onChange={(e) => setPurchaseDate(e.target.value)}
@@ -225,6 +243,7 @@ function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormP
         ) : (
           <>
             <input
+              ref={dateInputRef}
               type="text"
               value={purchaseDate}
               onChange={(e) => setPurchaseDate(e.target.value)}
@@ -420,6 +439,7 @@ function ReceiptEditForm({ receiptId, data, onSave, onCancel }: ReceiptEditFormP
       <label className="flex flex-col gap-1 text-sm font-semibold text-gray-900">
         Total
         <input
+          ref={totalInputRef}
           type="text"
           value={total}
           onChange={(e) => setTotal(e.target.value)}

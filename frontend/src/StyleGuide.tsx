@@ -373,9 +373,19 @@ function StyleGuide() {
             </svg>
             <div>
               <p className="font-semibold">Check these values</p>
-              <ul className="mt-1 list-disc pl-4">
-                <li>The total (79.40) does not match the items, discounts and tax (69.40 + 0.00).</li>
-                <li>The purchase date is missing.</li>
+              <ul className="mt-1 flex flex-col gap-1.5 list-disc pl-4">
+                <li className="flex flex-wrap items-center gap-2">
+                  <span>The total (79.40) does not match the items, discounts and tax (69.40 + 0.00).</span>
+                  <Button variant="secondary" size="sm">
+                    Fix in Edit
+                  </Button>
+                </li>
+                <li className="flex flex-wrap items-center gap-2">
+                  <span>The purchase date is missing.</span>
+                  <Button variant="secondary" size="sm">
+                    Fix in Edit
+                  </Button>
+                </li>
               </ul>
             </div>
           </div>
@@ -406,6 +416,43 @@ function StyleGuide() {
             </div>
           </div>
         </Alert>
+      </Section>
+
+      <Section title="Receipt meta line: a raw/unrecognized date, and Discounts/Taxes with the currency in the heading">
+        <Card className="flex flex-col gap-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Store name</p>
+            <p className="mt-1 inline-flex items-center gap-1 text-sm text-ink-muted" title="This date could not be read as a valid date. Open the receipt and fix it with Edit.">
+              <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 flex-shrink-0 text-warning" fill="none">
+                <path d="M10 3.5l8 13.5H2l8-13.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="M10 8.5v3.5M10 11.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              26/06/2025
+              <span className="sr-only">Date not recognized</span>
+              <span>· USD</span>
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 text-sm">
+            <div>
+              <h2 className="font-medium text-ink-muted">Discounts (USD)</h2>
+              <ul className="flex flex-col gap-1">
+                <li className="flex items-baseline justify-between gap-4">
+                  <span>Loyalty discount</span>
+                  <span className="whitespace-nowrap text-right tabular-nums">0.50</span>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h2 className="font-medium text-ink-muted">Taxes (USD)</h2>
+              <ul className="flex flex-col gap-1">
+                <li className="flex items-baseline justify-between gap-4">
+                  <span>Sales tax</span>
+                  <span className="whitespace-nowrap text-right tabular-nums">0.64</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </Card>
       </Section>
 
       <Section title="Apartment choice (RadioCardGroup -- none chosen / chosen / loading / failure)">

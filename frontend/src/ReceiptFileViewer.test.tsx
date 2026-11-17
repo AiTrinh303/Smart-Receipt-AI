@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import ReceiptFileViewer from './ReceiptFileViewer'
+import ReceiptFileViewer, { PDF_VIEW_FRAGMENT } from './ReceiptFileViewer'
 
 const RECEIPT_ID = '11111111-1111-1111-1111-111111111111'
 const EXPECTED_URL = `http://localhost:8001/receipts/${RECEIPT_ID}/file`
@@ -33,14 +33,16 @@ test('an image content type renders an <img> whose src is the file URL', () => {
   expect(img.src).toBe(EXPECTED_URL)
 })
 
-test('a PDF content type renders an iframe with that src and a title', () => {
+test('a PDF content type renders an iframe with that src (plus the PDF view fragment) and a title', () => {
   // Given a receipt known to be a PDF
   render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.pdf" contentType="application/pdf" />)
 
-  // Then an iframe with the file URL and a descriptive title is rendered
+  // Then an iframe with the file URL -- plus PDF_VIEW_FRAGMENT, so Chrome/
+  // Edge fit the page to width and hide the thumbnail panel -- and a
+  // descriptive title is rendered
   const iframe = screen.getByTitle(/original receipt pdf/i) as HTMLIFrameElement
   expect(iframe.tagName).toBe('IFRAME')
-  expect(iframe.src).toBe(EXPECTED_URL)
+  expect(iframe.src).toBe(`${EXPECTED_URL}${PDF_VIEW_FRAGMENT}`)
 })
 
 test('kind is decided from contentType first, then the filename extension, then defaults to image', () => {

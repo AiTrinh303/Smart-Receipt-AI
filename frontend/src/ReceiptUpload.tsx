@@ -280,6 +280,7 @@ function ReceiptUpload() {
   const [extractionError, setExtractionError] = useState<string | null>(null)
   const [result, setResult] = useState<ReceiptResultData | null>(null)
   const [isEditing, setIsEditing] = useState(false)
+  const [editFocusField, setEditFocusField] = useState<'purchase_date' | 'total' | null>(null)
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -735,6 +736,7 @@ function ReceiptUpload() {
         <ReceiptEditForm
           receiptId={result.receipt_id}
           data={result}
+          focusField={editFocusField}
           onSave={(updated) => {
             setResult(updated)
             setIsEditing(false)
@@ -814,7 +816,13 @@ function ReceiptUpload() {
               apartmentId={result.apartment_id}
               onUpdated={(updated) => setResult(updated)}
             />
-            <ReceiptResult data={result} onEdit={() => setIsEditing(true)} />
+            <ReceiptResult
+              data={result}
+              onEdit={(focusField) => {
+                setEditFocusField(focusField ?? null)
+                setIsEditing(true)
+              }}
+            />
 
             {isConfirmingDelete ? (
               <Alert variant="error">

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
+import { PDF_VIEW_FRAGMENT } from './ReceiptFileViewer'
 import { mockObjectUrl } from './test/objectUrl'
 import { SAMPLE_APARTMENTS, withApartments } from './test/apartmentsFetch'
 
@@ -213,7 +214,7 @@ describe('showing the original file next to receipt data', () => {
       expect(screen.getByText('Corner Store')).toBeInTheDocument()
     })
     const iframe = screen.getByTitle(/original receipt pdf/i) as HTMLIFrameElement
-    expect(iframe.src).toBe(EXPECTED_FILE_URL)
+    expect(iframe.src).toBe(`${EXPECTED_FILE_URL}${PDF_VIEW_FRAGMENT}`)
   })
 
   test('if the image fails to load, the "not available" message appears and data/Edit/Delete still work', async () => {

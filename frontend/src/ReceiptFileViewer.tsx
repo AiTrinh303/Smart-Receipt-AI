@@ -11,6 +11,14 @@ const DEFAULT_ZOOM = 100
 
 const NOT_AVAILABLE_MESSAGE = 'The original file is not available.'
 
+/** Appended to the PDF iframe's src: Chrome and Edge honor these PDF open
+ * parameters (fit the page to the viewport width, hide the side thumbnail
+ * panel) to avoid the double toolbar/horizontal scrollbar/large empty area
+ * their default plugin viewer otherwise shows at this iframe's width;
+ * other browsers simply ignore an unrecognized fragment, which is
+ * harmless. Never hides the browser's own PDF toolbar. */
+export const PDF_VIEW_FRAGMENT = '#view=FitH&navpanes=0'
+
 const LINK_BUTTON_CLASSES =
   'inline-flex min-h-[44px] flex-shrink-0 items-center justify-center gap-1.5 rounded-md border ' +
   'border-border bg-white px-3 py-2 text-sm font-semibold text-ink hover:bg-slate-50 ' +
@@ -184,7 +192,7 @@ function ReceiptFileViewer({ receiptId, fileName, contentType }: ReceiptFileView
           </div>
         ) : kind === 'pdf' ? (
           <iframe
-            src={fileUrl}
+            src={`${fileUrl}${PDF_VIEW_FRAGMENT}`}
             title={fileName ? `Original receipt PDF (${fileName})` : 'Original receipt PDF'}
             className="h-[600px] w-full lg:h-full lg:min-h-[600px]"
           />

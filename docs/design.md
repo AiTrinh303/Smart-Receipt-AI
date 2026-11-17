@@ -1340,6 +1340,68 @@ instead.
   the existing "Review bar" one, shows the position/Previous/Next/
   "Approve and next" row as a static sample.
 
+## Showing date problems where they are, and tidying the summary and PDF view
+
+Four smaller observations from the same saved-receipt-view ticket: an
+unrecognized date showed only as raw text with no marker; a warning told
+the user something was wrong but gave no way to act on it; the summary
+repeated the currency on every discount/tax row, which could misread as
+tax added on top of the total; and the PDF viewer showed the browser's own
+PDF-plugin chrome (a second toolbar, a side thumbnail pane, a horizontal
+scrollbar, a large dark empty area) inside an already-framed panel.
+
+- **The meta line's date** (`ReceiptResult.tsx`'s new `PurchaseDateMeta`)
+  now follows the same three-way rule the Items table's `DateCell`
+  already uses, via the same `formatDisplayDate()`: a valid ISO date
+  renders exactly as before (unchanged raw text — this ticket never
+  reformats a *valid* date, only adds a marker for an *invalid* one); an
+  unrecognized value shows that raw text next to a small warning icon,
+  `title="This date could not be read as a valid date. Open the receipt
+  and fix it with Edit."` and a visually hidden "Date not recognized"
+  (`UNRECOGNIZED_DATE_TITLE` is now exported from `ReceiptItems.tsx` and
+  imported here, rather than duplicated); a missing date renders
+  `MissingValue`.
+- **"Fix in Edit" on a warning.** `ReceiptResult.tsx`'s warnings panel now
+  renders a small "Fix in Edit" button next to any warning whose `field`
+  is exactly `purchase_date` or `total` (`check_receipt`'s own field
+  names) — every other warning (e.g. `store_name`, an `items[n]` line
+  mismatch) stays text-only, since there's no single input to jump to for
+  those. Clicking it calls `onEdit(field)` — `ReceiptResult`'s `onEdit`
+  prop is now `(focusField?: 'purchase_date' | 'total') => void`, called
+  with no argument by the plain "Edit" button in the header, same as
+  before. `ReceiptUpload.tsx` stores that as `editFocusField` state and
+  passes it to a new `ReceiptEditForm` prop, `focusField`, which a
+  mount-only `useEffect` uses to focus the matching input (`dateInputRef`
+  or `totalInputRef`) — *after* mount, never during render, and never
+  re-focusing on a later prop change within the same form instance.
+- **Discounts/Taxes summary** (`ReceiptResult.tsx`'s `AmountRow`): each
+  section heading is now `Discounts${currencyLabel}`/`Taxes${currencyLabel}`
+  (the same `currencyLabel` the item table's column headers already use —
+  e.g. "Discounts (USD)") when the currency is known, and every amount
+  row is `formatMoney(amount, currency, {includeCurrency: false})` —
+  right-aligned, tabular, no per-row currency prefix. When currency is
+  `null`, the heading simply has no suffix and `formatMoney` already
+  falls back to a plain number regardless of `includeCurrency`, so nothing
+  breaks — a missing currency was never a special case to handle, just
+  the natural result of the same call. The Total row's text
+  (`` `Total: ${formatMoney(data.total, data.currency)}` ``, still with
+  its currency prefix) is completely unchanged.
+- **PDF view fragment.** `ReceiptFileViewer.tsx` exports
+  `PDF_VIEW_FRAGMENT = '#view=FitH&navpanes=0'`, appended to the PDF
+  iframe's `src`. Chrome and Edge honor these PDF open parameters (fit to
+  width, hide the side thumbnail panel), removing the double
+  toolbar/horizontal-scrollbar/empty-area effect at this iframe's width;
+  a browser that doesn't recognize the fragment simply ignores it — never
+  an error, never hiding the browser's *own* PDF toolbar (only the
+  plugin's optional extras). `ReceiptFileViewer.test.tsx` and
+  `ReceiptUpload.fileViewer.test.tsx`'s iframe-`src` assertions were
+  updated to expect the fragment appended.
+- **Added to `?view=styleguide`:** the existing "Data-quality warnings"
+  section's two sample warnings now each show a "Fix in Edit" button; a
+  new "Receipt meta line" section shows the raw-date warning marker next
+  to the Discounts/Taxes-with-currency-heading pattern, as a static
+  sample.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

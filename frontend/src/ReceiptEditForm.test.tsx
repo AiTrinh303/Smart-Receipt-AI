@@ -312,3 +312,40 @@ describe('ReceiptEditForm', () => {
     expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/extract'))).toBe(false)
   })
 })
+
+describe('focusField ("Fix in Edit")', () => {
+  test('focusField="purchase_date" focuses the date input after mount', () => {
+    render(
+      <ReceiptEditForm
+        receiptId={RECEIPT_ID}
+        data={SAMPLE_DATA}
+        onSave={jest.fn()}
+        onCancel={jest.fn()}
+        focusField="purchase_date"
+      />,
+    )
+
+    expect(document.activeElement).toBe(screen.getByDisplayValue('2026-01-15'))
+  })
+
+  test('focusField="total" focuses the Total input after mount', () => {
+    render(
+      <ReceiptEditForm
+        receiptId={RECEIPT_ID}
+        data={SAMPLE_DATA}
+        onSave={jest.fn()}
+        onCancel={jest.fn()}
+        focusField="total"
+      />,
+    )
+
+    expect(document.activeElement).toBe(screen.getByLabelText('Total'))
+  })
+
+  test('no focusField leaves focus untouched', () => {
+    render(<ReceiptEditForm receiptId={RECEIPT_ID} data={SAMPLE_DATA} onSave={jest.fn()} onCancel={jest.fn()} />)
+
+    expect(document.activeElement).not.toBe(screen.getByLabelText('Total'))
+    expect(document.activeElement).not.toBe(screen.getByDisplayValue('2026-01-15'))
+  })
+})

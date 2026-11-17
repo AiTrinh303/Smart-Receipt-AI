@@ -1,6 +1,9 @@
 import type { LineItem, ReceiptExtraction } from './api/types'
+import { formatDisplayDate } from './format/formatDisplayDate'
+import { UNRECOGNIZED_DATE_TITLE } from './ReceiptItems'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
+import MissingValue from './components/ui/MissingValue'
 import { formatMoney } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
 
@@ -26,6 +29,42 @@ function WarningIcon() {
       <path d="M10 8.5v3.5M10 14.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   )
+}
+
+function DateWarningIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 flex-shrink-0 text-warning" fill="none">
+      <path
+        d="M10 3.5l8 13.5H2l8-13.5z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path d="M10 8.5v3.5M10 11.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** Shows the receipt's purchase_date in the store-name meta line: a valid
+ * ISO date is shown exactly as before (unchanged raw text); a value that
+ * doesn't parse as one shows that raw text next to a warning marker (the
+ * same pattern the Items table's DateCell already uses, imported from
+ * there rather than duplicated); a missing date renders MissingValue. */
+function PurchaseDateMeta({ value }: { value: string | null | undefined }) {
+  const display = formatDisplayDate(value ?? null)
+  if (display.kind === 'missing') {
+    return <MissingValue />
+  }
+  if (display.kind === 'raw') {
+    return (
+      <span className="inline-flex items-center gap-1" title={UNRECOGNIZED_DATE_TITLE}>
+        <DateWarningIcon />
+        {display.text}
+        <span className="sr-only">Date not recognized</span>
+      </span>
+    )
+  }
+  return <>{value}</>
 }
 
 function PencilIcon() {
@@ -74,18 +113,34 @@ interface AmountRowProps {
   currency: string | null
 }
 
+/** Plain, right-aligned, tabular amounts -- the currency itself is shown
+ * once, in the section heading (see currencySuffix below), rather than
+ * repeated on every row ("EUR -0.24", "EUR 0.14" read as noisy, and a
+ * repeated "EUR" in a Taxes row could misread as tax added on top of the
+ * total). When currency is unknown, formatMoney with includeCurrency:
+ * false falls back to the same plain number either way, so nothing
+ * breaks. */
 function AmountRow({ description, amount, currency }: AmountRowProps) {
   return (
     <li className="flex items-baseline justify-between gap-4">
       <span>{displayText(description)}</span>
-      <span className="whitespace-nowrap tabular-nums">{formatMoney(amount, currency)}</span>
+      <span className="whitespace-nowrap text-right tabular-nums">
+        {formatMoney(amount, currency, { includeCurrency: false })}
+      </span>
     </li>
   )
 }
 
+const EDITABLE_WARNING_FIELDS = ['purchase_date', 'total'] as const
+type EditableWarningField = (typeof EDITABLE_WARNING_FIELDS)[number]
+
+function isEditableWarningField(field: string): field is EditableWarningField {
+  return (EDITABLE_WARNING_FIELDS as readonly string[]).includes(field)
+}
+
 interface ReceiptResultProps {
   data: ReceiptExtraction
-  onEdit: () => void
+  onEdit: (focusField?: EditableWarningField) => void
 }
 
 function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
@@ -100,10 +155,20 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
             <WarningIcon />
             <div>
               <p className="font-semibold">Check these values</p>
-              <ul className="mt-1 list-disc pl-4">
-                {data.warnings.map((warning, index) => (
-                  <li key={index}>{warning.message}</li>
-                ))}
+              <ul className="mt-1 flex flex-col gap-1.5 list-disc pl-4">
+                {data.warnings.map((warning, index) => {
+                  const field = warning.field
+                  return (
+                    <li key={index} className="flex flex-wrap items-center gap-2">
+                      <span>{warning.message}</span>
+                      {isEditableWarningField(field) && (
+                        <Button variant="secondary" size="sm" onClick={() => onEdit(field)}>
+                          Fix in Edit
+                        </Button>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           </div>
@@ -128,10 +193,10 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
             className="mt-1 text-sm text-ink-muted"
             aria-label={`Date: ${displayText(data.purchase_date)}, Currency: ${displayText(data.currency)}`}
           >
-            {displayText(data.purchase_date)} · {displayText(data.currency)}
+            <PurchaseDateMeta value={data.purchase_date} /> · {displayText(data.currency)}
           </p>
         </div>
-        <Button variant="secondary" size="sm" onClick={onEdit} className="flex-shrink-0">
+        <Button variant="secondary" size="sm" onClick={() => onEdit()} className="flex-shrink-0">
           <PencilIcon />
           Edit
         </Button>
@@ -197,7 +262,7 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
 
       <div className="flex flex-col gap-3 text-sm">
         <div>
-          <h2 className="font-medium text-ink-muted">Discounts</h2>
+          <h2 className="font-medium text-ink-muted">Discounts{currencyLabel}</h2>
           {data.discounts.length === 0 ? (
             <p className="text-ink-muted">None detected</p>
           ) : (
@@ -215,7 +280,7 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
         </div>
 
         <div>
-          <h2 className="font-medium text-ink-muted">Taxes</h2>
+          <h2 className="font-medium text-ink-muted">Taxes{currencyLabel}</h2>
           {data.taxes.length === 0 ? (
             <p className="text-ink-muted">None detected</p>
           ) : (

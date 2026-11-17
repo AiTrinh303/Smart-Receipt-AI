@@ -53,10 +53,14 @@ test('full data: store, date, every item row, discounts, taxes and total are sho
   expect(screen.getByText('5.00')).toBeInTheDocument()
   expect(screen.getAllByText('3.00')).toHaveLength(2)
 
+  // The currency itself is shown once, in the section heading, not
+  // repeated on every amount row
+  expect(screen.getByText('Discounts (USD)')).toBeInTheDocument()
   expect(screen.getByText('Loyalty discount')).toBeInTheDocument()
-  expect(screen.getByText('USD 0.50')).toBeInTheDocument()
+  expect(screen.getByText('0.50')).toBeInTheDocument()
+  expect(screen.getByText('Taxes (USD)')).toBeInTheDocument()
   expect(screen.getByText('Sales tax')).toBeInTheDocument()
-  expect(screen.getByText('USD 0.64')).toBeInTheDocument()
+  expect(screen.getByText('0.64')).toBeInTheDocument()
   expect(screen.getByText('Total: USD 8.14')).toBeInTheDocument()
 })
 
@@ -192,4 +196,90 @@ test('small screen with null item fields: "Not detected" shown, never NaN/null/u
   expect(document.body.textContent).not.toMatch(/\bnull\b/i)
   expect(document.body.textContent).not.toMatch(/\bundefined\b/i)
   expect(document.body.textContent).not.toMatch(/\bNaN\b/i)
+})
+
+// --- Meta line: raw/unrecognized dates and missing dates -------------------
+
+test('an unrecognized purchase_date shows its raw text with a warning marker and hidden "Date not recognized" text', () => {
+  const data = { ...FULL_DATA, purchase_date: '26/06/2025' }
+  render(<ReceiptResult data={data} onEdit={() => {}} />)
+
+  expect(screen.getByText('26/06/2025')).toBeInTheDocument()
+  expect(screen.getByText('Date not recognized')).toBeInTheDocument()
+})
+
+test('a missing purchase_date shows MissingValue (a dash, with "Not detected" as hidden text)', () => {
+  const data = { ...FULL_DATA, purchase_date: null }
+  render(<ReceiptResult data={data} onEdit={() => {}} />)
+
+  // MissingValue's own hidden text, not the plain "Not detected" word used
+  // elsewhere for other missing fields
+  expect(screen.getAllByText('Not detected').length).toBeGreaterThan(0)
+  expect(screen.queryByText('Date not recognized')).not.toBeInTheDocument()
+})
+
+test('a valid ISO purchase_date is shown unchanged, with no warning marker', () => {
+  render(<ReceiptResult data={FULL_DATA} onEdit={() => {}} />)
+
+  expect(screen.getByText('2026-01-15 · USD')).toBeInTheDocument()
+  expect(screen.queryByText('Date not recognized')).not.toBeInTheDocument()
+})
+
+// --- "Fix in Edit" on purchase_date/total warnings -------------------------
+
+test('"Fix in Edit" appears for a purchase_date warning and calls onEdit with that field', () => {
+  const onEdit = jest.fn()
+  const data = {
+    ...FULL_DATA,
+    warnings: [
+      { code: 'DATE_NOT_STANDARD', field: 'purchase_date', message: 'The date is not standard.', details: {} },
+    ],
+  }
+  render(<ReceiptResult data={data} onEdit={onEdit} />)
+
+  screen.getByRole('button', { name: 'Fix in Edit' }).click()
+  expect(onEdit).toHaveBeenCalledWith('purchase_date')
+})
+
+test('"Fix in Edit" appears for a total warning and calls onEdit with that field', () => {
+  const onEdit = jest.fn()
+  const data = {
+    ...FULL_DATA,
+    warnings: [{ code: 'MISSING_TOTAL', field: 'total', message: 'The total is missing.', details: {} }],
+  }
+  render(<ReceiptResult data={data} onEdit={onEdit} />)
+
+  screen.getByRole('button', { name: 'Fix in Edit' }).click()
+  expect(onEdit).toHaveBeenCalledWith('total')
+})
+
+test('"Fix in Edit" does not appear for a warning on another field', () => {
+  const data = {
+    ...FULL_DATA,
+    warnings: [{ code: 'MISSING_STORE', field: 'store_name', message: 'The store name is missing.', details: {} }],
+  }
+  render(<ReceiptResult data={data} onEdit={() => {}} />)
+
+  expect(screen.queryByRole('button', { name: 'Fix in Edit' })).not.toBeInTheDocument()
+})
+
+test('plain "Edit" still calls onEdit with no field', () => {
+  const onEdit = jest.fn()
+  render(<ReceiptResult data={FULL_DATA} onEdit={onEdit} />)
+
+  screen.getByRole('button', { name: /^edit$/i }).click()
+  expect(onEdit).toHaveBeenCalledWith()
+})
+
+// --- Discounts/Taxes headings and amounts -----------------------------------
+
+test('a missing currency falls back to plain headings and plain amounts', () => {
+  const data = { ...FULL_DATA, currency: null }
+  render(<ReceiptResult data={data} onEdit={() => {}} />)
+
+  expect(screen.getByText('Discounts')).toBeInTheDocument()
+  expect(screen.queryByText(/Discounts \(/)).not.toBeInTheDocument()
+  expect(screen.getByText('Taxes')).toBeInTheDocument()
+  expect(screen.getByText('0.50')).toBeInTheDocument()
+  expect(screen.getByText('0.64')).toBeInTheDocument()
 })

@@ -613,13 +613,47 @@ the purchase info, and the result is displayed for review.
   `normalize_purchase_date`) finds a leading ISO date in it (e.g.
   `"2025-06-26 11"`), in which case the `<input type="date">` is prefilled
   with just that leading date instead (never the raw text, which the
-  server would reject) and no hint is shown.
+  server would reject) and no hint is shown. `focusField` (`'purchase_
+  date' | 'total' | null`, default `null`) is set only by "Fix in Edit"
+  (see below); a mount-only `useEffect` (never re-running on a later prop
+  change within the same form instance) then focuses the matching input
+  — `dateInputRef` (attached to whichever of the `<input type="date">`/
+  plain-text date input actually renders) or `totalInputRef`.
   Never calls the extract endpoint.
   **Data-quality warnings, Edited badge, reset
   (`ReceiptResult.tsx`, `src/api/resetReceipt.ts`):** when `data.warnings`
   is non-empty, `ReceiptResult` renders an `Alert variant="warning"`
   ("Check these values", icon + bulleted messages) above the data card;
   empty `warnings` renders nothing, and warnings never block any action.
+  **"Fix in Edit"**: a warning whose `field` is exactly `purchase_date` or
+  `total` (the only two `check_receipt` field names with one single input
+  to jump to) additionally renders a small "Fix in Edit" button next to
+  its message; every other warning (`store_name`, an `items[n]` line
+  mismatch) stays text-only. Clicking it calls `onEdit(field)` —
+  `ReceiptResult`'s `onEdit` prop is `(focusField?: 'purchase_date' |
+  'total') => void`, the plain "Edit" button in the header still calling
+  it with no argument. `ReceiptUpload.tsx` stores the given field as
+  `editFocusField` state and passes it through to `ReceiptEditForm` as
+  its new `focusField` prop (see above).
+  **The meta line's `purchase_date`** (`ReceiptResult.tsx`'s
+  `PurchaseDateMeta`, `UNRECOGNIZED_DATE_TITLE` now exported from
+  `ReceiptItems.tsx` rather than duplicated): follows the exact same rule
+  the Items table's `DateCell` already uses, via the same
+  `formatDisplayDate()` — a valid ISO date renders unchanged (this never
+  reformats a *valid* date, only marks an *invalid* one); an unrecognized
+  value shows that raw text next to a small warning icon, the same
+  `title`, and a hidden "Date not recognized"; a missing date renders
+  `MissingValue`.
+  **Discounts/Taxes summary**: each section heading is
+  `Discounts${currencyLabel}`/`Taxes${currencyLabel}` (the same
+  `currencyLabel` the item table's own column headers use, e.g.
+  "Discounts (USD)") when currency is known, and `AmountRow` now calls
+  `formatMoney(amount, currency, {includeCurrency: false})` — right-
+  aligned, tabular, no per-row currency prefix (previously "EUR -0.24",
+  which could misread as tax added on top of the total). A `null`
+  currency simply drops the heading suffix; `formatMoney` already falls
+  back to a plain number regardless of `includeCurrency`, so nothing
+  else changes. The Total row's exact text is untouched.
   An "Edited" badge (warning-toned, `edited_at` in its `title`) sits next
   to the store name when `data.edited` is `true`. In the surrounding
   container, a secondary "Reset to AI result" button appears only when
@@ -652,7 +686,15 @@ the purchase info, and the result is displayed for review.
   original" on the same `hasError` condition (a failed image load); a body with
   a `slate-100` background (so a white receipt stands out) that is either
   the image/iframe or, on a failed image load, an `Alert` with "The
-  original file is not available." instead of a broken image.
+  original file is not available." instead of a broken image. The PDF
+  iframe's `src` is `` `${fileUrl}${PDF_VIEW_FRAGMENT}` `` —
+  `PDF_VIEW_FRAGMENT = '#view=FitH&navpanes=0'` (exported) — a PDF open
+  parameter fragment Chrome and Edge honor (fit the page to width, hide
+  the side thumbnail panel), avoiding the double toolbar/horizontal-
+  scrollbar/empty-area effect their default plugin viewer otherwise shows
+  at this iframe's width; any other browser simply ignores an
+  unrecognized fragment, and the browser's own PDF toolbar is never
+  hidden (only the plugin's optional extras are).
   `ReceiptDetailLayout` wraps the saved-receipt view (`ReceiptResult`) and
   the edit view (`ReceiptEditForm`) in a shared two-column layout
   (`lg:grid-cols-[5fr_6fr]`, file left/data right, file panel `sticky`

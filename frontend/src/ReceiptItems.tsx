@@ -29,7 +29,7 @@ const LOADING_ROW_COUNT = 4
 
 const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
 const LIST_FAILED_MESSAGE = 'Could not load items. Please try again.'
-const UNRECOGNIZED_DATE_TITLE =
+export const UNRECOGNIZED_DATE_TITLE =
   'This date could not be read as a valid date. Open the receipt and fix it with Edit.'
 
 const FOCUS_TAB_INDEX_SESSION_KEY = 'receiptItemsFocusTabIndex'
