@@ -880,4 +880,28 @@ describe('ReceiptHistory', () => {
       expect(screen.getByTitle(longName)).toBeInTheDocument()
     })
   })
+
+  // --- Filter row composition (Commit 2) ----------------------------------
+
+  test('Year and Status selects are composed in the same row container', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+    )
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+    })
+    const yearSelect = screen.getByLabelText('Year')
+    const statusSelect = screen.getByLabelText('Status')
+    // Both selects' wrapping row container is the same element, and that
+    // row is composed with the md:flex-row layout (never sm:flex-row,
+    // which the Items view's own, differently-composed row never used
+    // either -- this is the one row ReceiptHistory and ReceiptItems now
+    // share the same breakpoint for).
+    const yearRow = yearSelect.closest('div')?.parentElement
+    const statusRow = statusSelect.closest('div')?.parentElement
+    expect(yearRow).toBe(statusRow)
+    expect(yearRow?.className).toContain('md:flex-row')
+  })
 })

@@ -741,7 +741,7 @@ function StyleGuide() {
             })}
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 md:flex-row">
             <div className="flex flex-1 flex-col gap-1">
               <label htmlFor="styleguide-history-year" className="text-sm font-medium text-ink">
                 Year

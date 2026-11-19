@@ -1470,6 +1470,43 @@ Items view already used short names.
   unrecognized date, and a long store name with no badges (as they'd
   appear filtered to one apartment tab with a Status filter active).
 
+## Tidying History filters (Show more blocked on a backend gap)
+
+A follow-up to "Compact History rows": the Year/Status selects sat one
+above the other until `sm` (640px), adding to the ~200px the filters used
+before the first row.
+
+- **Year/Status now sit on one row from `md` up** (768px, not `sm`).
+  `ReceiptFilters.tsx`'s row wrapper is now always `md:flex-row` (plus
+  `md:items-end` only when `extraFilter` is given) instead of branching
+  between `sm:flex-row` (no `extraFilter` — History's case) and
+  `md:flex-row md:items-end` (`extraFilter` given — the Items view's
+  case). For the Items view this is a no-op: its own branch's resulting
+  classes are byte-identical before and after, confirmed by the full
+  (unchanged) test suite still passing with no Items test modified.
+  History's breakpoint simply moved from `sm` to `md`, matching the Items
+  view's own filter row and composed through the one shared component
+  rather than a second, diverging layout.
+- **Summary line ("N receipts", `role="status"`) needed no change** —
+  it was already exactly this text with no additions, which is what the
+  ticket asked for; a new test (`ReceiptHistory.test.tsx`) confirms Year
+  and Status render inside the same row container at the `md:flex-row`
+  breakpoint.
+- **"Show more" pagination: blocked, not implemented.** `GET /receipts`
+  (`backend/api/routes.py`'s `list_receipts`) accepts only `limit`/
+  `apartment_id`/`year`/`status` — no `offset` — and its response is
+  `{"items": [...], "count": N}` with no `total` field, unlike `GET
+  /items`, which has both. Building "Show more" the way the Items view
+  does it would require a backend change, which was explicitly out of
+  scope for this (frontend-only) ticket; per its own stop condition, this
+  was reported instead of guessed at. `ReceiptHistory.tsx` still uses the
+  plain, un-paginated `listReceipts()` call it always had (the backend's
+  own default `limit` of 50 receipts). **To add paging later**, `GET
+  /receipts` needs an `offset` query param (mirroring `GET /items`'s
+  `Query(default=0, ge=0)`) and its response needs a `total` field (the
+  unfiltered/filtered row count before the `limit` slice) — a backend
+  change, not something the frontend can work around.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

@@ -345,8 +345,16 @@ the purchase info, and the result is displayed for review.
   itself** (it only ever mounts once its page has already left its own
   loading state, so "the tab bar exists in the DOM" and "`ReceiptFilters`
   just mounted" are the same moment) to restore keyboard focus to the
-  newly selected tab across that remount. "N receipts" is a `role="status"`;
-  "Clear
+  newly selected tab across that remount. The Year/Status row sits
+  `md:flex-row` (768px — moved from `sm:flex-row`/640px) the same way the
+  Items view's own filter row already did; `ReceiptFilters.tsx`'s row
+  wrapper class no longer branches on whether `extraFilter` is given for
+  this ("Tidying History filters" in
+  [docs/design.md](docs/design.md) has the exact before/after classes
+  and confirms the Items view's own branch is byte-identical, a no-op).
+  "N receipts" is a `role="status"`, unchanged (no "Show more"/paging
+  exists yet for this list — `GET /receipts` has neither `offset` nor
+  `total`, see the backend `routes.py` entry above); "Clear
   filters" shows only when a year/status select (not just an
   apartment tab) is active, and resets both, leaving the
   apartment tab alone, per spec. The plain "No receipts yet..." empty
@@ -1316,7 +1324,14 @@ the purchase info, and the result is displayed for review.
     `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`,
     `GET /receipts?limit=N` — list, newest first, `limit` default 50
     (1–200, else `422`), `{"items": [...], "count": N}`, empty DB ->
-    `{"items": [], "count": 0}` never `404`. Optional filters, AND-combined,
+    `{"items": [], "count": 0}` never `404`. **No `offset` param and no
+    `total` field** — unlike `GET /items` below, which has both — so
+    there is currently no way to page past the first `limit` receipts;
+    a frontend ticket ("Tidy History filters and add Show more") hit
+    this gap and stopped rather than guess at a backend change (see
+    [docs/design.md](docs/design.md)'s "Tidying History filters" section
+    for exactly what `GET /receipts` would need — an `offset` param and
+    a `total` field, mirroring `GET /items` — to support it). Optional filters, AND-combined,
     no params unchanged from before, validated by the shared
     `_validate_receipt_filters(repository, apartment_id, year, status)`
     helper (also used by `GET /items`, below, so the two

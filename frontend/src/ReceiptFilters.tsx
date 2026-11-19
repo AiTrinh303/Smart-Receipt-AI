@@ -139,7 +139,7 @@ function ReceiptFilters({
         })}
       </div>
 
-      <div className={`flex flex-col gap-3 ${extraFilter ? 'md:flex-row md:items-end' : 'sm:flex-row'}`}>
+      <div className={`flex flex-col gap-3 md:flex-row ${extraFilter ? 'md:items-end' : ''}`}>
         <div className={`flex flex-col gap-1 ${extraFilter ? 'md:w-48 md:flex-none' : 'flex-1'}`}>
           <label htmlFor={yearSelectId} className="text-sm font-medium text-ink">
             Year
