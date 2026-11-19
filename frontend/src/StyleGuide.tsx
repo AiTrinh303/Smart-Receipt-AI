@@ -20,6 +20,7 @@ import {
   StatusCell,
   StoreCell,
 } from './ReceiptItems'
+import { HistoryRow } from './ReceiptHistory'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 const ALERT_VARIANTS = ['info', 'success', 'warning', 'error'] as const
@@ -631,35 +632,73 @@ function StyleGuide() {
         </div>
       </Section>
 
-      <Section title="History row badges (apartment / status)">
-        <ul className="flex max-w-xs flex-col gap-2">
-          <li className="rounded border border-gray-200 px-3 py-2 text-sm">
-            <span className="block font-medium text-gray-900">Corner Store</span>
-            <span className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">
-                <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 flex-shrink-0" fill="none">
-                  <path
-                    d="M4 17.5V5.5a1 1 0 011-1h4.5v13M11.5 17.5V9h3.5a1 1 0 011 1v7.5"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path d="M6 7.5h1M6 10.5h1M6 13.5h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                Oberaudorf Bergblick
-              </span>
-              <StatusBadge status="approved" />
-            </span>
-          </li>
-          <li className="rounded border border-gray-200 px-3 py-2 text-sm">
-            <span className="block font-medium text-gray-900">Other Store</span>
-            <span className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span className="text-ink-muted">Not assigned</span>
-              <StatusBadge status="needs_review" />
-            </span>
-          </li>
+      <Section title="Compact History rows (HistoryRow -- normal/unrecognized/missing date, long store name, All tab vs. a filtered tab)">
+        <ul className="flex flex-col gap-2">
+          <HistoryRow
+            item={{
+              receipt_id: 'sg-1',
+              original_filename: 'a.jpg',
+              store_name: 'Corner Store',
+              purchase_date: '2026-01-15',
+              currency: 'USD',
+              total: 10,
+              created_at: '2026-01-15T00:00:00+00:00',
+              apartment_id: 'oberaudorf-bergblick',
+              apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
+              status: 'approved',
+            }}
+            href="#"
+            onOpen={() => {}}
+            showApartmentBadge
+            showStatusBadge
+            isSmallScreen={false}
+          />
+          <HistoryRow
+            item={{
+              receipt_id: 'sg-2',
+              original_filename: 'b.jpg',
+              store_name: 'A receipt with an unrecognized date',
+              purchase_date: '02 Juni 2026',
+              currency: 'USD',
+              total: 20,
+              created_at: '2026-01-14T00:00:00+00:00',
+              apartment_id: null,
+              apartment_name: null,
+              status: 'needs_review',
+            }}
+            href="#"
+            onOpen={() => {}}
+            showApartmentBadge
+            showStatusBadge
+            isSmallScreen={false}
+          />
+          <HistoryRow
+            item={{
+              receipt_id: 'sg-3',
+              original_filename: 'c.jpg',
+              store_name:
+                'A very long store name that needs to be clamped to one line instead of wrapping and growing the row',
+              purchase_date: null,
+              currency: 'USD',
+              total: 30,
+              created_at: '2026-01-13T00:00:00+00:00',
+              apartment_id: null,
+              apartment_name: null,
+              status: 'needs_review',
+            }}
+            href="#"
+            onOpen={() => {}}
+            showApartmentBadge={false}
+            showStatusBadge={false}
+            isSmallScreen={false}
+          />
         </ul>
+        <p className="text-sm text-ink-muted">
+          The first row (All apartments, Status "All") shows both badges; the second shows the raw,
+          unrecognized date with the same warning marker the Items view uses; the third demonstrates a
+          clamped long store name with no badges -- as they would appear inside a specific apartment tab
+          with a Status filter active.
+        </p>
       </Section>
 
       <Section title="History tab bar and filters (ReceiptHistory -- All apartments / one apartment selected)">

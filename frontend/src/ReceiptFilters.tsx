@@ -30,6 +30,13 @@ export function effectiveStatus(rawStatus: string | null): ReceiptStatus | null 
 export interface FilterTab {
   id: string | null
   label: string
+  /** Overrides the tab's accessible name and `title` tooltip, for when the
+   * visible `label` doesn't spell out the full name on its own (e.g.
+   * History's apartment tabs show a short name + count, but the
+   * accessible name and tooltip stay the full apartment name). Falls back
+   * to `label` when omitted -- the Items view's tabs (no counts) pass no
+   * `accessibleName`, so their behavior is completely unchanged. */
+  accessibleName?: string
 }
 
 interface ReceiptFiltersProps {
@@ -117,6 +124,8 @@ function ReceiptFilters({
               type="button"
               role="tab"
               aria-selected={selected}
+              aria-label={tab.accessibleName ?? undefined}
+              title={tab.accessibleName ?? undefined}
               tabIndex={selected ? 0 : -1}
               onClick={() => onSelectApartment(tab.id)}
               onKeyDown={(e) => handleTabKeyDown(e, index)}

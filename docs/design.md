@@ -1402,6 +1402,74 @@ scrollbar, a large dark empty area) inside an already-framed panel.
   to the Discounts/Taxes-with-currency-heading pattern, as a static
   sample.
 
+## Compact History rows with consistent dates and short names
+
+At ~820px with 46 receipts, each row was ~80px tall (the apartment badge
+and "Needs review" status badge repeated on almost every row even though
+one was already redundant with the active tab), dates appeared in three
+different formats in the same list ("02 Juni 2026" raw text, "02.06.2026",
+"2026-07-27"), and the apartment tabs/badges used the full name while the
+Items view already used short names.
+
+- **Dates via `formatDisplayDate`/`DateCell`.** `ReceiptHistory.tsx` now
+  imports `DateCell` directly from `ReceiptItems.tsx` (reused, never
+  duplicated) instead of showing the raw `purchase_date` string: a valid
+  ISO date renders `DD.MM.YYYY`, a non-date value shows that raw text next
+  to the same warning icon/`title`/hidden "Date not recognized" the Items
+  view already uses, and a missing date renders `MissingValue`.
+- **One compact row (~56px) from `sm` up** (`HistoryRow`, now exported):
+  store name (`ClampedText`, 1 line, full text in its `title`), the date,
+  the total right-aligned via `formatMoney` (replacing the old ad hoc
+  `displayAmount` helper, which is gone), then the badges — all in one
+  row, instead of a ~80px two-line stack. Below `sm`, the same component
+  renders two lines instead (store + total; date + badges) — only one
+  layout is ever mounted, decided by `useMediaQuery('(max-width: 639px)')`
+  (same pattern as `ReceiptResult.tsx`/`ReceiptItems.tsx`), never both.
+- **Badges, shown only when they add information.** The apartment badge
+  (`ApartmentBadge`) now shows `apartmentShortName(name)` visibly (`aria-
+  hidden`, decorative), with the full name as both the badge's `title`
+  and a hidden (`sr-only`) span for assistive tech that doesn't read
+  `title` — and is shown only in "All apartments" (unchanged rule, just
+  now with a short visible name). The status badge is now shown only when
+  the Status filter is "All" (`statusValue === null`) — in a filtered tab
+  or select, the same information is already in the URL/UI, so repeating
+  "Needs review" on every row added nothing.
+- **Apartment tabs: short name + count, full name as the accessible
+  name.** `ReceiptFilters.tsx`'s `FilterTab` gained an optional
+  `accessibleName` (falls back to `label`, so the Items view's tabs — no
+  counts, no `accessibleName` passed — are completely unchanged): when
+  given, it becomes the tab `<button>`'s `aria-label` and `title`, while
+  the visible text (`label`) stays the short-name-plus-count string (e.g.
+  "Waldglück (17)"). `ReceiptHistory.tsx` now builds its apartment tabs
+  with `label: `${apartmentShortName(a.name) ?? a.name} (${a.count})``
+  and `accessibleName: a.name` — the "All apartments (N)" tab is
+  untouched (same string, both visible and accessible).
+- **Rows are real links.** The row `<button onClick>` became a real
+  `<a href="/?receipt=<id>{&from=...}">` with the exact same `from`
+  mechanism and target URL as before (`e.preventDefault()` + `navigateTo`
+  on click), matching the Items view's `ItemNameLink` pattern — so
+  opening a receipt in a new tab now works from History too.
+- **Test changes** (`ReceiptHistory.test.tsx`): tab queries that searched
+  for `` `${name} (${count})` `` as the accessible name now search for
+  just `name` (the count stays in the tab's visible text, asserted
+  separately via `toHaveTextContent`); the apartment-badge presence
+  checks moved from `getByText`/`queryByText` to `within(list).getByTitle`
+  /`queryByTitle` (since the visible short name and the hidden full name
+  can be identical strings when a fixture's name has no `" - "` segments,
+  which would otherwise match twice; the tab button now also carries the
+  same `title`, so badge-presence checks are scoped to the row list to
+  avoid matching the tab instead); the row-click test and `App.test.tsx`'s
+  History-row click moved from `getByRole('button', ...)` to
+  `getByRole('link', ...)`. New tests cover: every date-display case
+  (valid/raw/missing), the status badge's All-only visibility, a
+  three-segment apartment name's short-name-plus-count tab, row `href`s
+  with and without `from`, and a long store name's clamped title.
+- **Added to `?view=styleguide`:** the old hand-written "History row
+  badges" section was replaced with "Compact History rows", which renders
+  the real, exported `HistoryRow` component for a normal date, an
+  unrecognized date, and a long store name with no badges (as they'd
+  appear filtered to one apartment tab with a Status filter active).
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

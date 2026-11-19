@@ -271,13 +271,27 @@ the purchase info, and the result is displayed for review.
   name="theme-color" content="#4f46e5">` and a `<meta name="description">`,
   and its static `<title>` is `"Smart Receipt AI"` (the per-view
   `document.title` effect still overwrites it on mount).
-  `ReceiptHistory.tsx` lists saved receipts (store, date, total; "Not
-  detected" for anything missing, each row's `apartment_name` as a small
-  icon+text badge or plain muted "Not assigned" when it's `null`/missing
-  (hidden entirely inside a specific apartment tab — redundant there),
-  and `status` as a `StatusBadge` (icon+text, shared with
-  `ReceiptReviewStatus.tsx`)) and navigates to `?receipt=<id>` on row
-  click; `ReceiptUpload.tsx` adds a "Back to history" link when showing a
+  `ReceiptHistory.tsx` lists saved receipts as compact rows
+  (`HistoryRow`, exported) — one ~56px row from `sm` up (store via
+  `ClampedText`, 1 line/full text in `title`; the date via `DateCell`,
+  imported from `ReceiptItems.tsx` rather than duplicated — `DD.MM.YYYY`
+  for a valid ISO date, the raw text + the same warning icon/`title`/
+  hidden "Date not recognized" for anything else, `MissingValue` when
+  missing; the total right-aligned via `formatMoney`; then the badges),
+  two lines below `sm` (store+total; date+badges) — only one layout
+  ever mounted, via `useMediaQuery('(max-width: 639px)')`, same pattern
+  as `ReceiptResult.tsx`/`ReceiptItems.tsx`. Each row's `apartment_name`
+  is a small icon+text badge showing `apartmentShortName(name)` (`aria-
+  hidden`, decorative) with the full name as both its `title` and a
+  hidden (`sr-only`) span, or plain muted "Not assigned" when it's
+  `null`/missing — shown only in "All apartments" (hidden inside a
+  specific apartment tab — redundant there). `status` is a `StatusBadge`
+  (icon+text, shared with `ReceiptReviewStatus.tsx`/`ReviewBar.tsx`),
+  shown only when the Status filter is "All" — redundant otherwise, same
+  reasoning as the apartment badge. Each row is a real `<a href="/?
+  receipt=<id>{&from=...}">` (not a `<button>`, so opening one in a new
+  tab works) with the exact same `from` mechanism/target as before;
+  `ReceiptUpload.tsx` adds a "Back to history" link when showing a
   result.
   **Splitting the history by apartment, with filters:** all state lives in
   the URL (`?view=history&apartment=<id>&year=<v>&status=<v>`), never
@@ -310,7 +324,15 @@ the purchase info, and the result is displayed for review.
   `role="tablist"` (`aria-label="Apartment"`), one `role="tab"` per
   apartment plus a leading "All apartments (N)" (the count suffix is
   built by `ReceiptHistory` itself, before handing the `tabs` prop to
-  `ReceiptFilters` — Items builds the same shape without it), roving
+  `ReceiptFilters` — Items builds the same shape without it). Each
+  apartment tab's visible text is `` `${apartmentShortName(name) ??
+  name} (${count})` `` (e.g. "Waldglück (17)"), but its accessible name
+  and `title` tooltip are the *full* name, via `FilterTab`'s optional
+  `accessibleName` field (`ReceiptFilters.tsx` sets it as the tab
+  `<button>`'s `aria-label`/`title` when given, falling back to `label`
+  otherwise — the Items view's tabs pass no `accessibleName`, so their
+  behavior is unchanged); the leading "All apartments (N)" tab is
+  untouched either way. Roving
   `tabIndex`
   (selected = `0`, else `-1`), `aria-selected`, and selected = bold text +
   white background/shadow against the tab bar's `slate-100`, never color

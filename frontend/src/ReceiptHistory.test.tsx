@@ -131,7 +131,7 @@ describe('ReceiptHistory', () => {
     await waitFor(() => {
       expect(screen.getByText('Store C')).toBeInTheDocument()
     })
-    const rows = screen.getAllByRole('button', { name: /store/i })
+    const rows = screen.getAllByRole('link', { name: /store/i })
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('Store C')
     expect(rows[1]).toHaveTextContent('Store B')
@@ -325,9 +325,13 @@ describe('ReceiptHistory', () => {
 
     render(<ReceiptHistory />)
 
+    // The badge shows the short name visibly, with the full name as its
+    // title tooltip and as hidden text for assistive tech -- scoped to the
+    // row list, since the apartment tab also carries this same title.
     await waitFor(() => {
-      expect(screen.getByText(OBERAUDORF.name)).toBeInTheDocument()
+      expect(within(screen.getByRole('list')).getByTitle(OBERAUDORF.name)).toBeInTheDocument()
     })
+    expect(within(screen.getByRole('list')).getAllByText(OBERAUDORF.name).length).toBeGreaterThan(0)
   })
 
   test('a row with no apartment shows plain muted "Not assigned", and a missing field renders without crashing', async () => {
@@ -413,9 +417,22 @@ describe('ReceiptHistory', () => {
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: 'All apartments (3)' })).toBeInTheDocument()
     })
-    expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: `${WALDGLUECK.name} (1)` })).toBeInTheDocument()
+    // Each apartment tab's accessible name is the full name (no count);
+    // the count is still visible in the tab's own text content.
+    expect(screen.getByRole('tab', { name: OBERAUDORF.name })).toHaveTextContent(`${OBERAUDORF.name} (2)`)
+    expect(screen.getByRole('tab', { name: WALDGLUECK.name })).toHaveTextContent(`${WALDGLUECK.name} (1)`)
     expect(screen.getByRole('tab', { name: 'All apartments (3)' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('each apartment tab shows the full name as its title tooltip', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+    )
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: OBERAUDORF.name })).toHaveAttribute('title', OBERAUDORF.name)
+    })
   })
 
   test('choosing a tab sends apartment_id and updates the URL', async () => {
@@ -433,10 +450,10 @@ describe('ReceiptHistory', () => {
     )
     render(<HistoryHarness />)
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: OBERAUDORF.name })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` }))
+    await user.click(screen.getByRole('tab', { name: OBERAUDORF.name }))
 
     await waitFor(() => {
       expect(window.location.search).toContain(`apartment=${OBERAUDORF.id}`)
@@ -466,7 +483,7 @@ describe('ReceiptHistory', () => {
     })
     // Focus follows the selection across the remount a navigation causes.
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toHaveFocus()
+      expect(screen.getByRole('tab', { name: OBERAUDORF.name })).toHaveFocus()
     })
 
     await user.keyboard('{ArrowRight}')
@@ -474,7 +491,7 @@ describe('ReceiptHistory', () => {
       expect(window.location.search).toContain(`apartment=${WALDGLUECK.id}`)
     })
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: `${WALDGLUECK.name} (1)` })).toHaveFocus()
+      expect(screen.getByRole('tab', { name: WALDGLUECK.name })).toHaveFocus()
     })
 
     await user.keyboard('{Home}')
@@ -502,17 +519,19 @@ describe('ReceiptHistory', () => {
     )
     const { unmount } = render(<ReceiptHistory />)
     await waitFor(() => {
-      expect(screen.getByText(OBERAUDORF.name)).toBeInTheDocument()
+      expect(within(screen.getByRole('list')).getByTitle(OBERAUDORF.name)).toBeInTheDocument()
     })
     unmount()
 
-    // A specific apartment tab -- badge hidden (redundant)
+    // A specific apartment tab -- badge hidden (redundant); the tab button
+    // itself still carries this same title, so the check is scoped to the
+    // row list, not the whole document.
     window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}`)
     render(<ReceiptHistory />)
     await waitFor(() => {
       expect(screen.getByText('Store A')).toBeInTheDocument()
     })
-    expect(screen.queryByText(OBERAUDORF.name)).not.toBeInTheDocument()
+    expect(within(screen.getByRole('list')).queryByTitle(OBERAUDORF.name)).not.toBeInTheDocument()
   })
 
   // --- Filters ---------------------------------------------------------------
@@ -589,7 +608,7 @@ describe('ReceiptHistory', () => {
     })
     expect(capturedUrl).toContain('year=2025')
     expect(capturedUrl).toContain('status=approved')
-    expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: OBERAUDORF.name })).toHaveAttribute('aria-selected', 'true')
   })
 
   test('invalid URL values are ignored, showing the unfiltered result for that value', async () => {
@@ -689,10 +708,10 @@ describe('ReceiptHistory', () => {
     )
     render(<HistoryHarness />)
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: OBERAUDORF.name })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('tab', { name: `${OBERAUDORF.name} (2)` }))
+    await user.click(screen.getByRole('tab', { name: OBERAUDORF.name }))
     await waitFor(() => {
       expect(window.location.search).toContain(`apartment=${OBERAUDORF.id}`)
     })
@@ -716,5 +735,149 @@ describe('ReceiptHistory', () => {
       expect(screen.getByText('3 receipts')).toBeInTheDocument()
     })
     expect(screen.getByText('3 receipts')).toHaveAttribute('role', 'status')
+  })
+
+  // --- Compact rows: dates, badges, links, short names --------------------
+
+  function oneItem(overrides: Record<string, unknown> = {}) {
+    return {
+      receipt_id: '11111111-1111-1111-1111-111111111111',
+      original_filename: 'a.jpg',
+      store_name: 'Store A',
+      purchase_date: '2026-01-15',
+      currency: 'USD',
+      total: 10,
+      created_at: '2026-01-15T00:00:00+00:00',
+      ...overrides,
+    }
+  }
+
+  test('a valid ISO purchase_date renders as DD.MM.YYYY via formatDisplayDate', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1 })) }),
+    )
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByText('15.01.2026')).toBeInTheDocument()
+    })
+  })
+
+  test('a non-date raw date shows the raw text with the Items view\'s warning marker', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () =>
+          Promise.resolve(jsonResponse(200, { items: [oneItem({ purchase_date: '02 Juni 2026' })], count: 1 })),
+      }),
+    )
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByText('02 Juni 2026')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Date not recognized')).toBeInTheDocument()
+  })
+
+  test('a missing purchase_date renders MissingValue, not raw "Not detected" text', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ purchase_date: null })], count: 1 })),
+      }),
+    )
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Store A')).toBeInTheDocument()
+    })
+    // MissingValue's hidden text, findable the same way the old plain text was
+    expect(screen.getAllByText('Not detected').length).toBeGreaterThan(0)
+  })
+
+  test('the status badge is shown only when the Status filter is "All"', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'approved' })], count: 1 })) }),
+    )
+    const { unmount } = render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(within(screen.getByRole('list')).getByText('Approved')).toBeInTheDocument()
+    })
+    unmount()
+
+    window.history.replaceState({}, '', '/?view=history&status=approved')
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'approved' })], count: 1 })) }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('Store A')).toBeInTheDocument()
+    })
+    expect(within(screen.getByRole('list')).queryByText('Approved')).not.toBeInTheDocument()
+  })
+
+  test('an apartment tab with a three-segment name shows the short name and count, full name as the accessible name and title', async () => {
+    const threeSegment = { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick', count: 5 }
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: () =>
+          Promise.resolve(
+            jsonResponse(200, { apartments: [threeSegment], total: 5, years: [2026], has_undated: false }),
+          ),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      }),
+    )
+    render(<ReceiptHistory />)
+
+    const tab = await screen.findByRole('tab', { name: threeSegment.name })
+    expect(tab).toHaveTextContent('Bergblick (5)')
+    expect(tab).toHaveAttribute('title', threeSegment.name)
+  })
+
+  test('row hrefs point at the receipt and carry `from` when a tab/filter is active', async () => {
+    window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}`)
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: (urlString) =>
+          Promise.resolve(
+            jsonResponse(
+              200,
+              urlString.includes(`apartment_id=${OBERAUDORF.id}`)
+                ? { ...DEFAULT_FACETS, years: [2026], has_undated: false }
+                : DEFAULT_FACETS,
+            ),
+          ),
+        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1 })),
+      }),
+    )
+    render(<ReceiptHistory />)
+
+    const link = await screen.findByRole('link', { name: /store a/i })
+    expect(link).toHaveAttribute(
+      'href',
+      `/?receipt=11111111-1111-1111-1111-111111111111&from=${encodeURIComponent(`?view=history&apartment=${OBERAUDORF.id}`)}`,
+    )
+  })
+
+  test('row hrefs have no `from` when unfiltered', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1 })) }),
+    )
+    render(<ReceiptHistory />)
+
+    const link = await screen.findByRole('link', { name: /store a/i })
+    expect(link).toHaveAttribute('href', '/?receipt=11111111-1111-1111-1111-111111111111')
+  })
+
+  test('a long store name is clamped with the full text in its title', async () => {
+    const longName = 'A'.repeat(140)
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ store_name: longName })], count: 1 })),
+      }),
+    )
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByTitle(longName)).toBeInTheDocument()
+    })
   })
 })

@@ -3,11 +3,16 @@ import { ApiError } from './api/ApiError'
 import { getReceiptFacets } from './api/getReceiptFacets'
 import { listReceipts } from './api/listReceipts'
 import type { ApartmentFacet, ReceiptSummary } from './api/types'
+import { apartmentShortName } from './format/apartmentShortName'
+import { DateCell } from './ReceiptItems'
 import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
 import Button from './components/ui/Button'
+import ClampedText from './components/ui/ClampedText'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
+import { formatMoney } from './components/ui/formatMoney'
+import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo } from './navigation'
 
 const LOADING_ROW_COUNT = 4
@@ -34,30 +39,92 @@ function ApartmentIcon() {
   )
 }
 
+/** The apartment badge now shows the short name visibly (same convenience
+ * as the Items view's ApartmentCell and the upload form's apartment
+ * choice), but keeps the full name available both as a `title` tooltip
+ * and as hidden text for assistive tech that doesn't read `title` --
+ * the visible short name is purely decorative (`aria-hidden`) so the two
+ * are never both announced. */
 function ApartmentBadge({ apartmentName }: { apartmentName: string | null | undefined }) {
   if (!apartmentName) {
     return <span className="text-ink-muted">{NOT_ASSIGNED}</span>
   }
 
+  const short = apartmentShortName(apartmentName) ?? apartmentName
+
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">
+    <span
+      title={apartmentName}
+      className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand"
+    >
       <ApartmentIcon />
-      {apartmentName}
+      <span aria-hidden="true">{short}</span>
+      <span className="sr-only">{apartmentName}</span>
     </span>
   )
 }
 
-function displayText(value: string | null | undefined): string {
-  return value === null || value === undefined || value === '' ? NOT_DETECTED : value
+interface HistoryRowProps {
+  item: ReceiptSummary
+  href: string
+  onOpen: (receiptId: string) => void
+  showApartmentBadge: boolean
+  showStatusBadge: boolean
+  isSmallScreen: boolean
 }
 
-function displayAmount(value: number | null | undefined, currency: string | null): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return NOT_DETECTED
-  }
+/** One compact row (~56px from `sm` up, two lines below it) instead of the
+ * previous ~80px stacked layout -- a real `<a>` link (same href/`from`
+ * mechanism as before, now matching the Items view's row links) rather
+ * than a `<button>`, so opening one in a new tab works. Only one of the
+ * two layouts is ever mounted, decided in JS via `isSmallScreen`, same
+ * pattern as ReceiptResult.tsx/ReceiptItems.tsx. */
+export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusBadge, isSmallScreen }: HistoryRowProps) {
+  const amount = formatMoney(item.total, item.currency)
+  const store = item.store_name ? (
+    <ClampedText text={item.store_name} lines={1} className="min-w-0 flex-1 font-medium text-ink" />
+  ) : (
+    <span className="min-w-0 flex-1 font-medium text-ink">{NOT_DETECTED}</span>
+  )
+  const badges = (showApartmentBadge || showStatusBadge) && (
+    <span className="flex flex-wrap items-center gap-1.5">
+      {showApartmentBadge && <ApartmentBadge apartmentName={item.apartment_name} />}
+      {showStatusBadge && <StatusBadge status={item.status} />}
+    </span>
+  )
 
-  const formatted = value.toFixed(2)
-  return currency ? `${currency} ${formatted}` : formatted
+  return (
+    <a
+      href={href}
+      onClick={(e) => {
+        e.preventDefault()
+        onOpen(item.receipt_id)
+      }}
+      className="flex min-h-[44px] items-center gap-3 rounded-md border border-border bg-surface px-3 py-2 text-left text-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+    >
+      {isSmallScreen ? (
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex items-center justify-between gap-3">
+            {store}
+            <span className="flex-shrink-0 font-semibold text-ink">{amount}</span>
+          </span>
+          <span className="flex flex-wrap items-center gap-1.5 text-ink-muted">
+            <DateCell value={item.purchase_date} />
+            {badges}
+          </span>
+        </span>
+      ) : (
+        <>
+          {store}
+          <span className="flex-shrink-0 whitespace-nowrap text-ink-muted">
+            <DateCell value={item.purchase_date} />
+          </span>
+          <span className="flex-shrink-0 whitespace-nowrap font-semibold text-ink">{amount}</span>
+          {badges}
+        </>
+      )}
+    </a>
+  )
 }
 
 const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
@@ -123,6 +190,8 @@ function ReceiptHistory() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [reloadToken, setReloadToken] = useState(0)
+
+  const isSmallScreen = useMediaQuery('(max-width: 639px)')
 
   useEffect(() => {
     let cancelled = false
@@ -191,13 +260,17 @@ function ReceiptHistory() {
     setReloadToken((n) => n + 1)
   }
 
-  const openReceipt = (receiptId: string) => {
-    // Only carry a `from` param when a tab or filter is actually active --
-    // the plain, unfiltered history view needs no round trip, and this
-    // keeps `?receipt=<id>` exactly as it was for that common case.
+  // Only carry a `from` param when a tab or filter is actually active --
+  // the plain, unfiltered history view needs no round trip, and this
+  // keeps `?receipt=<id>` exactly as it was for that common case.
+  const receiptHref = (receiptId: string): string => {
     const hasActiveFilterOrTab = effectiveApartmentId !== null || anyFilterActive
     const from = hasActiveFilterOrTab ? `&from=${encodeURIComponent(window.location.search)}` : ''
-    navigateTo(`?receipt=${receiptId}${from}`)
+    return `/?receipt=${receiptId}${from}`
+  }
+
+  const openReceipt = (receiptId: string) => {
+    navigateTo(receiptHref(receiptId).slice(1))
   }
 
   const goToUpload = (e: React.MouseEvent) => {
@@ -221,9 +294,13 @@ function ReceiptHistory() {
     navigateTo(buildHistorySearch({ apartment: urlParams.apartment, year: null, status: null }))
   }
 
-  const tabs: { id: string | null; label: string }[] = [
+  const tabs: { id: string | null; label: string; accessibleName?: string }[] = [
     { id: null, label: `All apartments (${totalCount})` },
-    ...(apartments ?? []).map((a) => ({ id: a.id, label: `${a.name} (${a.count})` })),
+    ...(apartments ?? []).map((a) => ({
+      id: a.id,
+      label: `${apartmentShortName(a.name) ?? a.name} (${a.count})`,
+      accessibleName: a.name,
+    })),
   ]
 
   const yearValue = effectiveYear(urlParams.year)
@@ -322,21 +399,14 @@ function ReceiptHistory() {
         <ul className="flex flex-col gap-2">
           {items?.map((item) => (
             <li key={item.receipt_id}>
-              <button
-                type="button"
-                onClick={() => openReceipt(item.receipt_id)}
-                className="flex w-full items-center justify-between gap-4 rounded-md border border-border bg-surface px-3 py-2 text-left text-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-              >
-                <span>
-                  <span className="block font-medium text-ink">{displayText(item.store_name)}</span>
-                  <span className="block text-ink-muted">{displayText(item.purchase_date)}</span>
-                  <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                    {effectiveApartmentId === null && <ApartmentBadge apartmentName={item.apartment_name} />}
-                    <StatusBadge status={item.status} />
-                  </span>
-                </span>
-                <span className="font-semibold text-ink">{displayAmount(item.total, item.currency)}</span>
-              </button>
+              <HistoryRow
+                item={item}
+                href={receiptHref(item.receipt_id)}
+                onOpen={openReceipt}
+                showApartmentBadge={effectiveApartmentId === null}
+                showStatusBadge={statusValue === null}
+                isSmallScreen={isSmallScreen}
+              />
             </li>
           ))}
         </ul>

@@ -402,7 +402,7 @@ describe('navigation between upload, history and a saved receipt', () => {
     })
 
     // When the user clicks the row
-    await user.click(screen.getByRole('button', { name: /Corner Store/i }))
+    await user.click(screen.getByRole('link', { name: /Corner Store/i }))
 
     // Then the address bar becomes ?receipt=<id> and the detail view loads from GET,
     // never from the extract endpoint
