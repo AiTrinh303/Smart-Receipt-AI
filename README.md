@@ -50,7 +50,7 @@ After changing `backend/.env`, stop and restart uvicorn. `--reload` does not wat
 
 ## What it does not do yet
 - No login. Use it only on your own machine and do not expose it to the internet.
-- No year-end report or export yet. Planned: approved receipts only, per apartment and year, as CSV plus a PDF bundle.
+- No year-end export (CSV/PDF) yet, and no UI for it. The backend has a yearly spending summary per apartment (`GET /reports/yearly?year=YYYY&basis=all|approved`) for preparing a tax declaration by hand; every receipt counts by default (`basis=all`), not only approved ones.
 - No duplicate detection: uploading the same receipt twice creates two records.
 - No bulk approval: receipts are approved one at a time, with a review mode that moves to the next one.
 - The AI can misread a receipt. Check each one against the original before approving it.

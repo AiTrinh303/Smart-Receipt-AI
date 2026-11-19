@@ -1383,6 +1383,95 @@ the purchase info, and the result is displayed for review.
     is never captured by that route's `{receipt_id}` segment; 422 for an
     unknown `apartment_id`; returns `repository.get_receipt_facets(...)
     .model_dump()` directly.
+    **Yearly spending summary (`GET /reports/years`, `GET
+    /reports/yearly?year=YYYY&basis=all|approved`,
+    `domain.rules.summarize_year`):** both live under `/reports`, a path
+    segment `GET /receipts/{receipt_id}` can never match, so there is no
+    registration-order collision to worry about (nor between the two new
+    routes themselves, whose own suffixes differ). `GET /reports/years`
+    reuses the exact same unscoped `get_receipt_facets()` call `GET
+    /receipts/facets` does and returns `{"items": facets.years}` (already
+    descending) — so the two can never disagree about which years exist.
+    `GET /reports/yearly` requires `year` (a plain 4-digit `2000-2100`,
+    *not* the list endpoints' own `year` filter, which also accepts
+    `"none"` — this one has no undated case, since a report is always for
+    one specific year) — missing or invalid is `422` via a dedicated
+    `_parse_report_year()`, deliberately not shared with `_parse_year_
+    filter()`. `basis` defaults to `"all"` (every receipt counts whatever
+    its status — the owner has no time to review every receipt before a
+    tax declaration is due) or `"approved"`; anything else is `422`.
+    The route itself does almost nothing: `repository.list_matching_
+    receipts()` (no filters — every receipt) and `repository.list_
+    apartments()` (active, in `sort_order`) feed straight into
+    `domain.rules.summarize_year(receipts, apartments, year, basis,
+    date.today())`, whose result is returned via `.model_dump()` — no new
+    repository/adapter method was needed; both calls were already there
+    for `GET /items`/`GET /apartments`.
+    **`summarize_year`'s bucket order** (a receipt counts at most once, in
+    the *first* bucket it matches): (a) no valid normalized date ->
+    `excluded.undated` — checked *before* the year comparison, so this is
+    the one bucket that is **not** scoped to the requested year (an
+    undated receipt belongs to no year, so it is `excluded.undated` for
+    every year queried); (b) a valid date whose year differs from the
+    requested one -> silently **ignored** (not counted in any bucket at
+    all, for this call); (c) `basis == "approved"` and the receipt isn't
+    approved -> `excluded.not_approved` (never reached at all when
+    `basis == "all"` — that bucket then stays `0`); (d) `total is None`
+    -> `excluded.no_total`; (e) currency missing/blank (trimmed, so
+    whitespace-only counts as missing) -> `excluded.no_currency`; (f)
+    `apartment_id is None` -> `excluded.no_apartment`; (g) otherwise,
+    **counted**. The year itself comes from `normalize_purchase_date` —
+    never `created_at` — so a legacy dotted/month-name date (see
+    `domain/rules.py` above) lands in the right year/month exactly like
+    everywhere else in the app. The amount is the receipt's `total` from
+    `extracted_json` (the edited working copy — `list_matching_receipts`
+    already reads from there, same as `GET /items`), as printed, gross
+    (no net/VAT split); a negative total (a refund) sums with its sign.
+    Every amount in the response is `Decimal(str(value))` math only, as a
+    decimal string quantized to two decimals with `ROUND_HALF_UP` (not
+    Python's default round-half-to-even) via `_format_report_amount()` —
+    a fixed, documented rounding rule for a report used for a tax
+    declaration; a comment notes currencies with a different number of
+    decimal places aren't supported yet. Currencies are never added
+    together — every total is grouped by the receipt's own currency
+    (trimmed, uppercased).
+    **Response shape:** `apartments` — one entry **per active apartment,
+    always, in `sort_order`**, even one with zero counted receipts (empty
+    `by_currency`/`months`) — each with `by_currency` (currencies in
+    alphabetical order) and `months` (`1`-`12`, **only months that
+    actually had a counted receipt**); `overall` — the same `by_currency`
+    shape, summed across every apartment (always equal to the sum of the
+    apartments' own `by_currency`, since both are built from the same
+    per-receipt loop); `excluded` (the five counts above); `with_warnings`
+    — the number of **counted** receipts for which `check_receipt(data,
+    today)` returns at least one warning (an excluded receipt's warnings,
+    if any, are never counted here).
+    **Owner-facing extras (none of these ever include an excluded
+    receipt):** `counted_unreviewed` — counted receipts whose `status !=
+    "approved"` (always `0` under `basis == "approved"`, since every
+    counted receipt is approved by definition there; meaningful under
+    `basis == "all"`, where it says how many of what's counted still
+    needs review). `attention` — up to 50 counted receipts with at least
+    one warning, sorted by (normalized `purchase_date`, `receipt_id`)
+    ascending, each `{receipt_id, store_name, purchase_date, total,
+    currency, apartment_id, warning_codes}`; `with_warnings` is the
+    *full* count (may exceed 50) — `attention` is just a capped sample to
+    act on. `possible_duplicates` — up to 50 groups (`possible_
+    duplicate_groups` is the full count) of 2+ counted receipts sharing
+    `apartment_id`, normalized `purchase_date`, `store_name` (trimmed,
+    `casefold()`-ed — never a `None`/blank store, which is never grouped),
+    currency and `total` (compared as `Decimal`); groups are sorted by
+    (`purchase_date`, `apartment_id`, store `casefold()`, currency,
+    `total`) for a deterministic order. **Totals are never reduced for a
+    detected duplicate** — a duplicate stays fully counted in every total
+    above until the owner actually deletes one of the receipts; this
+    endpoint only flags the group, it never guesses which copy (if
+    either) is the real one. `largest` — per currency (alphabetical),
+    the 10 counted receipts with the largest **absolute** total (so a
+    large refund ranks by its magnitude, not its sign; ties broken by
+    `receipt_id`), each `{receipt_id, store_name, purchase_date, total,
+    apartment_id}` (no `currency` field inside an item — it's already the
+    enclosing group's key).
     `GET /items` — a flat list of purchased line items across receipts:
     `{"items": [...], "count": <returned>, "total": <all matching rows>}`.
     Accepts the identical `apartment_id`/`year`/`status`

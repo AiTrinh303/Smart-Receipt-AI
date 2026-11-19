@@ -1,9 +1,25 @@
 import re
 import unicodedata
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
-from domain.models import LineItemRow, ReceiptData, ReceiptWarning, SavedReceipt
+from domain.models import (
+    Apartment,
+    ApartmentYearSummary,
+    AttentionReceipt,
+    CurrencyLargest,
+    CurrencyTotal,
+    DuplicateGroup,
+    ExcludedCounts,
+    LargestReceipt,
+    LineItemRow,
+    MonthlyBreakdown,
+    ReceiptData,
+    ReceiptStatus,
+    ReceiptWarning,
+    SavedReceipt,
+    YearlySummary,
+)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "application/pdf"}
@@ -475,3 +491,234 @@ def sort_line_items(rows: list[LineItemRow], sort: str) -> list[LineItemRow]:
     undated = [row for row in rows if normalize_purchase_date(row.purchase_date) is None]
     dated.sort(key=lambda row: normalize_purchase_date(row.purchase_date), reverse=(sort == "date_desc"))
     return dated + undated
+
+
+# --- GET /reports/yearly: per-apartment yearly spending summary ------------
+
+ALLOWED_REPORT_BASIS = ("all", "approved")
+DEFAULT_REPORT_BASIS = "all"
+
+ATTENTION_LIMIT = 50
+DUPLICATE_GROUP_LIMIT = 50
+LARGEST_PER_CURRENCY_LIMIT = 10
+
+
+def _format_report_amount(value: Decimal) -> str:
+    """Exactly two decimals, rounded half-up (never Python's default
+    half-to-even) -- a fixed, documented rounding rule for a report the
+    owner uses for a tax declaration. Currencies with a different number
+    of decimal places are not supported yet."""
+    return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _report_currency(raw: str | None) -> str | None:
+    """A receipt's currency, trimmed and uppercased for grouping -- None
+    (never an empty string) when it's missing or blank."""
+    if raw is None:
+        return None
+    trimmed = raw.strip()
+    return trimmed.upper() or None
+
+
+class _CurrencyAccumulator:
+    """Sums one currency's Decimal totals and counts its receipts --
+    never a float, never an intermediate rounding step."""
+
+    def __init__(self) -> None:
+        self.total = Decimal("0")
+        self.count = 0
+
+    def add(self, amount: Decimal) -> None:
+        self.total += amount
+        self.count += 1
+
+
+def _currency_totals_to_list(accumulators: dict[str, "_CurrencyAccumulator"]) -> list[CurrencyTotal]:
+    return [
+        CurrencyTotal(
+            currency=currency,
+            total=_format_report_amount(acc.total),
+            receipt_count=acc.count,
+        )
+        for currency, acc in sorted(accumulators.items())
+    ]
+
+
+def summarize_year(
+    receipts: list[SavedReceipt],
+    apartments: list[Apartment],
+    year: int,
+    basis: str,
+    today: date,
+) -> YearlySummary:
+    """Buckets every receipt into exactly one of: excluded.undated
+    (no valid normalized date -- counted regardless of year, since an
+    undated receipt belongs to no year), ignored (a valid date, but not
+    in `year` -- simply skipped, not counted anywhere), excluded.
+    not_approved (only when basis == "approved" and the receipt isn't
+    approved -- with basis == "all" this bucket is never used, and every
+    receipt is counted whatever its status), excluded.no_total,
+    excluded.no_currency, excluded.no_apartment, or counted. Money is
+    always Decimal(str(value)); every amount in the result is a decimal
+    string, quantized with ROUND_HALF_UP. Never raises on odd data."""
+    excluded = {"undated": 0, "not_approved": 0, "no_total": 0, "no_currency": 0, "no_apartment": 0}
+
+    apartment_totals: dict[str, dict[str, _CurrencyAccumulator]] = {a.id: {} for a in apartments}
+    apartment_month_totals: dict[str, dict[int, dict[str, _CurrencyAccumulator]]] = {a.id: {} for a in apartments}
+    overall_totals: dict[str, _CurrencyAccumulator] = {}
+
+    with_warnings = 0
+    counted_unreviewed = 0
+    counted: list[SavedReceipt] = []
+
+    for receipt in receipts:
+        normalized_date = normalize_purchase_date(receipt.purchase_date)
+        if normalized_date is None:
+            excluded["undated"] += 1
+            continue
+
+        if int(normalized_date[:4]) != year:
+            continue
+
+        if basis == "approved" and receipt.status != ReceiptStatus.APPROVED:
+            excluded["not_approved"] += 1
+            continue
+
+        if receipt.total is None:
+            excluded["no_total"] += 1
+            continue
+
+        currency = _report_currency(receipt.currency)
+        if currency is None:
+            excluded["no_currency"] += 1
+            continue
+
+        if receipt.apartment_id is None:
+            excluded["no_apartment"] += 1
+            continue
+
+        amount = Decimal(str(receipt.total))
+        month = int(normalized_date[5:7])
+
+        apartment_totals.setdefault(receipt.apartment_id, {}).setdefault(
+            currency, _CurrencyAccumulator()
+        ).add(amount)
+        apartment_month_totals.setdefault(receipt.apartment_id, {}).setdefault(month, {}).setdefault(
+            currency, _CurrencyAccumulator()
+        ).add(amount)
+        overall_totals.setdefault(currency, _CurrencyAccumulator()).add(amount)
+
+        if receipt.status != ReceiptStatus.APPROVED:
+            counted_unreviewed += 1
+        if check_receipt(receipt, today):
+            with_warnings += 1
+
+        counted.append(receipt)
+
+    apartments_out = [
+        ApartmentYearSummary(
+            apartment_id=apartment.id,
+            apartment_name=apartment.name,
+            by_currency=_currency_totals_to_list(apartment_totals.get(apartment.id, {})),
+            months=[
+                MonthlyBreakdown(
+                    month=month,
+                    by_currency=_currency_totals_to_list(
+                        apartment_month_totals.get(apartment.id, {})[month]
+                    ),
+                )
+                for month in sorted(apartment_month_totals.get(apartment.id, {}).keys())
+            ],
+        )
+        for apartment in apartments
+    ]
+
+    overall_out = _currency_totals_to_list(overall_totals)
+
+    # --- attention: counted receipts with at least one warning ------------
+    flagged = [(receipt, check_receipt(receipt, today)) for receipt in counted]
+    flagged = [(receipt, warnings) for receipt, warnings in flagged if warnings]
+    flagged.sort(key=lambda pair: (normalize_purchase_date(pair[0].purchase_date), pair[0].receipt_id))
+    attention = [
+        AttentionReceipt(
+            receipt_id=receipt.receipt_id,
+            store_name=receipt.store_name,
+            purchase_date=normalize_purchase_date(receipt.purchase_date),
+            total=_format_report_amount(Decimal(str(receipt.total))),
+            currency=_report_currency(receipt.currency),
+            apartment_id=receipt.apartment_id,
+            warning_codes=[warning.code for warning in warnings],
+        )
+        for receipt, warnings in flagged[:ATTENTION_LIMIT]
+    ]
+
+    # --- possible_duplicates: same apartment/date/store/currency/total ----
+    duplicate_groups: dict[tuple, list[SavedReceipt]] = {}
+    for receipt in counted:
+        store = (receipt.store_name or "").strip()
+        if not store:
+            continue
+        key = (
+            receipt.apartment_id,
+            normalize_purchase_date(receipt.purchase_date),
+            store.casefold(),
+            _report_currency(receipt.currency),
+            Decimal(str(receipt.total)),
+        )
+        duplicate_groups.setdefault(key, []).append(receipt)
+
+    duplicate_groups_matched = [
+        (key, members) for key, members in duplicate_groups.items() if len(members) >= 2
+    ]
+    duplicate_groups_matched.sort(key=lambda kv: (kv[0][1], kv[0][0], kv[0][2], kv[0][3], kv[0][4]))
+    possible_duplicate_groups = len(duplicate_groups_matched)
+    possible_duplicates = [
+        DuplicateGroup(
+            receipt_ids=sorted(member.receipt_id for member in members),
+            store_name=members[0].store_name.strip(),
+            purchase_date=key[1],
+            total=_format_report_amount(key[4]),
+            currency=key[3],
+            apartment_id=key[0],
+        )
+        for key, members in duplicate_groups_matched[:DUPLICATE_GROUP_LIMIT]
+    ]
+
+    # --- largest: per currency, top N counted receipts by |total| ---------
+    receipts_by_currency: dict[str, list[SavedReceipt]] = {}
+    for receipt in counted:
+        receipts_by_currency.setdefault(_report_currency(receipt.currency), []).append(receipt)
+
+    largest = [
+        CurrencyLargest(
+            currency=currency,
+            items=[
+                LargestReceipt(
+                    receipt_id=receipt.receipt_id,
+                    store_name=receipt.store_name,
+                    purchase_date=normalize_purchase_date(receipt.purchase_date),
+                    total=_format_report_amount(Decimal(str(receipt.total))),
+                    apartment_id=receipt.apartment_id,
+                )
+                for receipt in sorted(
+                    receipts_by_currency[currency],
+                    key=lambda r: (-abs(Decimal(str(r.total))), r.receipt_id),
+                )[:LARGEST_PER_CURRENCY_LIMIT]
+            ],
+        )
+        for currency in sorted(receipts_by_currency.keys())
+    ]
+
+    return YearlySummary(
+        year=year,
+        basis=basis,
+        apartments=apartments_out,
+        overall=overall_out,
+        excluded=ExcludedCounts(**excluded),
+        with_warnings=with_warnings,
+        counted_unreviewed=counted_unreviewed,
+        attention=attention,
+        possible_duplicates=possible_duplicates,
+        possible_duplicate_groups=possible_duplicate_groups,
+        largest=largest,
+    )

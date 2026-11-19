@@ -27,7 +27,9 @@ from domain.ports import (
 )
 from domain.rules import (
     ALLOWED_ITEM_SORT_VALUES,
+    ALLOWED_REPORT_BASIS,
     DEFAULT_ITEM_SORT,
+    DEFAULT_REPORT_BASIS,
     EmptyFileError,
     FileTooLargeError,
     UnsupportedFileTypeError,
@@ -38,6 +40,7 @@ from domain.rules import (
     media_type_for_extension,
     normalize_purchase_date,
     sort_line_items,
+    summarize_year,
     validate_upload,
 )
 
@@ -259,6 +262,49 @@ def get_receipt_facets(
 
     facets = repository.get_receipt_facets(apartment_id=apartment_id)
     return facets.model_dump()
+
+
+def _parse_report_year(year: str) -> int:
+    """A required (not optional) 4-digit year, 2000-2100 -- no "none"
+    sentinel here, unlike the list endpoints' own year filter, since a
+    yearly report always needs a specific year."""
+    if not YEAR_PATTERN.match(year):
+        raise HTTPException(status_code=422, detail="year must be a 4-digit year (2000-2100).")
+    year_value = int(year)
+    if not (MIN_FILTER_YEAR <= year_value <= MAX_FILTER_YEAR):
+        raise HTTPException(status_code=422, detail="year must be a 4-digit year (2000-2100).")
+    return year_value
+
+
+@router.get("/reports/years")
+def get_report_years(repository: ReceiptRepository = Depends(get_repository)):
+    """Years that have at least one dated receipt, newest first -- reuses
+    the same unscoped facets computation GET /receipts/facets already
+    does, so the two can never disagree about which years exist."""
+    facets = repository.get_receipt_facets()
+    return {"items": facets.years}
+
+
+@router.get("/reports/yearly")
+def get_yearly_report(
+    year: str = Query(...),
+    basis: str = Query(default=DEFAULT_REPORT_BASIS),
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    # Both new routes live under /reports, a path segment GET /receipts/
+    # {receipt_id} can never match, so registration order here can never
+    # collide with it (or with each other, since their own suffixes
+    # differ).
+    year_value = _parse_report_year(year)
+    if basis not in ALLOWED_REPORT_BASIS:
+        raise HTTPException(
+            status_code=422, detail=f"basis must be one of: {', '.join(ALLOWED_REPORT_BASIS)}."
+        )
+
+    receipts = repository.list_matching_receipts()
+    apartments = repository.list_apartments()
+    summary = summarize_year(receipts, apartments, year_value, basis, date.today())
+    return summary.model_dump()
 
 
 def get_extractor() -> ReceiptExtractor:

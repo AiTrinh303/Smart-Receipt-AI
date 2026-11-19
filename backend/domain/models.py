@@ -140,6 +140,108 @@ class LineItemRow(BaseModel):
     status: str
 
 
+class CurrencyTotal(BaseModel):
+    """One currency's total within a yearly report scope (an apartment, a
+    month, or the overall combined total) -- `total` is always a decimal
+    string, never a float."""
+
+    currency: str
+    total: str
+    receipt_count: int
+
+
+class MonthlyBreakdown(BaseModel):
+    """One calendar month (1-12) of a yearly report's apartment breakdown
+    -- only months that actually had a counted receipt appear."""
+
+    month: int
+    by_currency: list[CurrencyTotal]
+
+
+class ApartmentYearSummary(BaseModel):
+    """One apartment's yearly totals -- every active apartment appears
+    (even with empty `by_currency`/`months`), in the same `sort_order`
+    `list_apartments()` already returns."""
+
+    apartment_id: str
+    apartment_name: str
+    by_currency: list[CurrencyTotal]
+    months: list[MonthlyBreakdown]
+
+
+class ExcludedCounts(BaseModel):
+    """Why a receipt did not end up in any apartment's totals --
+    `undated` counts every receipt with no valid date regardless of the
+    requested year (a receipt with no date has no year to belong to);
+    the other four only count receipts whose date falls in the
+    requested year, in the fixed bucket order `summarize_year` applies."""
+
+    undated: int
+    not_approved: int
+    no_total: int
+    no_currency: int
+    no_apartment: int
+
+
+class AttentionReceipt(BaseModel):
+    """One counted receipt with at least one data-quality warning,
+    surfaced so the owner can fix it before filing -- `purchase_date` is
+    already normalized, `total` is a decimal string."""
+
+    receipt_id: str
+    store_name: str | None
+    purchase_date: str
+    total: str
+    currency: str
+    apartment_id: str
+    warning_codes: list[str]
+
+
+class DuplicateGroup(BaseModel):
+    """Two or more counted receipts that share apartment, normalized
+    date, store name (casefolded), currency and total -- a likely
+    double-entry. Totals are never reduced for this; the owner deletes
+    the extra one if it really is a duplicate."""
+
+    receipt_ids: list[str]
+    store_name: str
+    purchase_date: str
+    total: str
+    currency: str
+    apartment_id: str
+
+
+class LargestReceipt(BaseModel):
+    """One of a currency's largest counted receipts by absolute total."""
+
+    receipt_id: str
+    store_name: str | None
+    purchase_date: str
+    total: str
+    apartment_id: str
+
+
+class CurrencyLargest(BaseModel):
+    currency: str
+    items: list[LargestReceipt]
+
+
+class YearlySummary(BaseModel):
+    """GET /reports/yearly's response body."""
+
+    year: int
+    basis: str
+    apartments: list[ApartmentYearSummary]
+    overall: list[CurrencyTotal]
+    excluded: ExcludedCounts
+    with_warnings: int
+    counted_unreviewed: int
+    attention: list[AttentionReceipt]
+    possible_duplicates: list[DuplicateGroup]
+    possible_duplicate_groups: int
+    largest: list[CurrencyLargest]
+
+
 class ReceiptFacets(BaseModel):
     """GET /receipts/facets's response body. `years` is sorted descending
     (newest first, matching the list's own default order); `has_undated`
