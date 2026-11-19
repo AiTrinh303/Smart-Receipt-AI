@@ -165,7 +165,7 @@ def test_combined_filters_apply_with_and(seeded):
 def test_combined_filters_with_no_match_returns_empty_items_and_zero_count(seeded):
     response = client.get(f"/receipts?apartment_id={WALDGLUECK}&status={ReceiptStatus.NEEDS_REVIEW}&year=2099")
     assert response.status_code == 200
-    assert response.json() == {"items": [], "count": 0}
+    assert response.json() == {"items": [], "count": 0, "total": 0}
 
 
 def test_unknown_apartment_returns_422(seeded):

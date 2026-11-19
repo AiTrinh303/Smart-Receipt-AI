@@ -53,7 +53,7 @@ After changing `backend/.env`, stop and restart uvicorn. `--reload` does not wat
 - The AI can misread a receipt. Check each one against the original before approving it.
 - Receipt files are sent to OpenAI to be read, and deleting a receipt here cannot delete that copy.
 - Backups are manual (`python scripts/backup.py`, run inside `backend/`), and a batch in progress is lost if the browser tab is closed.
-- History shows only the first page of receipts (the backend's default limit, 50) with no "Show more" yet — the list endpoint has no `offset`/`total` to page with. The Items view already supports paging past its own first page.
+- History shows only the first page of receipts (the backend's default limit, 50) with no "Show more" yet — the list endpoint now supports `offset`/`total`, but the History view doesn't call it with those yet. The Items view already supports paging past its own first page.
 
 ## Where the decisions live
 - Architecture: [ADR 0001, layered backend](docs/adr/0001-layered-backend.md)

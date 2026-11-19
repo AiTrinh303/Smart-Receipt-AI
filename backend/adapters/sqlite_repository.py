@@ -393,46 +393,54 @@ class SqliteReceiptRepository:
     def list_receipts(
         self,
         limit: int,
+        offset: int = 0,
         apartment_id: str | None = None,
         year: int | None = None,
         undated: bool = False,
         status: str | None = None,
-    ) -> list[ReceiptSummary]:
+    ) -> tuple[list[ReceiptSummary], int]:
+        """Returns (summaries, total): `total` is the count of every
+        receipt matching the given filters -- ignoring `limit`/`offset`
+        entirely -- in the same stable order (`created_at` DESC,
+        `receipt_id` ASC) `_filtered_receipt_rows` already applies, sliced
+        *before* `limit`/`offset` are. A row skipped there for unparseable
+        `extracted_json` was never part of `rows` to begin with, so it is
+        excluded from `total` the same way it has always been excluded
+        from `count` -- consistent, not a new special case."""
         with self._connect() as conn:
             rows = self._filtered_receipt_rows(conn, apartment_id, year, undated, status)
 
-        summaries: list[ReceiptSummary] = []
-        for (
-            receipt_id,
-            extracted,
-            created_at,
-            _updated_at,
-            original_filename,
-            _content_type,
-            _edited_at,
-            apartment_id_value,
-            apartment_name,
-            status_value,
-        ) in rows:
-            if len(summaries) >= limit:
-                break
+        total = len(rows)
+        page = rows[offset : offset + limit]
 
-            summaries.append(
-                ReceiptSummary(
-                    receipt_id=receipt_id,
-                    original_filename=original_filename,
-                    store_name=extracted.store_name,
-                    purchase_date=extracted.purchase_date,
-                    currency=extracted.currency,
-                    total=extracted.total,
-                    created_at=created_at,
-                    apartment_id=apartment_id_value,
-                    apartment_name=apartment_name,
-                    status=status_value,
-                )
+        summaries: list[ReceiptSummary] = [
+            ReceiptSummary(
+                receipt_id=receipt_id,
+                original_filename=original_filename,
+                store_name=extracted.store_name,
+                purchase_date=extracted.purchase_date,
+                currency=extracted.currency,
+                total=extracted.total,
+                created_at=created_at,
+                apartment_id=apartment_id_value,
+                apartment_name=apartment_name,
+                status=status_value,
             )
+            for (
+                receipt_id,
+                extracted,
+                created_at,
+                _updated_at,
+                original_filename,
+                _content_type,
+                _edited_at,
+                apartment_id_value,
+                apartment_name,
+                status_value,
+            ) in page
+        ]
 
-        return summaries
+        return summaries, total
 
     def list_matching_receipts(
         self,

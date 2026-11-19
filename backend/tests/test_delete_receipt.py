@@ -248,8 +248,8 @@ def test_database_removal_failure_returns_500_retry_then_succeeds(temp_upload_di
         def get_receipt(self, receipt_id):
             return self._real.get_receipt(receipt_id)
 
-        def list_receipts(self, limit):
-            return self._real.list_receipts(limit)
+        def list_receipts(self, limit, offset=0, **filters):
+            return self._real.list_receipts(limit, offset, **filters)
 
         def update_receipt(self, receipt_id, update):
             return self._real.update_receipt(receipt_id, update)

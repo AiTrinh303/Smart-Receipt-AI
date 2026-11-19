@@ -61,7 +61,7 @@ def test_empty_database_returns_200_with_empty_items_and_zero_count(temp_reposit
 
     # Then the response is 200 with an empty items list and count 0, never 404
     assert response.status_code == 200
-    assert response.json() == {"items": [], "count": 0}
+    assert response.json() == {"items": [], "count": 0, "total": 0}
 
 
 def test_three_receipts_saved_at_different_times_are_returned_newest_first(temp_repository):
@@ -206,7 +206,7 @@ def test_upload_only_receipt_never_extracted_is_not_listed(temp_repository):
 
     # Then it is not listed
     assert response.status_code == 200
-    assert response.json() == {"items": [], "count": 0}
+    assert response.json() == {"items": [], "count": 0, "total": 0}
 
 
 def test_list_item_matches_get_receipt_values_and_types_for_shared_fields(temp_repository):
@@ -225,6 +225,143 @@ def test_list_item_matches_get_receipt_values_and_types_for_shared_fields(temp_r
     for field in ["store_name", "purchase_date", "currency", "total"]:
         assert get_body[field] == list_item[field]
         assert type(get_body[field]) is type(list_item[field])
+
+
+def test_total_counts_every_matching_receipt_ignoring_limit_and_offset(temp_repository):
+    # Given five receipts
+    for i in range(5):
+        save_receipt(temp_repository, make_receipt_data(store_name=f"Store {i}"))
+
+    # When listed with a limit smaller than the total
+    response = client.get("/receipts?limit=2")
+
+    # Then total counts every matching receipt, not just the returned page
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 2
+    assert body["total"] == 5
+
+
+def test_total_reflects_filters_not_the_unfiltered_count(temp_repository):
+    # Given two receipts, only one of them approved
+    import adapters.sqlite_repository as sqlite_repository_module
+
+    first_id = save_receipt(temp_repository, make_receipt_data(store_name="First"))
+    save_receipt(temp_repository, make_receipt_data(store_name="Second"))
+    with temp_repository._connect() as conn:
+        conn.execute("UPDATE receipts SET status = 'approved' WHERE receipt_id = ?", (first_id,))
+
+    # When listed filtered by status=approved
+    response = client.get("/receipts?status=approved")
+
+    # Then total reflects only the filtered count, not every receipt
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["total"] == 1
+
+
+def test_offset_skips_the_newest_rows_in_stable_order(temp_repository):
+    # Given three receipts saved at different times
+    first_id = save_receipt(temp_repository, make_receipt_data(store_name="First"))
+    time.sleep(0.01)
+    second_id = save_receipt(temp_repository, make_receipt_data(store_name="Second"))
+    time.sleep(0.01)
+    third_id = save_receipt(temp_repository, make_receipt_data(store_name="Third"))
+
+    # When listed with offset=1 (skipping the newest one)
+    response = client.get("/receipts?offset=1")
+
+    # Then the second and first (in that newest-first order) are returned
+    body = response.json()
+    assert [item["receipt_id"] for item in body["items"]] == [second_id, first_id]
+    assert third_id not in [item["receipt_id"] for item in body["items"]]
+    assert body["count"] == 2
+    assert body["total"] == 3
+
+
+def test_offset_beyond_the_end_returns_empty_items_zero_count_and_the_real_total(temp_repository):
+    # Given two receipts
+    save_receipt(temp_repository)
+    save_receipt(temp_repository)
+
+    # When listed with an offset past the end
+    response = client.get("/receipts?offset=10")
+
+    # Then items is empty and count is 0, but total still reflects every match
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["count"] == 0
+    assert body["total"] == 2
+
+
+def test_limit_and_offset_together_return_the_middle_page(temp_repository):
+    # Given four receipts
+    ids = []
+    for i in range(4):
+        ids.append(save_receipt(temp_repository, make_receipt_data(store_name=f"Store {i}")))
+        time.sleep(0.01)
+    newest_first = list(reversed(ids))
+
+    # When listed with limit=2, offset=1 (the middle two, newest-first order)
+    response = client.get("/receipts?limit=2&offset=1")
+
+    body = response.json()
+    assert [item["receipt_id"] for item in body["items"]] == newest_first[1:3]
+    assert body["count"] == 2
+    assert body["total"] == 4
+
+
+@pytest.mark.parametrize("offset_value", ["-1", "abc"])
+def test_invalid_offset_values_return_422(temp_repository, offset_value):
+    # Given an offset that is negative or non-numeric
+    # When the list endpoint is called with that offset
+    response = client.get(f"/receipts?offset={offset_value}")
+
+    # Then the response is 422
+    assert response.status_code == 422
+
+
+def test_filters_combine_with_offset(temp_repository):
+    # Given three approved receipts and one needs-review receipt
+    approved_ids = []
+    for i in range(3):
+        rid = save_receipt(temp_repository, make_receipt_data(store_name=f"Approved {i}"))
+        approved_ids.append(rid)
+        time.sleep(0.01)
+    save_receipt(temp_repository, make_receipt_data(store_name="Needs review"))
+    with temp_repository._connect() as conn:
+        conn.executemany(
+            "UPDATE receipts SET status = 'approved' WHERE receipt_id = ?",
+            [(rid,) for rid in approved_ids],
+        )
+    newest_first_approved = list(reversed(approved_ids))
+
+    # When listed filtered by status=approved with offset=1
+    response = client.get("/receipts?status=approved&offset=1")
+
+    body = response.json()
+    assert [item["receipt_id"] for item in body["items"]] == newest_first_approved[1:]
+    assert body["count"] == 2
+    assert body["total"] == 3
+
+
+def test_response_without_an_offset_param_is_unchanged_except_for_total(temp_repository):
+    # Given a couple of receipts
+    first_id = save_receipt(temp_repository, make_receipt_data(store_name="First"))
+    time.sleep(0.01)
+    second_id = save_receipt(temp_repository, make_receipt_data(store_name="Second"))
+
+    # When listed with no offset param at all (defaults to 0)
+    response = client.get("/receipts")
+
+    # Then the shape is the same as before, plus the new total field
+    body = response.json()
+    assert set(body.keys()) == {"items", "count", "total"}
+    assert [item["receipt_id"] for item in body["items"]] == [second_id, first_id]
+    assert body["count"] == 2
+    assert body["total"] == 2
 
 
 def test_get_receipt_and_health_still_work(temp_repository):

@@ -49,11 +49,12 @@ class ReceiptRepository(Protocol):
     def list_receipts(
         self,
         limit: int,
+        offset: int = 0,
         apartment_id: str | None = None,
         year: int | None = None,
         undated: bool = False,
         status: str | None = None,
-    ) -> list[ReceiptSummary]: ...
+    ) -> tuple[list[ReceiptSummary], int]: ...
 
     def update_receipt(self, receipt_id: str, update: ReceiptUpdate) -> SavedReceipt | None: ...
 

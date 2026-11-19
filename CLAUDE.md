@@ -1220,11 +1220,18 @@ the purchase info, and the result is displayed for review.
     `status` plus `updated_at`, returns `None` if no `receipts` row exists
     (so the route 404s), never touches `edited_at`, `extracted_json`,
     `ai_result_json`, `created_at`, or `apartment_id`.
-    `list_receipts` orders by `created_at DESC, receipt_id ASC` (stable
-    tie-break) and builds each row from `extracted_json` (same source as
-    `get_receipt`, so `total`'s JSON type matches); a row with unparseable
+    `list_receipts(limit, offset=0, ...)` orders by `created_at DESC,
+    receipt_id ASC` (stable tie-break) and builds each row from
+    `extracted_json` (same source as `get_receipt`, so `total`'s JSON
+    type matches); a row with unparseable
     `extracted_json` is logged (receipt_id only) and skipped rather than
-    failing the whole list.
+    failing the whole list. It returns `(summaries, total)`: `total` is
+    `len(rows)` from `_filtered_receipt_rows` (every matching, already-
+    parsed receipt, before the `limit`/`offset` slice — so a skipped
+    corrupt row is excluded exactly as it already was from the old
+    `count`), and `summaries` is built from `rows[offset : offset +
+    limit]` only — never eagerly converting rows outside the requested
+    page into `ReceiptSummary` objects.
     **Filtering (`apartment_id`/`year`/`undated`/`status` params):**
     `apartment_id` and `status`
     (plain column equality) are filtered in a parameterized SQL `WHERE`
@@ -1322,16 +1329,23 @@ the purchase info, and the result is displayed for review.
     an uploads row), stored on the uploads row, echoed in the response as
     `apartment_id`/`apartment_name`,
     `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`,
-    `GET /receipts?limit=N` — list, newest first, `limit` default 50
-    (1–200, else `422`), `{"items": [...], "count": N}`, empty DB ->
-    `{"items": [], "count": 0}` never `404`. **No `offset` param and no
-    `total` field** — unlike `GET /items` below, which has both — so
-    there is currently no way to page past the first `limit` receipts;
-    a frontend ticket ("Tidy History filters and add Show more") hit
-    this gap and stopped rather than guess at a backend change (see
-    [docs/design.md](docs/design.md)'s "Tidying History filters" section
-    for exactly what `GET /receipts` would need — an `offset` param and
-    a `total` field, mirroring `GET /items` — to support it). Optional filters, AND-combined,
+    `GET /receipts?limit=N&offset=M` — list, newest first, `limit`
+    default 50 (1–200, else `422`), `offset` default 0 (`>= 0`, else
+    `422`),
+    `{"items": [...], "count": N, "total": T}`, empty DB ->
+    `{"items": [], "count": 0, "total": 0}` never `404`. `total` is the
+    count of every receipt matching the given filters, ignoring
+    `limit`/`offset` entirely (the same stable order — `created_at`
+    DESC, `receipt_id` ASC — applied *before* the `limit`/`offset`
+    slice, same as `GET /items`); `count` stays the number of items
+    actually returned on this page. A row skipped for unparseable
+    `extracted_json` is excluded from `total` the same way it was
+    always excluded from `count` — it was never part of the filtered
+    rows to begin with, not a new special case. `offset`/`total` were
+    added — mirroring `GET /items`, which already had both — after an
+    earlier frontend ticket ("Tidy History filters and add Show more")
+    hit this exact gap and stopped rather than guess at a backend
+    change. Optional filters, AND-combined,
     no params unchanged from before, validated by the shared
     `_validate_receipt_filters(repository, apartment_id, year, status)`
     helper (also used by `GET /items`, below, so the two

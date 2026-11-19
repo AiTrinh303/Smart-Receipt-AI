@@ -185,14 +185,15 @@ def _validate_receipt_filters(
 @router.get("/receipts")
 def list_receipts(
     limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     apartment_id: str | None = Query(default=None),
     year: str | None = Query(default=None),
     status: str | None = Query(default=None),
     repository: ReceiptRepository = Depends(get_repository),
 ):
     filters = _validate_receipt_filters(repository, apartment_id, year, status)
-    items = repository.list_receipts(limit, **filters)
-    return {"items": [item.model_dump() for item in items], "count": len(items)}
+    items, total = repository.list_receipts(limit, offset, **filters)
+    return {"items": [item.model_dump() for item in items], "count": len(items), "total": total}
 
 
 MAX_ITEM_SEARCH_LENGTH = 100
