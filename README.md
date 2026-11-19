@@ -75,11 +75,36 @@ clearly for review.
 
 ## Reference
 
-### Project Structure
+## Project Structure
 
-```
+```text
 Smart-Receipt-AI/
-├── frontend/   # React + TypeScript (Vite)
-└── backend/    # FastAPI
+├── backend/
+│   ├── main.py            # entry point (uvicorn main:app)
+│   ├── config.py          # settings from .env (API key, database path)
+│   ├── domain/            # pure rules: models, dates, money, warnings, interfaces
+│   ├── adapters/          # outside world: OpenAI, SQLite, uploads folder, PDF export
+│   ├── api/               # FastAPI routes and error handling
+│   ├── scripts/           # backup.py and restore.py
+│   ├── tests/             # pytest
+│   ├── data/              # SQLite database (not in git)
+│   └── uploads/           # original receipt files (not in git)
+├── frontend/
+│   └── src/
+│       ├── api/           # calls to the backend
+│       ├── batch/         # upload queue logic
+│       ├── components/ui/ # shared UI components
+│       ├── format/        # display helpers (dates, apartment names)
+│       ├── hooks/         # React hooks
+│       └── *.tsx          # screens: upload, history, items, receipt
+├── docs/
+│   ├── adr/               # architecture decisions
+│   └── design.md          # design rules
+├── backups/               # backup archives (not in git)
+├── CLAUDE.md              # rules for the AI assistant
+└── README.md
 ```
+
+Dependencies point inward: `api` → `adapters` → `domain`. The domain never imports the others, and `import-linter` checks this.
+
 
