@@ -176,13 +176,16 @@ test('all nav items are present, with aria-current="page" on the active one', ()
   const uploadLink = screen.getByRole('link', { name: /^upload$/i })
   const historyLink = screen.getByRole('link', { name: /^history$/i })
   const itemsLink = screen.getByRole('link', { name: /^items$/i })
+  const reportLink = screen.getByRole('link', { name: /^report$/i })
 
   expect(uploadLink).toBeInTheDocument()
   expect(historyLink).toBeInTheDocument()
   expect(itemsLink).toBeInTheDocument()
+  expect(reportLink).toBeInTheDocument()
   expect(uploadLink).toHaveAttribute('aria-current', 'page')
   expect(historyLink).not.toHaveAttribute('aria-current')
   expect(itemsLink).not.toHaveAttribute('aria-current')
+  expect(reportLink).not.toHaveAttribute('aria-current')
 })
 
 test('neither nav tab is marked current when viewing a saved receipt', async () => {
@@ -218,10 +221,11 @@ test('neither nav tab is marked current when viewing a saved receipt', async () 
     expect(screen.getByText('Corner Store')).toBeInTheDocument()
   })
 
-  // Then none of "Upload", "History" or "Items" is marked as the current tab
+  // Then none of "Upload", "History", "Items" or "Report" is marked current
   expect(screen.getByRole('link', { name: /^upload$/i })).not.toHaveAttribute('aria-current')
   expect(screen.getByRole('link', { name: /^history$/i })).not.toHaveAttribute('aria-current')
   expect(screen.getByRole('link', { name: /^items$/i })).not.toHaveAttribute('aria-current')
+  expect(screen.getByRole('link', { name: /^report$/i })).not.toHaveAttribute('aria-current')
 
   // @ts-expect-error cleaning up the test-only global fetch stub
   delete global.fetch
@@ -253,6 +257,14 @@ test('document.title reflects the current view', async () => {
   // Then the title updates again
   await waitFor(() => {
     expect(document.title).toBe('Items · Smart Receipt AI')
+  })
+
+  // When the user navigates to the yearly report
+  await user.click(screen.getByRole('link', { name: /^report$/i }))
+
+  // Then the title updates again
+  await waitFor(() => {
+    expect(document.title).toBe('Report · Smart Receipt AI')
   })
 
   // @ts-expect-error cleaning up the test-only global fetch stub

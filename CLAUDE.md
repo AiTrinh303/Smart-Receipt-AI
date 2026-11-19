@@ -219,14 +219,16 @@ the purchase info, and the result is displayed for review.
   one themselves); `App.tsx` listens for `popstate` (real browser
   back/forward and the synthetic ones) to decide, from the URL, which of
   `ReceiptHistory.tsx` (`?view=history`), `ReceiptItems.tsx`
-  (`?view=items`), or `ReceiptUpload.tsx` (otherwise —
+  (`?view=items`), `ReceiptReport.tsx` (`?view=report`), or
+  `ReceiptUpload.tsx` (otherwise —
   including `?receipt=<id>`) to render, keying each on the current
   `location.search` so external navigation remounts cleanly without
   disturbing `ReceiptUpload`'s own internal `replaceState` calls. The
-  header nav has three links (Upload/History/Items); `getActiveNav()`/
-  `getPageName()` (-> `document.title`, e.g. "Items · Smart Receipt AI")
-  both switch on the same three-way `View` type, same `aria-current`
-  treatment for all three.
+  header nav has four links (Upload/History/Items/Report);
+  `getActiveNav()`/
+  `getPageName()` (-> `document.title`, e.g. "Items · Smart Receipt AI",
+  "Report · Smart Receipt AI") both switch on the same `View` type, same
+  `aria-current` treatment for all four.
   **Page header pattern (`ui/PageHeader.tsx`) — exactly one `<h1>` per
   view:** `PageHeader` renders a view's one `<h1>` (`text-title`), an
   optional muted `description` (`max-w-prose`), and an `actions` slot
@@ -524,6 +526,80 @@ the purchase info, and the result is displayed for review.
   `line-clamp-2` (built into Tailwind v3.3+, no plugin) with a `title`
   carrying the full text (omitted when empty) so a 100+ character product
   title can't blow out a row's height.
+  **Yearly report (`ReceiptReport.tsx`, `src/api/getReportYears.ts`,
+  `src/api/getYearlyReport.ts`, a fourth nav link "Report"/`?view=
+  report`):** reads `GET /reports/years` and `GET /reports/yearly?year=
+  &basis=`. State lives in the URL (`?view=report&year=<v>&basis=
+  approved`) — `basis=all` (the backend's own default) is the one value
+  never written to the URL; only an explicit `basis=approved` opt-in is.
+  The checkbox is "Only count receipts I approved" (unchecked by
+  default). An invalid/missing `year` falls back to the newest loaded
+  year, same "ignored, never sent as given" spirit as every other filter
+  in this app.
+  **No arithmetic on money in the frontend:** the backend's amounts are
+  already-rounded decimal strings (e.g. `"1234.56"`, `"-12.50"`).
+  `formatMoneyFromString()` (`components/ui/formatMoney.ts`) displays
+  one exactly as given, with its currency prefix — never parsed into a
+  number and re-formatted. This is also why the monthly table has **no
+  combined "Both" column**: `GET /reports/yearly`'s `overall` field has
+  no monthly breakdown (only each apartment's own `months` does), and
+  summing two apartments' decimal strings to produce one would be
+  exactly the arithmetic this rule forbids — the monthly table shows one
+  column per apartment only (documented in `ReceiptReport.tsx` itself).
+  **Summary**: one `Card` per apartment (`apartmentShortName` visible,
+  full name in `title`) with a right-aligned, tabular-nums amount per
+  currency plus "N receipts", then a combined "Both apartments" card
+  built straight from the backend's own `overall` (never summed from the
+  apartment cards). An apartment with no data shows "No approved
+  receipts in `<year>`." (`basis=approved`) or "No receipts in `<year>`."
+  (`basis=all`). A calm info line ("N of the counted receipts were not
+  reviewed. The quick check below shows what to look at first.") appears
+  under the summary only when `counted_unreviewed > 0` — there is no
+  unconditional notice.
+  **Monthly table**: one table per currency present in any apartment's
+  `months`, rows = months actually present (`MONTH_NAMES`, a fixed
+  array — no locale dependence), columns = one per apartment; a cell
+  with no data for that apartment/month/currency shows a plain dash.
+  From `sm` up it's a table, below `sm` a list of cards — only one ever
+  mounted (`useMediaQuery`, same pattern as `ReceiptItems.tsx`/
+  `ReceiptResult.tsx`).
+  **"Quick check"** (three `<details>`, closed by default, each
+  `<summary>` showing its own count): "Receipts with warnings (N)" lists
+  `attention` (capped at 50 server-side; `with_warnings` is the full,
+  uncapped count, so "Showing the first 50." shows only when it exceeds
+  the returned list), each a link to `?receipt=<id>` with the store,
+  `formatDisplayDate`'s `DD.MM.YYYY`, the amount, and every warning code
+  translated through a fixed map (`TOTAL_MISMATCH`/`LINE_MISMATCH`/
+  `MISSING_STORE`/`FUTURE_DATE` have plain-words labels; any other code
+  shows the raw code itself). "Possible duplicates (N groups)" lists
+  `possible_duplicates` (also capped at 50; `possible_duplicate_groups`
+  is the full count), each group as one line ("store, date, total")
+  with one "Open N" link per receipt in the group and a muted note that
+  both stay counted until the owner deletes one. "Largest receipts"
+  lists `largest`, per currency. An empty block shows "None." instead of
+  an empty list. When `with_warnings === 0 && possible_duplicate_groups
+  === 0`, a success `Alert` ("No warnings and no duplicates found in
+  `<year>`.") appears above the three blocks.
+  **"Receipts not in these totals"** (a second, separate panel): the
+  "not approved" link (`?view=history&year=<year>&status=needs_review`)
+  appears only when `basis === 'approved'` *and* `excluded.not_approved
+  > 0` (always `0` under `basis === 'all'` anyway); "undated" links to
+  `?view=history&year=none`; `no_total`/`no_currency`/`no_apartment` are
+  plain text with a count and a hint to fix it with Edit (no filter
+  link invented); a `with_warnings` line is also shown here as plain
+  text, even though those receipts *are* counted — this panel is a
+  general "check before you trust" area, not "excluded only". A zero
+  count renders nothing; when every one is zero, a *different* success
+  `Alert` ("Every receipt of `<year>` is in these totals.") appears —
+  distinct from the Quick check's own success message, since the two
+  panels have different success conditions. A fixed line always
+  follows: "Totals are the amounts printed on the receipts, including
+  VAT. Ask your tax advisor how to use them."
+  **Loading/error/empty**: `role="status" aria-busy="true"` with the
+  exact text "Loading report...", `Skeleton` blocks; `Alert` + Retry on
+  error; "No dated receipts yet. Upload and approve receipts to see the
+  report." when `GET /reports/years` returns no years (no Year select
+  in that case).
   **Changing the apartment on a saved receipt (`ReceiptApartment.tsx`,
   `src/api/updateReceiptApartment.ts`):** rendered by the saved-receipt
   container (the same `if (result)` branch used right after extraction and

@@ -5,6 +5,11 @@ Keep, check and archive receipts for two holiday apartments, ready for the year-
 ## What this is
 A web app that stores the shopping receipts of my two holiday apartments in Germany. I upload photos or PDFs, AI reads the date, store, items and total, I check the result against the original and approve it, and the data will feed my year-end tax report. It is built for one person, the owner of the apartments, not as a multi-user product.
 
+## Features
+- Upload a receipt photo or PDF; AI reads the store, date, items and total.
+- Browse History and Items, filter by apartment/year/status, search items.
+- Yearly report (counts every receipt; shows warnings, possible duplicates and the largest receipts to check).
+
 ## Before you start
 - Python 3 (I use 3.12) and Node.js with npm (a current LTS version). Check with `python3 --version` and `node --version`.
 - Git, and a Linux or macOS terminal. On Windows, use WSL or replace the activate command with `venv\Scripts\activate`.
@@ -50,7 +55,7 @@ After changing `backend/.env`, stop and restart uvicorn. `--reload` does not wat
 
 ## What it does not do yet
 - No login. Use it only on your own machine and do not expose it to the internet.
-- No year-end export (CSV/PDF) yet, and no UI for it. The backend has a yearly spending summary per apartment (`GET /reports/yearly?year=YYYY&basis=all|approved`) for preparing a tax declaration by hand; every receipt counts by default (`basis=all`), not only approved ones.
+- No CSV export of the yearly report yet.
 - No duplicate detection: uploading the same receipt twice creates two records.
 - No bulk approval: receipts are approved one at a time, with a review mode that moves to the next one.
 - The AI can misread a receipt. Check each one against the original before approving it.

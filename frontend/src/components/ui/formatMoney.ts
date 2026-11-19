@@ -41,3 +41,20 @@ export function formatMoney(
   const amount = value.toFixed(decimals)
   return includeCurrency ? `${currency} ${amount}` : amount
 }
+
+/** Displays an amount that already arrived as a decimal STRING (e.g. the
+ * yearly report's totals, "1234.56"/"-12.50"/"0.00") -- the string is
+ * shown exactly as given, never parsed into a number and re-formatted,
+ * which would be arithmetic this app's money rule forbids. Same
+ * null/undefined/blank fallback as `formatMoney`. */
+export function formatMoneyFromString(
+  value: string | null | undefined,
+  currency: string | null | undefined,
+  { includeCurrency = true }: FormatMoneyOptions = {},
+): string {
+  if (value === null || value === undefined || value === '') {
+    return NOT_DETECTED
+  }
+
+  return includeCurrency && currency ? `${currency} ${value}` : value
+}

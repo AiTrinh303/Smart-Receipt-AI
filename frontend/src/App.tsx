@@ -4,6 +4,7 @@ import { isDev } from './env'
 import { navigateTo } from './navigation'
 import ReceiptHistory from './ReceiptHistory'
 import ReceiptItems from './ReceiptItems'
+import ReceiptReport from './ReceiptReport'
 import ReceiptUpload from './ReceiptUpload'
 
 const RECEIPT_QUERY_PARAM = 'receipt'
@@ -20,7 +21,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // whether the route/render logic below ever reaches it at runtime.
 const StyleGuide = import.meta.env.DEV ? lazy(() => import('./StyleGuide')) : null
 
-type View = 'upload' | 'history' | 'items' | 'styleguide'
+type View = 'upload' | 'history' | 'items' | 'report' | 'styleguide'
 
 function getView(): View {
   const params = new URLSearchParams(window.location.search)
@@ -30,6 +31,7 @@ function getView(): View {
   const view = params.get('view')
   if (view === 'history') return 'history'
   if (view === 'items') return 'items'
+  if (view === 'report') return 'report'
   return 'upload'
 }
 
@@ -42,12 +44,15 @@ function isReceiptDetailView(): boolean {
 // `?receipt=<id>` renders the upload component (it owns the saved-receipt
 // view), but it is not the plain upload screen, so neither tab should claim
 // it -- otherwise "Upload" stays marked current while looking at a receipt.
-function getActiveNav(view: View): 'upload' | 'history' | 'items' | null {
+function getActiveNav(view: View): 'upload' | 'history' | 'items' | 'report' | null {
   if (view === 'history') {
     return 'history'
   }
   if (view === 'items') {
     return 'items'
+  }
+  if (view === 'report') {
+    return 'report'
   }
   if (view === 'styleguide') {
     return null
@@ -61,6 +66,9 @@ function getPageName(view: View): string {
   }
   if (view === 'items') {
     return 'Items'
+  }
+  if (view === 'report') {
+    return 'Report'
   }
   if (view === 'styleguide') {
     return 'Style Guide'
@@ -167,6 +175,9 @@ function App() {
             <NavLink href="/?view=items" search="?view=items" active={activeNav === 'items'}>
               Items
             </NavLink>
+            <NavLink href="/?view=report" search="?view=report" active={activeNav === 'report'}>
+              Report
+            </NavLink>
           </nav>
         </Container>
       </header>
@@ -181,6 +192,8 @@ function App() {
             <ReceiptHistory key={locationKey} />
           ) : view === 'items' ? (
             <ReceiptItems key={locationKey} />
+          ) : view === 'report' ? (
+            <ReceiptReport key={locationKey} />
           ) : (
             <ReceiptUpload key={locationKey} />
           )}

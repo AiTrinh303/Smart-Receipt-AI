@@ -94,3 +94,81 @@ export interface ItemsPage {
   count: number
   total: number
 }
+
+export type ReportBasis = 'all' | 'approved'
+
+/** One currency's total within a yearly report scope (an apartment, a
+ * month, or the overall combined total). `total` is a decimal string
+ * (e.g. "1234.56", "-12.50") -- already rounded server-side, never
+ * parsed back into a number for arithmetic on the frontend. */
+export interface ReportCurrencyTotal {
+  currency: string
+  total: string
+  receipt_count: number
+}
+
+export interface ReportMonth {
+  month: number
+  by_currency: ReportCurrencyTotal[]
+}
+
+export interface ReportApartmentSummary {
+  apartment_id: string
+  apartment_name: string
+  by_currency: ReportCurrencyTotal[]
+  months: ReportMonth[]
+}
+
+export interface ReportExcludedCounts {
+  undated: number
+  not_approved: number
+  no_total: number
+  no_currency: number
+  no_apartment: number
+}
+
+export interface ReportAttentionReceipt {
+  receipt_id: string
+  store_name: string | null
+  purchase_date: string
+  total: string
+  currency: string
+  apartment_id: string
+  warning_codes: string[]
+}
+
+export interface ReportDuplicateGroup {
+  receipt_ids: string[]
+  store_name: string
+  purchase_date: string
+  total: string
+  currency: string
+  apartment_id: string
+}
+
+export interface ReportLargestReceipt {
+  receipt_id: string
+  store_name: string | null
+  purchase_date: string
+  total: string
+  apartment_id: string
+}
+
+export interface ReportCurrencyLargest {
+  currency: string
+  items: ReportLargestReceipt[]
+}
+
+export interface YearlyReport {
+  year: number
+  basis: ReportBasis
+  apartments: ReportApartmentSummary[]
+  overall: ReportCurrencyTotal[]
+  excluded: ReportExcludedCounts
+  with_warnings: number
+  counted_unreviewed: number
+  attention: ReportAttentionReceipt[]
+  possible_duplicates: ReportDuplicateGroup[]
+  possible_duplicate_groups: number
+  largest: ReportCurrencyLargest[]
+}

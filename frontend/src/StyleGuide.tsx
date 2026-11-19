@@ -21,6 +21,7 @@ import {
   StoreCell,
 } from './ReceiptItems'
 import { HistoryRow } from './ReceiptHistory'
+import { formatMoneyFromString } from './components/ui/formatMoney'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 const ALERT_VARIANTS = ['info', 'success', 'warning', 'error'] as const
@@ -1194,6 +1195,135 @@ function StyleGuide() {
               ))}
             </ul>
           )}
+        </Card>
+      </Section>
+
+      <Section title="Yearly report (ReceiptReport -- summary cards, monthly table, Quick check, excluded panel)">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Card className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Oberaudorf - Bergblick">
+              Bergblick
+            </h2>
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-sm text-ink-muted">7 receipts</span>
+              <span className="text-right text-xl font-semibold tabular-nums text-ink">
+                {formatMoneyFromString('1234.56', 'EUR')}
+              </span>
+            </div>
+          </Card>
+          <Card className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Sankt Englmar - Waldglück">
+              Waldglück
+            </h2>
+            <p className="text-sm text-ink-muted">No receipts in 2026.</p>
+          </Card>
+          <Card className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-ink">Both apartments</h2>
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-sm text-ink-muted">7 receipts</span>
+              <span className="text-right text-xl font-semibold tabular-nums text-ink">
+                {formatMoneyFromString('1234.56', 'EUR')}
+              </span>
+            </div>
+          </Card>
+        </div>
+
+        <Card className="flex flex-col gap-4">
+          <h3 className="text-sm font-semibold text-ink">EUR</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">Monthly totals in EUR</caption>
+              <thead>
+                <tr className="border-b border-border text-ink-muted">
+                  <th scope="col" className="py-1 pr-2 font-medium">
+                    Month
+                  </th>
+                  <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
+                    Bergblick
+                  </th>
+                  <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
+                    Waldglück
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-border/40">
+                  <td className="py-1 pr-2">January</td>
+                  <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">120.00</td>
+                  <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-ink-muted">
+            No combined "Both" column here -- the backend has no monthly breakdown for the overall
+            total, and summing two apartments' amounts in the frontend would be arithmetic on money.
+          </p>
+        </Card>
+
+        <Card className="flex flex-col gap-4">
+          <h2 className="text-base font-semibold text-ink">Quick check</h2>
+          <details className="flex flex-col gap-2">
+            <summary className="cursor-pointer select-none text-sm font-semibold text-ink">
+              Receipts with warnings (2)
+            </summary>
+            <ul className="flex flex-col gap-2">
+              <li className="rounded-md border border-border p-3 text-sm">
+                <a href="#" className="font-medium text-ink underline">
+                  Corner Store
+                </a>
+                <p className="mt-1 text-ink-muted">15.01.2026 · EUR 19.99</p>
+                <p className="mt-1 text-ink-muted">total does not match the items</p>
+              </li>
+            </ul>
+          </details>
+          <details className="flex flex-col gap-2">
+            <summary className="cursor-pointer select-none text-sm font-semibold text-ink">
+              Possible duplicates (1 groups)
+            </summary>
+            <ul className="flex flex-col gap-2">
+              <li className="rounded-md border border-border p-3 text-sm">
+                <p className="font-medium text-ink">Corner Store, 15.01.2026, EUR 10.00</p>
+                <p className="mt-1 flex flex-wrap gap-2">
+                  <a href="#" className="font-medium text-ink underline">
+                    Open 1
+                  </a>
+                  <a href="#" className="font-medium text-ink underline">
+                    Open 2
+                  </a>
+                </p>
+                <p className="mt-1 text-ink-muted">Both are counted in the totals until you delete one.</p>
+              </li>
+            </ul>
+          </details>
+          <details className="flex flex-col gap-2">
+            <summary className="cursor-pointer select-none text-sm font-semibold text-ink">
+              Largest receipts
+            </summary>
+            <p className="text-sm text-ink-muted">None.</p>
+          </details>
+          <Alert variant="success">No warnings and no duplicates found in 2026.</Alert>
+        </Card>
+
+        <Card className="flex flex-col gap-3">
+          <h2 className="text-base font-semibold text-ink">Receipts not in these totals</h2>
+          <ul className="flex flex-col gap-2 text-sm">
+            <li>
+              <a href="#" className="font-medium text-brand underline">
+                3 receipts in 2026 are not approved yet
+              </a>
+            </li>
+            <li>
+              <a href="#" className="font-medium text-brand underline">
+                2 receipts have no valid date
+              </a>
+            </li>
+            <li className="text-ink-muted">1 receipt has no total. Open the receipt and fix it with Edit.</li>
+          </ul>
+          <p className="text-sm text-ink-muted">
+            Totals are the amounts printed on the receipts, including VAT. Ask your tax advisor how to
+            use them.
+          </p>
         </Card>
       </Section>
     </div>

@@ -1541,6 +1541,93 @@ uses both.
   more'" section shows the partial-page summary + button, the fully-
   loaded summary, and a failed page's `Alert` + Retry, as static samples.
 
+## Yearly report view
+
+A fourth nav link, "Report" (`?view=report`, `ReceiptReport.tsx`), reads
+`GET /reports/years`/`GET /reports/yearly` and shows spending per
+apartment for one year, with a quick check of what to look at before
+trusting the totals.
+
+- **Every receipt counts by default.** The checkbox "Only count receipts
+  I approved" is unchecked by default (`basis=all`, the backend's own
+  default — the owner has no time to review every receipt before a tax
+  declaration is due); checking it adds `basis=approved` to the URL.
+  `basis=all` is never written to the URL itself — only an explicit
+  opt-in is. A calm info line ("N of the counted receipts were not
+  reviewed. The quick check below shows what to look at first.") appears
+  under the summary only when `counted_unreviewed > 0` — there is no
+  unconditional "Estimates only" notice.
+- **Money display without arithmetic.** The backend's amounts are
+  already-rounded decimal strings (`"1234.56"`, `"-12.50"`). A new
+  `formatMoneyFromString()` (`components/ui/formatMoney.ts`) displays one
+  exactly as given, with its currency prefix — never parsed into a
+  number and re-formatted, which would be arithmetic on money in the
+  frontend. This is also why the monthly table has **no combined "Both"
+  column**: the backend's `overall` field has no monthly breakdown, and
+  summing two apartments' decimal strings to produce one would be
+  exactly that forbidden arithmetic — the monthly table shows one column
+  per apartment only, documented in `ReceiptReport.tsx` itself.
+- **Summary cards**: one `Card` per apartment (short name visible via
+  `apartmentShortName`, full name in `title`) with a right-aligned,
+  tabular-nums amount per currency plus "N receipts", then a combined
+  "Both apartments" card built from the backend's own `overall` field
+  (never computed by summing the apartment cards). An apartment with no
+  data shows "No approved receipts in `<year>`." under `basis=approved`
+  or "No receipts in `<year>`." under `basis=all`.
+- **Monthly table**: one table per currency present in any apartment's
+  `months`, rows = months actually present (via a fixed `MONTH_NAMES`
+  array, no locale dependence), columns = one per apartment. A cell with
+  no data for that apartment/month/currency shows a plain dash. From
+  `sm` up it's a table; below `sm`, a list of cards — only one of the
+  two is ever mounted (`useMediaQuery`, same pattern as
+  `ReceiptItems.tsx`/`ReceiptResult.tsx`).
+- **"Quick check"** (three `<details>`, closed by default, each
+  `<summary>` showing its own count): "Receipts with warnings (N)" lists
+  the backend's `attention` (capped at 50 — `with_warnings` is the full,
+  uncapped count, so "Showing the first 50." appears only when it
+  exceeds the list actually returned), each a link to `?receipt=<id>`
+  with the store, `formatDisplayDate`'s `DD.MM.YYYY`, the amount, and
+  every warning code translated through a fixed, documented map
+  (`TOTAL_MISMATCH`/`LINE_MISMATCH`/`MISSING_STORE`/`FUTURE_DATE` have
+  plain-words labels; any other code shows the raw code itself, never
+  nothing). "Possible duplicates (N groups)" lists the backend's
+  `possible_duplicates` (also capped at 50; `possible_duplicate_groups`
+  is the full count), each group as one line ("store, date, total") with
+  one "Open N" link per receipt in the group and a muted note that both
+  stay counted until the owner deletes one. "Largest receipts" lists the
+  backend's `largest`, per currency. Any block with nothing to show
+  renders "None." instead of an empty list. When neither warnings nor
+  duplicates have anything (`with_warnings === 0 && possible_duplicate_
+  groups === 0`), a success `Alert` ("No warnings and no duplicates
+  found in `<year>`.") appears above the three blocks — it never claims
+  the data itself is correct, only that nothing was flagged.
+- **"Receipts not in these totals"** (a second, separate panel): the
+  "not approved" link (`?view=history&year=<year>&status=needs_review`)
+  appears only when `basis === 'approved'` *and* `excluded.not_approved
+  > 0` (under `basis === 'all'` this bucket is always `0` anyway, since
+  the backend never excludes on status there); "undated" links to
+  `?view=history&year=none`; `no_total`/`no_currency`/`no_apartment` are
+  plain text with a count and a hint to open the receipt and fix it with
+  Edit (no filter exists for these, so no link is invented); a
+  `with_warnings` line is also shown here as plain text, even though
+  those receipts *are* counted — this panel is a general "check before
+  you trust the totals" area, not strictly "excluded only". A zero count
+  renders nothing; when every one of these is zero, a *different*
+  success `Alert` appears ("Every receipt of `<year>` is in these
+  totals.") — distinct from the Quick check's own success message, since
+  the two panels have different success conditions. A fixed line always
+  follows: "Totals are the amounts printed on the receipts, including
+  VAT. Ask your tax advisor how to use them."
+- **Loading/error/empty**: `role="status" aria-busy="true"` with the
+  exact text "Loading report...", `Skeleton` blocks; `Alert` + Retry on
+  error; "No dated receipts yet. Upload and approve receipts to see the
+  report." when `GET /reports/years` returns no years at all (no Year
+  select rendered in that case).
+- **Added to `?view=styleguide`:** a new "Yearly report" section shows
+  the summary cards (including the zero-apartment message), the monthly
+  table (with a note explaining the missing "Both" column), the three
+  Quick check blocks plus its success `Alert`, and the excluded panel.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
