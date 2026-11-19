@@ -1492,20 +1492,54 @@ before the first row.
   ticket asked for; a new test (`ReceiptHistory.test.tsx`) confirms Year
   and Status render inside the same row container at the `md:flex-row`
   breakpoint.
-- **"Show more" pagination: blocked, not implemented.** `GET /receipts`
-  (`backend/api/routes.py`'s `list_receipts`) accepts only `limit`/
-  `apartment_id`/`year`/`status` — no `offset` — and its response is
-  `{"items": [...], "count": N}` with no `total` field, unlike `GET
-  /items`, which has both. Building "Show more" the way the Items view
-  does it would require a backend change, which was explicitly out of
-  scope for this (frontend-only) ticket; per its own stop condition, this
-  was reported instead of guessed at. `ReceiptHistory.tsx` still uses the
-  plain, un-paginated `listReceipts()` call it always had (the backend's
-  own default `limit` of 50 receipts). **To add paging later**, `GET
-  /receipts` needs an `offset` query param (mirroring `GET /items`'s
-  `Query(default=0, ge=0)`) and its response needs a `total` field (the
-  unfiltered/filtered row count before the `limit` slice) — a backend
-  change, not something the frontend can work around.
+- **"Show more" pagination: blocked at the time, now added.** `GET
+  /receipts` had no `offset` param and no `total` field, unlike `GET
+  /items`; this was reported rather than guessed at, per this ticket's
+  own stop condition. See "Add paging to the receipt list" below for how
+  both the backend and `ReceiptHistory.tsx` resolved this.
+
+## Add paging to the receipt list
+
+The backend gap flagged above ("Show more" blocked) is closed: `GET
+/receipts` now accepts `offset` and returns `total`, and `ReceiptHistory`
+uses both.
+
+- **Backend: `GET /receipts?limit=N&offset=M`.** `offset` defaults to 0
+  (`>= 0`, else `422`, same pattern as `GET /items`'s own `offset`). The
+  response gains `"total"`: every receipt matching the given filters,
+  ignoring `limit`/`offset` entirely, in the same stable order
+  (`created_at` DESC, `receipt_id` ASC) already applied *before* the
+  slice — `count` stays the number of items actually returned on this
+  page. `adapters/sqlite_repository.py`'s `list_receipts(limit, offset=0,
+  ...)` now returns `(summaries, total)`: `total = len(rows)` from the
+  shared `_filtered_receipt_rows()` helper (reused exactly as `GET
+  /items` already reused it — no filter logic duplicated), and
+  `summaries` is built only from `rows[offset : offset + limit]`. A row
+  skipped for unparseable `extracted_json` is excluded from `total` the
+  same way it was always excluded from `count` — it was never part of
+  `rows` to begin with, not a new special case.
+- **Frontend: `listReceipts()`** gained `offset` (sent as a query param
+  when given) and its response type gained `total`. `ReceiptHistory.tsx`
+  now pages exactly the way `ReceiptItems.tsx` already does: `PAGE_SIZE =
+  50`; a `requestIdRef` shared between the main load effect and
+  `handleShowMore` so a reply to a request that's no longer the latest
+  one issued can never overwrite newer state (layered on top of the
+  existing per-mount `cancelled` closure, which already discards a stale
+  response across a full remount); "Show more" requests `offset:
+  listCount` and **appends** via `setItems((prev) => [...(prev ?? []),
+  ...response.items])`, never replacing; a failed "Show more" leaves the
+  existing rows alone and shows its own `Alert variant="error"` + Retry
+  (`loadMoreError`, separate from the main `error`); changing a tab/
+  filter is already a full remount (same mechanism as before), so paging
+  resets to `offset=0` for free, with no separate "reset paging" state.
+- **Summary line**: `{listCount} of {listTotal} receipts` while
+  `listCount < listTotal` (matching the Items view's own "`count` of
+  `total` items" wording), or the original, unchanged `` `${listTotal}
+  ${listTotal === 1 ? 'receipt' : 'receipts'}` `` once everything shown —
+  still `role="status"`, still exactly "N receipts" once loaded.
+- **Added to `?view=styleguide`:** a new "History summary line and 'Show
+  more'" section shows the partial-page summary + button, the fully-
+  loaded summary, and a failed page's `Alert` + Retry, as static samples.
 
 ## Changelog
 

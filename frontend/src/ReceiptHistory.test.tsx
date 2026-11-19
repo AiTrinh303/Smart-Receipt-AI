@@ -121,7 +121,7 @@ describe('ReceiptHistory', () => {
   test('three items are shown in the given (server) order', async () => {
     // Given the server returns three receipts, newest first
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3, total: 3 })) }),
     )
 
     // When the history view is rendered
@@ -143,7 +143,7 @@ describe('ReceiptHistory', () => {
     fetchSpy.mockImplementation(
       routeFetch({
         facets: () => Promise.resolve(jsonResponse(200, { apartments: [], total: 0, years: [], has_undated: false })),
-        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
       }),
     )
 
@@ -175,6 +175,7 @@ describe('ReceiptHistory', () => {
                 },
               ],
               count: 1,
+              total: 1,
             }),
           ),
       }),
@@ -198,7 +199,7 @@ describe('ReceiptHistory', () => {
     fetchSpy.mockImplementation(
       routeFetch({
         facets: () => deferred.promise,
-        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
       }),
     )
 
@@ -234,7 +235,7 @@ describe('ReceiptHistory', () => {
           }
           return Promise.resolve(jsonResponse(200, DEFAULT_FACETS))
         },
-        list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3, total: 3 })),
       }),
     )
     const user = userEvent.setup()
@@ -271,7 +272,7 @@ describe('ReceiptHistory', () => {
           }
           return Promise.resolve(jsonResponse(200, { apartments: [], total: 0, years: [], has_undated: false }))
         },
-        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
       }),
     )
     const user = userEvent.setup()
@@ -318,6 +319,7 @@ describe('ReceiptHistory', () => {
                 },
               ],
               count: 1,
+              total: 1,
             }),
           ),
       }),
@@ -363,6 +365,7 @@ describe('ReceiptHistory', () => {
                 },
               ],
               count: 2,
+              total: 2,
             }),
           ),
       }),
@@ -394,6 +397,7 @@ describe('ReceiptHistory', () => {
                 },
               ],
               count: 1,
+              total: 1,
             }),
           ),
       }),
@@ -410,7 +414,7 @@ describe('ReceiptHistory', () => {
 
   test('tabs render with counts from the facets', async () => {
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
     render(<ReceiptHistory />)
 
@@ -426,7 +430,7 @@ describe('ReceiptHistory', () => {
 
   test('each apartment tab shows the full name as its title tooltip', async () => {
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
     render(<ReceiptHistory />)
 
@@ -445,7 +449,7 @@ describe('ReceiptHistory', () => {
           }
           return Promise.resolve(jsonResponse(200, DEFAULT_FACETS))
         },
-        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
       }),
     )
     render(<HistoryHarness />)
@@ -468,7 +472,7 @@ describe('ReceiptHistory', () => {
   test('arrow keys move the tab selection', async () => {
     const user = userEvent.setup()
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
     render(<HistoryHarness />)
     await waitFor(() => {
@@ -515,7 +519,7 @@ describe('ReceiptHistory', () => {
 
     // All apartments -- badge shown
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [item], count: 1 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [item], count: 1, total: 1 })) }),
     )
     const { unmount } = render(<ReceiptHistory />)
     await waitFor(() => {
@@ -543,7 +547,7 @@ describe('ReceiptHistory', () => {
       routeFetch({
         list: (urlString) => {
           calls.push(urlString)
-          return Promise.resolve(jsonResponse(200, { items: [], count: 0 }))
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 }))
         },
       }),
     )
@@ -567,7 +571,7 @@ describe('ReceiptHistory', () => {
     fetchSpy.mockImplementation(
       routeFetch({
         facets: () => Promise.resolve(jsonResponse(200, { ...DEFAULT_FACETS, has_undated: false })),
-        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
       }),
     )
     const { unmount } = render(<ReceiptHistory />)
@@ -580,7 +584,7 @@ describe('ReceiptHistory', () => {
     fetchSpy.mockImplementation(
       routeFetch({
         facets: () => Promise.resolve(jsonResponse(200, { ...DEFAULT_FACETS, has_undated: true })),
-        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
       }),
     )
     render(<ReceiptHistory />)
@@ -596,7 +600,7 @@ describe('ReceiptHistory', () => {
       routeFetch({
         list: (urlString) => {
           capturedUrl = urlString
-          return Promise.resolve(jsonResponse(200, { items: [], count: 0 }))
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 }))
         },
       }),
     )
@@ -618,7 +622,7 @@ describe('ReceiptHistory', () => {
       routeFetch({
         list: (urlString) => {
           capturedUrl = urlString
-          return Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3 }))
+          return Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3, total: 3 }))
         },
       }),
     )
@@ -641,7 +645,7 @@ describe('ReceiptHistory', () => {
       routeFetch({
         list: (urlString) => {
           capturedUrl = urlString
-          return Promise.resolve(jsonResponse(200, { items: [], count: 0 }))
+          return Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 }))
         },
       }),
     )
@@ -660,7 +664,7 @@ describe('ReceiptHistory', () => {
     const user = userEvent.setup()
     window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}&year=2026`)
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
     render(<HistoryHarness />)
     await waitFor(() => {
@@ -678,7 +682,7 @@ describe('ReceiptHistory', () => {
   test('no "Clear filters" button when only the apartment tab is selected', async () => {
     window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}`)
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
     render(<ReceiptHistory />)
     await waitFor(() => {
@@ -690,7 +694,7 @@ describe('ReceiptHistory', () => {
   test('a filtered empty result shows "No receipts match these filters.", not the plain empty state', async () => {
     window.history.replaceState({}, '', '/?view=history&status=approved')
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
 
     render(<ReceiptHistory />)
@@ -704,7 +708,7 @@ describe('ReceiptHistory', () => {
   test('Back restores the previous tab and filters', async () => {
     const user = userEvent.setup()
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
     render(<HistoryHarness />)
     await waitFor(() => {
@@ -728,7 +732,7 @@ describe('ReceiptHistory', () => {
 
   test('the "N receipts" count is shown as a status', async () => {
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3, total: 3 })) }),
     )
     render(<ReceiptHistory />)
     await waitFor(() => {
@@ -754,7 +758,7 @@ describe('ReceiptHistory', () => {
 
   test('a valid ISO purchase_date renders as DD.MM.YYYY via formatDisplayDate', async () => {
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
     )
     render(<ReceiptHistory />)
 
@@ -767,7 +771,7 @@ describe('ReceiptHistory', () => {
     fetchSpy.mockImplementation(
       routeFetch({
         list: () =>
-          Promise.resolve(jsonResponse(200, { items: [oneItem({ purchase_date: '02 Juni 2026' })], count: 1 })),
+          Promise.resolve(jsonResponse(200, { items: [oneItem({ purchase_date: '02 Juni 2026' })], count: 1 , total: 1 })),
       }),
     )
     render(<ReceiptHistory />)
@@ -781,7 +785,7 @@ describe('ReceiptHistory', () => {
   test('a missing purchase_date renders MissingValue, not raw "Not detected" text', async () => {
     fetchSpy.mockImplementation(
       routeFetch({
-        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ purchase_date: null })], count: 1 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ purchase_date: null })], count: 1 , total: 1 })),
       }),
     )
     render(<ReceiptHistory />)
@@ -795,7 +799,7 @@ describe('ReceiptHistory', () => {
 
   test('the status badge is shown only when the Status filter is "All"', async () => {
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'approved' })], count: 1 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'approved' })], count: 1 , total: 1 })) }),
     )
     const { unmount } = render(<ReceiptHistory />)
     await waitFor(() => {
@@ -805,7 +809,7 @@ describe('ReceiptHistory', () => {
 
     window.history.replaceState({}, '', '/?view=history&status=approved')
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'approved' })], count: 1 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'approved' })], count: 1 , total: 1 })) }),
     )
     render(<ReceiptHistory />)
     await waitFor(() => {
@@ -822,7 +826,7 @@ describe('ReceiptHistory', () => {
           Promise.resolve(
             jsonResponse(200, { apartments: [threeSegment], total: 5, years: [2026], has_undated: false }),
           ),
-        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
       }),
     )
     render(<ReceiptHistory />)
@@ -845,7 +849,7 @@ describe('ReceiptHistory', () => {
                 : DEFAULT_FACETS,
             ),
           ),
-        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })),
       }),
     )
     render(<ReceiptHistory />)
@@ -859,7 +863,7 @@ describe('ReceiptHistory', () => {
 
   test('row hrefs have no `from` when unfiltered', async () => {
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
     )
     render(<ReceiptHistory />)
 
@@ -871,7 +875,7 @@ describe('ReceiptHistory', () => {
     const longName = 'A'.repeat(140)
     fetchSpy.mockImplementation(
       routeFetch({
-        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ store_name: longName })], count: 1 })),
+        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ store_name: longName })], count: 1 , total: 1 })),
       }),
     )
     render(<ReceiptHistory />)
@@ -885,7 +889,7 @@ describe('ReceiptHistory', () => {
 
   test('Year and Status selects are composed in the same row container', async () => {
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
     render(<ReceiptHistory />)
 
@@ -903,5 +907,179 @@ describe('ReceiptHistory', () => {
     const statusRow = statusSelect.closest('div')?.parentElement
     expect(yearRow).toBe(statusRow)
     expect(yearRow?.className).toContain('md:flex-row')
+  })
+
+  // --- "Show more" paging (Commit 2) --------------------------------------
+
+  test('the summary shows "N receipts" when everything is loaded', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: THREE_ITEMS, count: 3, total: 3 })) }),
+    )
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByText('3 receipts')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
+  })
+
+  test('the summary shows "X of N receipts" while more remain, and "Show more" appends and disappears at the end', async () => {
+    const firstPage = [oneItem({ receipt_id: 'p1-0', store_name: 'Page 1 Item 0' })]
+    const secondPage = [oneItem({ receipt_id: 'p2-0', store_name: 'Page 2 Item 0' })]
+    let callCount = 0
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          calls.push(urlString)
+          callCount += 1
+          if (callCount === 1) {
+            return Promise.resolve(jsonResponse(200, { items: firstPage, count: 1, total: 2 }))
+          }
+          return Promise.resolve(jsonResponse(200, { items: secondPage, count: 1, total: 2 }))
+        },
+      }),
+    )
+    const user = userEvent.setup()
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByText('1 of 2 receipts')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Page 1 Item 0')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show more' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('2 receipts')).toBeInTheDocument()
+    })
+    // The first page's row is still shown -- appended, not replaced
+    expect(screen.getByText('Page 1 Item 0')).toBeInTheDocument()
+    expect(screen.getByText('Page 2 Item 0')).toBeInTheDocument()
+    expect(calls[1]).toContain('offset=1')
+    // Nothing left to show -- the button is gone
+    expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
+  })
+
+  test('a failed "Show more" keeps the rows shown and shows an error with Retry', async () => {
+    const firstPage = [oneItem({ store_name: 'Page 1 Item' })]
+    let callCount = 0
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () => {
+          callCount += 1
+          if (callCount === 1) {
+            return Promise.resolve(jsonResponse(200, { items: firstPage, count: 1, total: 3 }))
+          }
+          return Promise.resolve(jsonResponse(500, { detail: 'Internal error' }))
+        },
+      }),
+    )
+    const user = userEvent.setup()
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Show more' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Could not load receipt history. Please try again.')
+    })
+    expect(screen.getByText('Page 1 Item')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+
+    // Retry re-sends the request; a success clears the error and the row stays
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () =>
+          Promise.resolve(
+            jsonResponse(200, {
+              items: [oneItem({ receipt_id: 'page-2', store_name: 'Page 2 Item' })],
+              count: 1,
+              total: 3,
+            }),
+          ),
+      }),
+    )
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => {
+      expect(screen.getByText('Page 2 Item')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  test('changing a filter resets paging to the first page (offset=0)', async () => {
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 5 }))
+        },
+      }),
+    )
+    const user = userEvent.setup()
+    render(<HistoryHarness />)
+    await waitFor(() => {
+      expect(screen.getByText('Show more')).toBeInTheDocument()
+    })
+
+    await user.selectOptions(screen.getByLabelText('Status'), 'Approved')
+
+    await waitFor(() => expect(window.location.search).toContain('status=approved'))
+    const lastCall = calls[calls.length - 1]
+    expect(lastCall).toContain('offset=0')
+  })
+
+  test('a reply to an older (stale) request never overwrites the newer result', async () => {
+    const olderItem = oneItem({ receipt_id: 'stale-id', store_name: 'Stale Item' })
+    const newerItem = oneItem({ receipt_id: 'fresh-id', store_name: 'Fresh Item' })
+    const olderFacets = createDeferred<unknown>()
+    let facetsCallCount = 0
+
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: () => {
+          facetsCallCount += 1
+          // The first (older) request's facets call never resolves until
+          // we explicitly do so below, well after the second request
+          // finishes -- simulating an out-of-order network reply.
+          return facetsCallCount === 1 ? olderFacets.promise : Promise.resolve(jsonResponse(200, DEFAULT_FACETS))
+        },
+        list: (urlString) =>
+          Promise.resolve(
+            jsonResponse(
+              200,
+              urlString.includes('status=approved')
+                ? { items: [olderItem], count: 1, total: 1 }
+                : { items: [newerItem], count: 1, total: 1 },
+            ),
+          ),
+      }),
+    )
+
+    // Given the older (stale) request starts first, for a URL with a filter
+    window.history.replaceState({}, '', '/?view=history&status=approved')
+    const { unmount } = render(<ReceiptHistory />)
+
+    // When a newer request starts (remount, as a real navigation would do)
+    // before the older one has resolved
+    unmount()
+    window.history.replaceState({}, '', '/?view=history')
+    render(<ReceiptHistory />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Fresh Item')).toBeInTheDocument()
+    })
+
+    // And only then does the older, now-stale request resolve
+    olderFacets.resolve(jsonResponse(200, DEFAULT_FACETS))
+
+    // Then the stale response never overwrites the newer, already-shown result
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.queryByText('Stale Item')).not.toBeInTheDocument()
+    expect(screen.getByText('Fresh Item')).toBeInTheDocument()
   })
 })

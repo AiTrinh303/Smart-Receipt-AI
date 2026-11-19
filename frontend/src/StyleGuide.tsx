@@ -701,6 +701,32 @@ function StyleGuide() {
         </p>
       </Section>
 
+      <Section title='History summary line and "Show more" (not everything loaded / everything loaded / a failed page)'>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <p role="status" className="text-sm text-ink-muted">
+              50 of 120 receipts
+            </p>
+          </div>
+          <Button variant="secondary" size="sm" className="self-start">
+            Show more
+          </Button>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <p role="status" className="text-sm text-ink-muted">
+            120 receipts
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Alert variant="error">Could not load receipt history. Please try again.</Alert>
+          <Button variant="secondary" size="sm" className="self-start">
+            Retry
+          </Button>
+        </div>
+      </Section>
+
       <Section title="History tab bar and filters (ReceiptHistory -- All apartments / one apartment selected)">
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => setHistoryTab('all')}>

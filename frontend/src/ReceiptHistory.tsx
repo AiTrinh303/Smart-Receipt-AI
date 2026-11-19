@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError } from './api/ApiError'
 import { getReceiptFacets } from './api/getReceiptFacets'
 import { listReceipts } from './api/listReceipts'
@@ -6,6 +6,7 @@ import type { ApartmentFacet, ReceiptSummary } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
 import { DateCell } from './ReceiptItems'
 import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
+import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import ClampedText from './components/ui/ClampedText'
 import PageHeader from './components/ui/PageHeader'
@@ -16,6 +17,7 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo } from './navigation'
 
 const LOADING_ROW_COUNT = 4
+const PAGE_SIZE = 50
 
 const HISTORY_DESCRIPTION = 'Browse every saved receipt, filtered by apartment, year or status.'
 
@@ -187,23 +189,39 @@ function ReceiptHistory() {
 
   const [items, setItems] = useState<ReceiptSummary[] | null>(null)
   const [listCount, setListCount] = useState(0)
+  const [listTotal, setListTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
 
+  const requestIdRef = useRef(0)
   const isSmallScreen = useMediaQuery('(max-width: 639px)')
+
+  const year = effectiveYear(urlParams.year)
+  const status = effectiveStatus(urlParams.status)
 
   useEffect(() => {
     let cancelled = false
     setIsLoading(true)
     setError(null)
+    setLoadMoreError(null)
 
     async function load() {
+      // A fresh requestId, shared with handleShowMore below: whichever
+      // request finishes last wins the id comparison, so a reply to an
+      // older request (e.g. one still in flight when the user filters
+      // again, which fully remounts this component anyway, or a slow
+      // "Show more" from a previous page) can never overwrite a newer
+      // result.
+      const requestId = ++requestIdRef.current
+
       try {
         // Unscoped first: this is always needed for the tab bar's counts,
         // and also validates the URL's `apartment` value against real ids.
         const tabFacets = await getReceiptFacets()
-        if (cancelled) return
+        if (cancelled || requestIdRef.current !== requestId) return
 
         const knownApartmentIds = new Set(tabFacets.apartments.map((a) => a.id))
         const apartmentId = urlParams.apartment && knownApartmentIds.has(urlParams.apartment) ? urlParams.apartment : null
@@ -220,7 +238,7 @@ function ReceiptHistory() {
             // a facet that's only used to populate the Year select.
           }
         }
-        if (cancelled) return
+        if (cancelled || requestIdRef.current !== requestId) return
 
         setApartments(tabFacets.apartments)
         setTotalCount(tabFacets.total)
@@ -228,22 +246,22 @@ function ReceiptHistory() {
         setHasUndated(scopedHasUndated)
         setEffectiveApartmentId(apartmentId)
 
-        const year = effectiveYear(urlParams.year)
-        const status = effectiveStatus(urlParams.status)
-
         const response = await listReceipts({
           apartmentId: apartmentId ?? undefined,
           year: year ?? undefined,
           status: status ?? undefined,
+          limit: PAGE_SIZE,
+          offset: 0,
         })
-        if (cancelled) return
+        if (cancelled || requestIdRef.current !== requestId) return
         setItems(response.items)
         setListCount(response.count)
+        setListTotal(response.total)
       } catch (err) {
-        if (cancelled) return
+        if (cancelled || requestIdRef.current !== requestId) return
         setError(err instanceof ApiError ? LIST_FAILED_MESSAGE : NETWORK_ERROR_MESSAGE)
       } finally {
-        if (!cancelled) setIsLoading(false)
+        if (!cancelled && requestIdRef.current === requestId) setIsLoading(false)
       }
     }
 
@@ -251,13 +269,38 @@ function ReceiptHistory() {
     return () => {
       cancelled = true
     }
-    // urlParams is captured once per mount (the whole page remounts on any
-    // navigation).
+    // urlParams/year/status are captured once per mount (the whole page
+    // remounts on any navigation).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadToken])
 
   const retry = () => {
     setReloadToken((n) => n + 1)
+  }
+
+  const handleShowMore = async () => {
+    const requestId = ++requestIdRef.current
+    setIsLoadingMore(true)
+    setLoadMoreError(null)
+
+    try {
+      const response = await listReceipts({
+        apartmentId: effectiveApartmentId ?? undefined,
+        year: year ?? undefined,
+        status: status ?? undefined,
+        limit: PAGE_SIZE,
+        offset: listCount,
+      })
+      if (requestIdRef.current !== requestId) return
+      setItems((prev) => [...(prev ?? []), ...response.items])
+      setListCount((prev) => prev + response.count)
+      setListTotal(response.total)
+    } catch (err) {
+      if (requestIdRef.current !== requestId) return
+      setLoadMoreError(err instanceof ApiError ? LIST_FAILED_MESSAGE : NETWORK_ERROR_MESSAGE)
+    } finally {
+      if (requestIdRef.current === requestId) setIsLoadingMore(false)
+    }
   }
 
   // Only carry a `from` param when a tab or filter is actually active --
@@ -303,8 +346,8 @@ function ReceiptHistory() {
     })),
   ]
 
-  const yearValue = effectiveYear(urlParams.year)
-  const statusValue = effectiveStatus(urlParams.status)
+  const yearValue = year
+  const statusValue = status
 
   const anyFilterActive = yearValue !== null || statusValue !== null
   const noticeBanner = notice ? <p className="text-sm text-green-600">{notice}</p> : null
@@ -369,7 +412,9 @@ function ReceiptHistory() {
 
       <div className="flex items-center justify-between gap-2">
         <p role="status" className="text-sm text-ink-muted">
-          {listCount} {listCount === 1 ? 'receipt' : 'receipts'}
+          {listCount < listTotal
+            ? `${listCount} of ${listTotal} receipts`
+            : `${listTotal} ${listTotal === 1 ? 'receipt' : 'receipts'}`}
         </p>
         {anyFilterActive && (
           <Button variant="secondary" size="sm" onClick={handleClearFilters}>
@@ -396,20 +441,46 @@ function ReceiptHistory() {
           </div>
         )
       ) : (
-        <ul className="flex flex-col gap-2">
-          {items?.map((item) => (
-            <li key={item.receipt_id}>
-              <HistoryRow
-                item={item}
-                href={receiptHref(item.receipt_id)}
-                onOpen={openReceipt}
-                showApartmentBadge={effectiveApartmentId === null}
-                showStatusBadge={statusValue === null}
-                isSmallScreen={isSmallScreen}
-              />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-2">
+            {items?.map((item) => (
+              <li key={item.receipt_id}>
+                <HistoryRow
+                  item={item}
+                  href={receiptHref(item.receipt_id)}
+                  onOpen={openReceipt}
+                  showApartmentBadge={effectiveApartmentId === null}
+                  showStatusBadge={statusValue === null}
+                  isSmallScreen={isSmallScreen}
+                />
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex flex-col gap-2">
+            {loadMoreError && (
+              <>
+                <Alert variant="error">{loadMoreError}</Alert>
+                <Button variant="secondary" size="sm" className="self-start" onClick={handleShowMore}>
+                  Retry
+                </Button>
+              </>
+            )}
+            {!loadMoreError && listCount < listTotal && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="self-start"
+                onClick={handleShowMore}
+                disabled={isLoadingMore}
+                loading={isLoadingMore}
+                loadingText="Loading..."
+              >
+                Show more
+              </Button>
+            )}
+          </div>
+        </>
       )}
     </div>
   )

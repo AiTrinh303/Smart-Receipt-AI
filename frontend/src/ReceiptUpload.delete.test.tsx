@@ -157,7 +157,7 @@ describe('deleting a saved receipt', () => {
     routeFetch(fetchSpy, {
       get: () => Promise.resolve(jsonResponse(200, SAVED_RECEIPT)),
       del: () => Promise.resolve({ ok: true, status: 204, json: () => Promise.resolve(null) }),
-      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
     })
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: /^delete$/i }))
@@ -210,7 +210,7 @@ describe('deleting a saved receipt', () => {
     routeFetch(fetchSpy, {
       get: () => Promise.resolve(jsonResponse(200, SAVED_RECEIPT)),
       del: () => Promise.resolve(jsonResponse(404, { detail: 'Receipt not found.' })),
-      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
     })
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: /^delete$/i }))
@@ -293,7 +293,7 @@ describe('deleting a saved receipt', () => {
     routeFetch(fetchSpy, {
       get: () => Promise.resolve(jsonResponse(200, SAVED_RECEIPT)),
       del: () => Promise.resolve({ ok: true, status: 204, json: () => Promise.resolve(null) }),
-      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
     })
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: /^delete$/i }))

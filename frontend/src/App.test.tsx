@@ -347,7 +347,7 @@ describe('navigation between upload, history and a saved receipt', () => {
   test('navigation links switch between the upload and history views', async () => {
     // Given the app is rendered on the upload view
     routeFetch(fetchSpy, {
-      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
     })
     const user = userEvent.setup()
     render(<App />)
@@ -391,6 +391,7 @@ describe('navigation between upload, history and a saved receipt', () => {
               },
             ],
             count: 1,
+            total: 1,
           }),
         ),
       get: () => Promise.resolve(jsonResponse(200, SAVED_RECEIPT)),
@@ -422,7 +423,7 @@ describe('navigation between upload, history and a saved receipt', () => {
     window.history.replaceState({}, '', `/?receipt=${VALID_UUID}`)
     routeFetch(fetchSpy, {
       get: () => Promise.resolve(jsonResponse(200, SAVED_RECEIPT)),
-      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0 })),
+      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
     })
     const user = userEvent.setup()
     render(<App />)

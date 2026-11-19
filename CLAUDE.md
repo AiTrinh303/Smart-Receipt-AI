@@ -52,8 +52,10 @@ the purchase info, and the result is displayed for review.
   "Upload another receipt", the 502/503 messages) must stay exactly as they
   are unless a task explicitly asks to change them.
   `src/api/` holds API call modules (`uploadReceipt.ts`, `extractReceipt.ts`,
-  `getReceipt.ts`, `listReceipts.ts` (accepts `{limit?, apartmentId?,
-  year?, status?}`, building the query string itself),
+  `getReceipt.ts`, `listReceipts.ts` (accepts `{limit?, offset?,
+  apartmentId?, year?, status?}`, building the query string itself; its
+  response type carries `total` alongside `items`/`count`, matching `GET
+  /receipts`),
   `getApartments.ts`,
   `updateReceiptApartment.ts`,
   `updateReceiptStatus.ts`, `getReceiptFacets.ts` (`GET /receipts/facets`,
@@ -352,9 +354,23 @@ the purchase info, and the result is displayed for review.
   this ("Tidying History filters" in
   [docs/design.md](docs/design.md) has the exact before/after classes
   and confirms the Items view's own branch is byte-identical, a no-op).
-  "N receipts" is a `role="status"`, unchanged (no "Show more"/paging
-  exists yet for this list — `GET /receipts` has neither `offset` nor
-  `total`, see the backend `routes.py` entry above); "Clear
+  **Paging ("Show more"):** `PAGE_SIZE = 50`; the summary line
+  (`role="status"`) reads `` `${listCount} of ${listTotal} receipts` ``
+  while `listCount < listTotal` (matching the Items view's own "`count`
+  of `total` items" wording), or the original, unchanged `` `${listTotal}
+  ${listTotal === 1 ? 'receipt' : 'receipts'}` `` once everything is
+  shown — still exactly "N receipts" at that point. A `requestIdRef`
+  shared between the main load effect and `handleShowMore` (same pattern
+  as `ReceiptItems.tsx`) means a reply to a request that's no longer the
+  latest one issued can never overwrite newer state; "Show more" requests
+  `offset: listCount` and **appends** via `setItems((prev) =>
+  [...(prev ?? []), ...response.items])`, never replacing what's already
+  shown; a failed "Show more" leaves the existing rows alone and shows
+  its own `Alert variant="error"` + Retry (`loadMoreError`, separate from
+  the main `error`); a tab/filter change is already a full remount (the
+  same mechanism `goToTab`/`handleYearChange`/`handleStatusChange` always
+  used), so paging resets to `offset=0` for free, with no separate "reset
+  paging" state. "Clear
   filters" shows only when a year/status select (not just an
   apartment tab) is active, and resets both, leaving the
   apartment tab alone, per spec. The plain "No receipts yet..." empty
