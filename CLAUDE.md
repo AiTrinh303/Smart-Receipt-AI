@@ -600,6 +600,55 @@ the purchase info, and the result is displayed for review.
   error; "No dated receipts yet. Upload and approve receipts to see the
   report." when `GET /reports/years` returns no years (no Year select
   in that case).
+  **Download controls for the yearly export (`ExportCard`, exported from
+  `ReceiptReport.tsx`; `src/api/reportExportUrl.ts`):** a "For your tax
+  advisor" `Card` below the summary cards, giving two plain `<a href>`
+  links to the backend's `GET /reports/yearly/export.csv`/`.zip` — same
+  "no fetch, the server's own `Content-Disposition` header triggers the
+  download" contract as "Download PDF" in `ReceiptFileViewer.tsx`
+  (whose `DownloadIcon` is exported and reused here rather than
+  duplicated). `reportExportCsvUrl(params)`/`reportExportZipUrl(params)`
+  (`{year, basis?, style, apartmentId?}`) build the query string with
+  `URLSearchParams`, following `getYearlyReport.ts`'s own convention for
+  `basis` (omitted entirely when `"all"`) — **except `style`, which is
+  always sent, even for the default `"excel_de"`**, so the downloaded
+  file's format can never silently depend on the backend's own default
+  changing later (the one deliberate difference from the `basis`
+  convention). `ExportCard` takes `year`/`basis`/`apartments`/
+  `countedUnreviewed` as props (presentational, exported specifically so
+  `StyleGuide.tsx` and tests can render it directly with static data,
+  the same pattern `ApartmentCell`/`HistoryRow`/etc. already use) and
+  keeps the chosen apartment and CSV style in its own component state —
+  deliberately never written to the URL or persisted across a reload,
+  unlike Year/basis, since this is a one-off export choice rather than a
+  saved view. The "Apartment" select ("All apartments" plus each
+  apartment from `useApartments(true)`, short name visible via
+  `apartmentShortName`, full name in the option's `title`) and "CSV
+  format" select ("German Excel (semicolon, decimal comma)", the
+  default value `"excel_de"`, or "Plain (comma, decimal point)",
+  `"plain"`) sit above the two links; Year and
+  "Only count receipts I approved" are read from the surrounding view,
+  never duplicated here, and also shown as plain text next to the links
+  ("`2026, all receipts`"/"`2026, approved receipts only`"), so a
+  Year/basis change (a full remount, like every other filter in this
+  app) updates both the hrefs and that text together. When there is no
+  year to export at all (`year === null` — no dated receipts, the same
+  condition that already shows "No dated receipts yet..." instead of
+  the summary), both links render as non-interactive
+  `<span aria-disabled="true">` (same pattern as `ReviewBar`'s disabled
+  Previous/Next ends) next to a "Nothing to export yet." hint — the
+  selects stay enabled regardless, since choosing ahead of having data
+  is harmless. Muted text always below the links explains what the ZIP
+  contains, that it can take a minute for many receipts, and that it is
+  **not encrypted and holds personal data**; a second muted line,
+  "Receipts that were not reviewed are included.", appears only when
+  `basis === "all"` *and* `countedUnreviewed > 0` (never under
+  `basis === "approved"`, where every counted receipt already is
+  reviewed by definition). No request is ever made for the export
+  itself — only a click on a link triggers the browser's own download;
+  `ExportCard` never calls `fetch`. Added to `?view=styleguide`: two
+  samples right after the summary cards' own sample — one with data (and
+  the unreviewed note), one with `year={null}` for the disabled state.
   **Changing the apartment on a saved receipt (`ReceiptApartment.tsx`,
   `src/api/updateReceiptApartment.ts`):** rendered by the saved-receipt
   container (the same `if (result)` branch used right after extraction and

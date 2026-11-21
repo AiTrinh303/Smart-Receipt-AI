@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { ApiError } from './api/ApiError'
 import { getReportYears } from './api/getReportYears'
 import { getYearlyReport } from './api/getYearlyReport'
+import type { ExportStyle } from './api/reportExportUrl'
+import { reportExportCsvUrl, reportExportZipUrl } from './api/reportExportUrl'
 import type {
+  Apartment,
   ReportApartmentSummary,
   ReportBasis,
   ReportCurrencyTotal,
@@ -15,8 +18,10 @@ import Card from './components/ui/Card'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
 import { formatMoneyFromString } from './components/ui/formatMoney'
+import { useApartments } from './hooks/useApartments'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo } from './navigation'
+import { DownloadIcon } from './ReceiptFileViewer'
 
 const REPORT_DESCRIPTION = 'Spending per apartment, from the receipts you approved.'
 const LOADING_ROW_COUNT = 4
@@ -294,6 +299,143 @@ function MonthlyCurrencyTable({
   )
 }
 
+const EXPORT_SELECT_CLASSES =
+  'h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink ' +
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
+
+const EXPORT_LINK_BASE =
+  'inline-flex min-h-[44px] flex-shrink-0 items-center justify-center gap-1.5 rounded-control px-4 ' +
+  'text-sm font-semibold transition-colors duration-150 motion-reduce:transition-none sm:min-h-0 sm:h-10'
+
+const EXPORT_PRIMARY_LINK_CLASSES =
+  `${EXPORT_LINK_BASE} bg-brand text-white hover:bg-brand-hover focus-visible:outline ` +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
+
+const EXPORT_PRIMARY_DISABLED_CLASSES = `${EXPORT_LINK_BASE} cursor-not-allowed bg-slate-300 text-slate-700`
+
+const EXPORT_SECONDARY_LINK_CLASSES =
+  `${EXPORT_LINK_BASE} border border-border bg-white text-ink hover:bg-slate-50 focus-visible:outline ` +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
+
+const EXPORT_SECONDARY_DISABLED_CLASSES =
+  `${EXPORT_LINK_BASE} cursor-not-allowed border border-border bg-slate-100 text-slate-400`
+
+const EXPORT_NOTHING_TO_EXPORT_TEXT = 'Nothing to export yet.'
+const EXPORT_UNREVIEWED_NOTE_TEXT = 'Receipts that were not reviewed are included.'
+const EXPORT_EXPLANATION_TEXT =
+  'The ZIP has one row per receipt and the original documents as PDF. It can take a minute when ' +
+  'there are many receipts. It contains personal data and is not encrypted: send it only to your ' +
+  'advisor.'
+
+function exportPeriodText(year: number, basis: ReportBasis): string {
+  return `${year}, ${basis === 'approved' ? 'approved receipts only' : 'all receipts'}`
+}
+
+/** "For your tax advisor": the CSV/ZIP download controls below the yearly
+ * summary. Presentational and self-contained (apartment list and style
+ * choice are its own component state, never the URL) so it can be reached
+ * both from ReceiptReport's live data and directly from StyleGuide/tests
+ * with static props -- the same pattern ApartmentCell/HistoryRow/etc.
+ * already use elsewhere in this app. A plain <a href> for each link: no
+ * fetch, no onClick -- the browser downloads via the server's own
+ * Content-Disposition header, exactly like "Download PDF" in
+ * ReceiptFileViewer.tsx. */
+export interface ExportCardProps {
+  /** null when there is no year to export at all (no dated receipts) --
+   * renders both links as disabled, non-interactive spans instead. */
+  year: number | null
+  basis: ReportBasis
+  apartments: Apartment[] | null
+  countedUnreviewed: number
+}
+
+export function ExportCard({ year, basis, apartments, countedUnreviewed }: ExportCardProps) {
+  const [apartmentId, setApartmentId] = useState('')
+  const [style, setStyle] = useState<ExportStyle>('excel_de')
+
+  const showUnreviewedNote = basis === 'all' && countedUnreviewed > 0
+
+  return (
+    <Card className="flex flex-col gap-4">
+      <h2 className="text-base font-semibold text-ink">For your tax advisor</h2>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="report-export-apartment-select" className="text-sm font-medium text-ink">
+            Apartment
+          </label>
+          <select
+            id="report-export-apartment-select"
+            value={apartmentId}
+            onChange={(e) => setApartmentId(e.target.value)}
+            className={EXPORT_SELECT_CLASSES}
+          >
+            <option value="">All apartments</option>
+            {(apartments ?? []).map((apartment) => (
+              <option key={apartment.id} value={apartment.id} title={apartment.name}>
+                {apartmentShortName(apartment.name) ?? apartment.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor="report-export-style-select" className="text-sm font-medium text-ink">
+            CSV format
+          </label>
+          <select
+            id="report-export-style-select"
+            value={style}
+            onChange={(e) => setStyle(e.target.value as ExportStyle)}
+            className={EXPORT_SELECT_CLASSES}
+          >
+            <option value="excel_de">German Excel (semicolon, decimal comma)</option>
+            <option value="plain">Plain (comma, decimal point)</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        {year === null ? (
+          <>
+            <span aria-disabled="true" className={EXPORT_PRIMARY_DISABLED_CLASSES}>
+              <DownloadIcon />
+              Download ZIP (CSV and PDFs)
+            </span>
+            <span aria-disabled="true" className={EXPORT_SECONDARY_DISABLED_CLASSES}>
+              <DownloadIcon />
+              Download CSV only
+            </span>
+          </>
+        ) : (
+          <>
+            <a
+              href={reportExportZipUrl({ year, basis, style, apartmentId: apartmentId || undefined })}
+              className={EXPORT_PRIMARY_LINK_CLASSES}
+            >
+              <DownloadIcon />
+              Download ZIP (CSV and PDFs)
+            </a>
+            <a
+              href={reportExportCsvUrl({ year, basis, style, apartmentId: apartmentId || undefined })}
+              className={EXPORT_SECONDARY_LINK_CLASSES}
+            >
+              <DownloadIcon />
+              Download CSV only
+            </a>
+            <span className="text-sm text-ink-muted">{exportPeriodText(year, basis)}</span>
+          </>
+        )}
+      </div>
+
+      {year === null && <p className="text-sm text-ink-muted">{EXPORT_NOTHING_TO_EXPORT_TEXT}</p>}
+
+      <p className="text-sm text-ink-muted">{EXPORT_EXPLANATION_TEXT}</p>
+      {showUnreviewedNote && <p className="text-sm text-ink-muted">{EXPORT_UNREVIEWED_NOTE_TEXT}</p>}
+    </Card>
+  )
+}
+
 const DETAILS_SUMMARY_CLASSES =
   'cursor-pointer select-none text-sm font-semibold text-ink focus-visible:outline ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
@@ -531,6 +673,7 @@ function ReceiptReport() {
   const [reloadToken, setReloadToken] = useState(0)
 
   const isSmallScreen = useMediaQuery('(max-width: 639px)')
+  const { apartments: exportApartments } = useApartments(true)
 
   useEffect(() => {
     let cancelled = false
@@ -635,6 +778,7 @@ function ReceiptReport() {
             No dated receipts yet. Upload and approve receipts to see the report.
           </p>
         </div>
+        <ExportCard year={null} basis="all" apartments={exportApartments} countedUnreviewed={0} />
       </div>
     )
   }
@@ -690,6 +834,13 @@ function ReceiptReport() {
         ))}
         <OverallSummaryCard overall={report.overall} year={year} basis={basis} />
       </div>
+
+      <ExportCard
+        year={year}
+        basis={basis}
+        apartments={exportApartments}
+        countedUnreviewed={report.counted_unreviewed}
+      />
 
       {report.counted_unreviewed > 0 && (
         <p className="text-sm text-ink-muted">

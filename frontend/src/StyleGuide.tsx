@@ -21,6 +21,7 @@ import {
   StoreCell,
 } from './ReceiptItems'
 import { HistoryRow } from './ReceiptHistory'
+import { ExportCard } from './ReceiptReport'
 import { formatMoneyFromString } from './components/ui/formatMoney'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
@@ -1227,6 +1228,17 @@ function StyleGuide() {
             </div>
           </Card>
         </div>
+
+        <ExportCard
+          year={2026}
+          basis="all"
+          apartments={[
+            { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick' },
+            { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück' },
+          ]}
+          countedUnreviewed={3}
+        />
+        <ExportCard year={null} basis="all" apartments={null} countedUnreviewed={0} />
 
         <Card className="flex flex-col gap-4">
           <h3 className="text-sm font-semibold text-ink">EUR</h3>

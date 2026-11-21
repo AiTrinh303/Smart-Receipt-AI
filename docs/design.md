@@ -1628,6 +1628,55 @@ trusting the totals.
   table (with a note explaining the missing "Both" column), the three
   Quick check blocks plus its success `Alert`, and the excluded panel.
 
+## Download controls for the yearly export
+
+A "For your tax advisor" `Card` (`ReceiptReport.tsx`'s exported
+`ExportCard`, `src/api/reportExportUrl.ts`) sits below the yearly
+summary cards, giving plain links to the backend's
+`GET /reports/yearly/export.csv`/`.zip`.
+
+- **Plain links, no fetch.** `reportExportCsvUrl()`/`reportExportZipUrl()`
+  build the URL with a query string (`URLSearchParams`); the two buttons
+  are real `<a href>` elements, same contract as "Download PDF" in
+  `ReceiptFileViewer.tsx` — the server's own `Content-Disposition:
+  attachment` header is what makes the browser download, so nothing here
+  ever calls `fetch()` or shows a progress indicator. Nothing is
+  requested on page load or on render; only a click downloads.
+- **Two choices, kept in component state, never the URL:** an "Apartment"
+  select ("All apartments" plus each apartment via `useApartments(true)`,
+  short name visible via `apartmentShortName`, full name in the
+  option's `title`) and a "CSV format" select ("German Excel (semicolon,
+  decimal comma)", the default, or "Plain (comma, decimal point)").
+  Unlike the Year/basis state, these two are deliberately *not* persisted
+  to the URL or across reloads — a one-off export choice, not a saved
+  report view.
+- **`style` is always sent**, even for the default `excel_de` — the one
+  deliberate difference from `basis` (which the URL/request omits
+  entirely for the default `"all"`) — so the downloaded file's format
+  can never silently drift if the backend's own default style ever
+  changes.
+- **Year and basis come from the view, not the export card**: the
+  currently-selected Year/"Only count receipts I approved" state feeds
+  straight into both links and is also shown as plain text next to them
+  ("2026, all receipts" / "2026, approved receipts only"), so changing
+  either immediately updates both the links and that text (the whole
+  view remounts on a Year/basis change, same mechanism as everywhere
+  else in this app).
+- **Disabled state** (`year === null` — no dated receipts at all):
+  both links render as non-interactive `<span aria-disabled="true">`
+  (same pattern as `ReviewBar`'s disabled Previous/Next ends), with a
+  "Nothing to export yet." hint; no apartment/style selects are hidden,
+  since picking ahead of having data is harmless.
+- **Muted explanatory text** always below the links: what the ZIP
+  contains, that it can take a minute for many receipts, and that it is
+  **not encrypted** and holds personal data. A second line, "Receipts
+  that were not reviewed are included.", appears only when
+  `basis === 'all'` *and* `counted_unreviewed > 0` — the one case where
+  the export's contents could otherwise surprise the owner.
+- **Added to `?view=styleguide`:** two `ExportCard` samples right after
+  the summary cards — one with data (and the unreviewed note), one with
+  `year={null}` showing the disabled state.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

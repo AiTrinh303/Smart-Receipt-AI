@@ -9,7 +9,7 @@ A web app that stores the shopping receipts of my two holiday apartments in Germ
 - Upload a receipt photo or PDF; AI reads the store, date, items and total.
 - Browse History and Items, filter by apartment/year/status, search items.
 - Yearly report (counts every receipt; shows warnings, possible duplicates and the largest receipts to check).
-- Yearly export for the tax advisor: a CSV (German or plain/English style) or a ZIP with the CSVs plus every receipt as a PDF.
+- Download the yearly report as CSV and a ZIP with the PDFs, for the tax advisor.
 
 ## Before you start
 - Python 3 (I use 3.12) and Node.js with npm (a current LTS version). Check with `python3 --version` and `node --version`.

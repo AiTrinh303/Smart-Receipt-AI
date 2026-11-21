@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptReport from './ReceiptReport'
+import { SAMPLE_APARTMENTS, clearApartmentsCache, withApartments } from './test/apartmentsFetch'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
+  clearApartmentsCache()
 })
 
 afterEach(() => {
@@ -112,7 +114,7 @@ describe('ReceiptReport', () => {
   let fetchSpy: jest.Mock
 
   beforeEach(() => {
-    fetchSpy = jest.fn().mockImplementation(routeFetch())
+    fetchSpy = jest.fn().mockImplementation(withApartments(routeFetch()))
     global.fetch = fetchSpy as unknown as typeof fetch
   })
 
@@ -635,5 +637,157 @@ describe('ReceiptReport', () => {
     await waitFor(() => {
       expect(screen.getByRole('table')).toBeInTheDocument()
     })
+  })
+})
+
+describe('ReceiptReport export controls (For your tax advisor)', () => {
+  let fetchSpy: jest.Mock
+
+  beforeEach(() => {
+    fetchSpy = jest.fn().mockImplementation(withApartments(routeFetch()))
+    global.fetch = fetchSpy as unknown as typeof fetch
+  })
+
+  afterEach(() => {
+    // @ts-expect-error cleaning up the test-only global fetch stub
+    delete global.fetch
+  })
+
+  const API_URL = 'http://localhost:8001'
+
+  async function renderReady() {
+    render(<ReportHarness />)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Year')).toHaveValue('2026')
+    })
+  }
+
+  function zipLink() {
+    return screen.getByRole('link', { name: /download zip/i })
+  }
+
+  function csvLink() {
+    return screen.getByRole('link', { name: /download csv only/i })
+  }
+
+  test('the two links have the exact hrefs for the default choices', async () => {
+    await renderReady()
+    expect(zipLink()).toHaveAttribute(
+      'href',
+      `${API_URL}/reports/yearly/export.zip?year=2026&style=excel_de`,
+    )
+    expect(csvLink()).toHaveAttribute(
+      'href',
+      `${API_URL}/reports/yearly/export.csv?year=2026&style=excel_de`,
+    )
+    expect(screen.getByText('2026, all receipts')).toBeInTheDocument()
+  })
+
+  test('changing the year updates both hrefs', async () => {
+    await renderReady()
+    await userEvent.selectOptions(screen.getByLabelText('Year'), '2025')
+    await waitFor(() => {
+      expect(zipLink()).toHaveAttribute(
+        'href',
+        `${API_URL}/reports/yearly/export.zip?year=2025&style=excel_de`,
+      )
+    })
+    expect(csvLink()).toHaveAttribute(
+      'href',
+      `${API_URL}/reports/yearly/export.csv?year=2025&style=excel_de`,
+    )
+  })
+
+  test('the checkbox switches basis -- hrefs and the visible text update', async () => {
+    await renderReady()
+    await userEvent.click(screen.getByLabelText('Only count receipts I approved'))
+    await waitFor(() => {
+      expect(zipLink()).toHaveAttribute(
+        'href',
+        `${API_URL}/reports/yearly/export.zip?year=2026&basis=approved&style=excel_de`,
+      )
+    })
+    expect(csvLink()).toHaveAttribute(
+      'href',
+      `${API_URL}/reports/yearly/export.csv?year=2026&basis=approved&style=excel_de`,
+    )
+    expect(screen.getByText('2026, approved receipts only')).toBeInTheDocument()
+    expect(screen.queryByText('2026, all receipts')).not.toBeInTheDocument()
+  })
+
+  test('choosing an apartment adds apartment_id to both hrefs', async () => {
+    await renderReady()
+    await waitFor(() => {
+      expect(screen.getByLabelText('Apartment')).toHaveValue('')
+    })
+    await userEvent.selectOptions(screen.getByLabelText('Apartment'), SAMPLE_APARTMENTS[0].id)
+    expect(zipLink()).toHaveAttribute(
+      'href',
+      `${API_URL}/reports/yearly/export.zip?year=2026&style=excel_de&apartment_id=${SAMPLE_APARTMENTS[0].id}`,
+    )
+    expect(csvLink()).toHaveAttribute(
+      'href',
+      `${API_URL}/reports/yearly/export.csv?year=2026&style=excel_de&apartment_id=${SAMPLE_APARTMENTS[0].id}`,
+    )
+  })
+
+  test('choosing the plain format sends style=plain; the default sends style=excel_de', async () => {
+    await renderReady()
+    expect(zipLink()).toHaveAttribute('href', expect.stringContaining('style=excel_de'))
+
+    await userEvent.selectOptions(screen.getByLabelText('CSV format'), 'plain')
+    expect(zipLink()).toHaveAttribute('href', expect.stringContaining('style=plain'))
+    expect(csvLink()).toHaveAttribute('href', expect.stringContaining('style=plain'))
+  })
+
+  test('no fetch is ever made for the export links -- only /reports/years and /reports/yearly and /apartments', async () => {
+    await renderReady()
+    await userEvent.selectOptions(screen.getByLabelText('CSV format'), 'plain')
+    await userEvent.selectOptions(screen.getByLabelText('Apartment'), SAMPLE_APARTMENTS[0].id)
+    for (const [url] of fetchSpy.mock.calls) {
+      expect(String(url)).not.toContain('/export.')
+    }
+  })
+
+  test('disabled state when there are no years: non-interactive links with the "Nothing to export yet" hint', async () => {
+    fetchSpy.mockImplementation(
+      withApartments(routeFetch({ years: () => Promise.resolve(jsonResponse(200, { items: [] })) })),
+    )
+    render(<ReceiptReport />)
+    await waitFor(() => {
+      expect(screen.getByText('Nothing to export yet.')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('link', { name: /download zip/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /download csv only/i })).not.toBeInTheDocument()
+    const disabled = screen.getAllByText(/download (zip|csv only)/i)
+    expect(disabled.length).toBeGreaterThan(0)
+    for (const element of disabled) {
+      const container = element.closest('[aria-disabled]')
+      expect(container).toHaveAttribute('aria-disabled', 'true')
+    }
+  })
+
+  test('the "not reviewed" line appears only when basis is all and counted_unreviewed > 0', async () => {
+    fetchSpy.mockImplementation(
+      withApartments(
+        routeFetch({
+          yearly: () =>
+            Promise.resolve(jsonResponse(200, reportResponse({ counted_unreviewed: 3 }))),
+        }),
+      ),
+    )
+    await renderReady()
+    expect(screen.getByText('Receipts that were not reviewed are included.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByLabelText('Only count receipts I approved'))
+    await waitFor(() => {
+      expect(screen.getByText('2026, approved receipts only')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Receipts that were not reviewed are included.')).not.toBeInTheDocument()
+  })
+
+  test('counted_unreviewed = 0 under basis all shows no "not reviewed" line', async () => {
+    await renderReady()
+    expect(screen.queryByText('Receipts that were not reviewed are included.')).not.toBeInTheDocument()
   })
 })
