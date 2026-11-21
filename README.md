@@ -9,6 +9,7 @@ A web app that stores the shopping receipts of my two holiday apartments in Germ
 - Upload a receipt photo or PDF; AI reads the store, date, items and total.
 - Browse History and Items, filter by apartment/year/status, search items.
 - Yearly report (counts every receipt; shows warnings, possible duplicates and the largest receipts to check).
+- Yearly export for the tax advisor: a CSV (German or plain/English style) or a ZIP with the CSVs plus every receipt as a PDF.
 
 ## Before you start
 - Python 3 (I use 3.12) and Node.js with npm (a current LTS version). Check with `python3 --version` and `node --version`.
@@ -55,12 +56,12 @@ After changing `backend/.env`, stop and restart uvicorn. `--reload` does not wat
 
 ## What it does not do yet
 - No login. Use it only on your own machine and do not expose it to the internet.
-- No CSV export of the yearly report yet.
 - No duplicate detection: uploading the same receipt twice creates two records.
 - No bulk approval: receipts are approved one at a time, with a review mode that moves to the next one.
 - The AI can misread a receipt. Check each one against the original before approving it.
 - Receipt files are sent to OpenAI to be read, and deleting a receipt here cannot delete that copy.
 - Backups are manual (`python scripts/backup.py`, run inside `backend/`), and a batch in progress is lost if the browser tab is closed.
+- The yearly export ZIP is **not encrypted** and contains personal data (receipt photos/PDFs and amounts) — handle and send it the same way you would the original receipts.
 
 ## Where the decisions live
 Why it is built this way, in short:

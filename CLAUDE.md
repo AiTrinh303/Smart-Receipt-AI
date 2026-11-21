@@ -1548,6 +1548,116 @@ the purchase info, and the result is displayed for review.
     `receipt_id`), each `{receipt_id, store_name, purchase_date, total,
     apartment_id}` (no `currency` field inside an item — it's already the
     enclosing group's key).
+    **Yearly export for the tax advisor (`domain/report_export.py`,
+    `adapters/report_export.py`, `GET /reports/yearly/export.csv`,
+    `GET /reports/yearly/export.zip`):** gives a statement with one row
+    per receipt plus the receipt documents, so the owner's tax advisor
+    can check every number against the original. `domain.rules.
+    classify_receipt(receipt, year, basis)` was extracted from
+    `summarize_year` (a pure refactor, no behavior change -- all of
+    `summarize_year`'s own tests pass unchanged) and returns one of
+    `"counted"`/`"other_year"`/`"undated"`/`"not_approved"`/`"no_total"`/
+    `"no_currency"`/`"no_apartment"`, the exact same order/rules
+    `summarize_year` always used; `summarize_year` now calls it instead
+    of duplicating the bucket logic. `domain.report_export` is pure
+    (only the standard library's `csv`/`io`, plus `domain.rules`/
+    `domain.models`) and defines `STYLES = ("excel_de", "plain")`:
+    `excel_de` is `;`-delimited, UTF-8 with a leading BOM, decimal comma,
+    dates `DD.MM.YYYY`, German headers/words (for Excel on German
+    Windows); `plain` is `,`-delimited, no BOM, decimal point, ISO dates,
+    English headers/words. `format_amount(value, style)` quantizes a
+    `Decimal` to 2 places with `ROUND_HALF_UP` (the same rule
+    `summarize_year` uses) and swaps `.` for `,` under `excel_de` --
+    never a float. `sanitize_cell(text)` is the CSV/formula-injection
+    mitigation: for TEXT cells only (store name, source file name,
+    apartment name -- never an amount column) a value starting with `=`,
+    `+`, `-`, `@`, a TAB or a CR gets a leading single quote, so a store
+    named e.g. `=HYPERLINK(...)` can never be read as a formula by Excel/
+    Sheets; `None` becomes `""`. `counted_receipts(receipts, year, basis,
+    apartment_id=None)` first restricts to one apartment when given (so
+    a receipt with no apartment is excluded by the filter itself, never
+    by `classify_receipt`), then keeps only the `"counted"` ones -- shared
+    by `receipts_rows`, the ZIP's PDF loop, and the route's
+    `MAX_EXPORT_RECEIPTS` check, so all three always agree on the same
+    set. `receipts_rows(...)` returns rows ordered by normalized purchase
+    date, then store (`casefold()`-ed), then `receipt_id`; columns are
+    Nr/No, Datum/Date, Geschaeft/Store, Wohnung/Apartment, Waehrung/
+    Currency, Betrag brutto/Amount gross (the working-copy total as
+    printed, gross -- no VAT split, no total row), Status/Status
+    (`"geprueft"`/`"nicht geprueft"` or `"approved"`/`"not reviewed"`),
+    Bearbeitet/Edited (`"ja"`/`"nein"` or `"yes"`/`"no"`, from
+    `SavedReceipt.edited`), Warnungen/Warnings (space-separated
+    `check_receipt()` codes -- the same mechanism `summarize_year`'s own
+    `with_warnings`/`attention` already use), PDF/PDF (the ZIP's relative
+    path, blank if that receipt's PDF could not be built), Quelldatei/
+    Source file (`original_filename`), Beleg-ID/Receipt ID.
+    `not_included_rows(...)` lists every excluded receipt (never
+    `"other_year"` or `"counted"`) with a plain-words Reason per bucket;
+    an undated receipt has no year of its own, so it appears in **every**
+    year's `not_included.csv` -- stated in `README.txt`. `summary_rows(
+    summary, style, apartment_id=None)` reuses the numbers an already-
+    computed `YearlySummary` holds (never recomputes money differently):
+    one row per apartment/currency, plus a "Beide Wohnungen"/"Both
+    apartments" row from `summary.overall` -- included **only** when
+    `apartment_id` is `None` (an apartment-filtered export shows that one
+    apartment's rows only). `to_csv(headers, rows, style)` writes via the
+    `csv` module (`QUOTE_MINIMAL`, `"\r\n"` line endings), prepending the
+    BOM for `excel_de`. `readme_text(...)` explains each file, that
+    amounts are gross/printed/not tax advice, that possible duplicates
+    stay fully counted, that undated receipts repeat in every year's
+    `not_included.csv`, the basis, the UTC generation time and the
+    counts (German for `excel_de`, English for `plain`).
+    `adapters.report_export.build_zip(receipts, apartments, year, basis,
+    style, apartment_id, today, upload_dir)` (stdlib `tempfile`/
+    `zipfile` only -- no new dependency) writes `receipts.csv`/
+    `summary.csv`/`not_included.csv`/`README.txt` plus one archive PDF
+    per counted receipt at `documents/<apartment_id>/<name>.pdf`, where
+    `<name>` is `domain.rules.archive_filename(...)` **without** its
+    `.pdf` extension, plus `"_"` and the first 8 characters of the
+    receipt id, plus `.pdf` -- unique even for two receipts sharing
+    store/date/total, and ASCII-only like `archive_filename` itself.
+    Each receipt's PDF comes from the existing `adapters.pdf_archive.
+    make_archive_pdf` (a `.pdf` original passed through byte-for-byte; an
+    image converted, EXIF-rotated, size-capped, exactly as `GET /receipts/
+    {id}/archive.pdf` already does) via the existing safe lookup in
+    `adapters.file_storage.find_file` (plus a resolved-path containment
+    check against `upload_dir`, defense in depth). A missing file or an
+    `ArchiveError` for one receipt never aborts the export: that
+    receipt's PDF column in `receipts.csv` stays blank and
+    `"<receipt_id>: <short reason>"` (no stack trace, no path) is
+    appended to a `problems.txt` member, added to the ZIP only when at
+    least one problem occurred. Returns the path of a temporary ZIP
+    file; the caller deletes it once the response has been sent.
+    The two routes share `_validate_export_params()`: `year` (the same
+    required 4-digit `2000-2100` `_parse_report_year` the plain yearly
+    report uses), `basis` (`ALLOWED_REPORT_BASIS`, default `"all"`),
+    `style` (`STYLES`, default `"excel_de"`), and an optional
+    `apartment_id` (422 via `repository.get_apartment()` if unknown --
+    same check as everywhere else). With `apartment_id` given, only that
+    apartment's receipts are included and a receipt with no apartment is
+    left out -- it appears only in the unfiltered export's
+    `not_included.csv`. `GET /reports/yearly/export.csv` returns just
+    `receipts.csv` as the body -- `Content-Type: text/csv; charset=utf-8`,
+    `Content-Disposition: attachment; filename="receipts-<year>-
+    all-apartments.csv"` (or `-<apartment_id>.csv`), `X-Content-Type-
+    Options: nosniff`, `Cache-Control: private, no-cache` -- and has
+    **no** limit on the number of counted receipts. `GET /reports/yearly/
+    export.zip` returns the full ZIP the same way (`Content-Type:
+    application/zip`, filename `smart-receipt-report-<year>-
+    all-apartments.zip` or `-<apartment_id>.zip`) via `FileResponse` plus
+    a `BackgroundTask` that unlinks the temporary file once the response
+    is sent; `MAX_EXPORT_RECEIPTS = 500` caps only this route (never the
+    CSV route) -- more counted receipts than that is a `422` suggesting
+    picking one apartment or using the CSV export instead, checked via
+    the exact same `counted_receipts(...)` list the ZIP itself would
+    build (so the check and the export can never disagree). Both routes
+    live under `/reports/yearly/export.*`, static suffixes that can never
+    collide with `GET /reports/yearly` or `GET /receipts/{receipt_id}`.
+    **Out of scope:** VAT split, categories, Excel `.xlsx`, currency
+    conversion, encryption, scheduling, and this export never changes
+    any report total. **The ZIP is not encrypted and contains personal
+    data** (receipt images/PDFs and amounts) -- handle and send it with
+    the same care as the original receipts.
     `GET /items` — a flat list of purchased line items across receipts:
     `{"items": [...], "count": <returned>, "total": <all matching rows>}`.
     Accepts the identical `apartment_id`/`year`/`status`

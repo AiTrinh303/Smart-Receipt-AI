@@ -544,6 +544,59 @@ def _currency_totals_to_list(accumulators: dict[str, "_CurrencyAccumulator"]) ->
     ]
 
 
+CLASSIFY_COUNTED = "counted"
+CLASSIFY_OTHER_YEAR = "other_year"
+CLASSIFY_UNDATED = "undated"
+CLASSIFY_NOT_APPROVED = "not_approved"
+CLASSIFY_NO_TOTAL = "no_total"
+CLASSIFY_NO_CURRENCY = "no_currency"
+CLASSIFY_NO_APARTMENT = "no_apartment"
+
+# The excluded buckets, in the fixed order classify_receipt checks them --
+# shared by callers (e.g. domain.report_export) that need to list every
+# excluded reason without re-deriving this order themselves.
+EXCLUDED_BUCKETS = (
+    CLASSIFY_UNDATED,
+    CLASSIFY_NOT_APPROVED,
+    CLASSIFY_NO_TOTAL,
+    CLASSIFY_NO_CURRENCY,
+    CLASSIFY_NO_APARTMENT,
+)
+
+
+def classify_receipt(receipt: SavedReceipt, year: int, basis: str) -> str:
+    """Classifies one receipt for a yearly report/export, using the exact
+    order and rules summarize_year has always used: CLASSIFY_UNDATED (no
+    valid normalized date -- checked before the year comparison, since an
+    undated receipt belongs to no year and so is undated for any year
+    asked about), CLASSIFY_OTHER_YEAR (a valid date, but not in `year` --
+    not an excluded bucket, simply not relevant to this call),
+    CLASSIFY_NOT_APPROVED (only when basis == "approved" and the receipt
+    isn't approved), CLASSIFY_NO_TOTAL, CLASSIFY_NO_CURRENCY,
+    CLASSIFY_NO_APARTMENT, or CLASSIFY_COUNTED. Pure, no I/O, never
+    raises on odd data."""
+    normalized_date = normalize_purchase_date(receipt.purchase_date)
+    if normalized_date is None:
+        return CLASSIFY_UNDATED
+
+    if int(normalized_date[:4]) != year:
+        return CLASSIFY_OTHER_YEAR
+
+    if basis == "approved" and receipt.status != ReceiptStatus.APPROVED:
+        return CLASSIFY_NOT_APPROVED
+
+    if receipt.total is None:
+        return CLASSIFY_NO_TOTAL
+
+    if _report_currency(receipt.currency) is None:
+        return CLASSIFY_NO_CURRENCY
+
+    if receipt.apartment_id is None:
+        return CLASSIFY_NO_APARTMENT
+
+    return CLASSIFY_COUNTED
+
+
 def summarize_year(
     receipts: list[SavedReceipt],
     apartments: list[Apartment],
@@ -572,31 +625,15 @@ def summarize_year(
     counted: list[SavedReceipt] = []
 
     for receipt in receipts:
+        bucket = classify_receipt(receipt, year, basis)
+        if bucket == CLASSIFY_OTHER_YEAR:
+            continue
+        if bucket != CLASSIFY_COUNTED:
+            excluded[bucket] += 1
+            continue
+
         normalized_date = normalize_purchase_date(receipt.purchase_date)
-        if normalized_date is None:
-            excluded["undated"] += 1
-            continue
-
-        if int(normalized_date[:4]) != year:
-            continue
-
-        if basis == "approved" and receipt.status != ReceiptStatus.APPROVED:
-            excluded["not_approved"] += 1
-            continue
-
-        if receipt.total is None:
-            excluded["no_total"] += 1
-            continue
-
         currency = _report_currency(receipt.currency)
-        if currency is None:
-            excluded["no_currency"] += 1
-            continue
-
-        if receipt.apartment_id is None:
-            excluded["no_apartment"] += 1
-            continue
-
         amount = Decimal(str(receipt.total))
         month = int(normalized_date[5:7])
 

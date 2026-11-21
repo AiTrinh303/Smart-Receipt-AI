@@ -7,11 +7,14 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
+from starlette.background import BackgroundTask
 
 import config
+import adapters.file_storage as file_storage
 from adapters.file_storage import delete_file, find_file, save_file
 from adapters.openai_extractor import OpenAIReceiptExtractor
 from adapters.pdf_archive import ArchiveError, make_archive_pdf
+from adapters.report_export import build_zip
 from adapters.sqlite_repository import SqliteReceiptRepository
 from domain.models import (
     ApartmentAssignment,
@@ -24,6 +27,14 @@ from domain.ports import (
     ExtractionUnavailableError,
     ReceiptExtractor,
     ReceiptRepository,
+)
+from domain.report_export import (
+    DEFAULT_EXPORT_STYLE,
+    RECEIPTS_HEADERS,
+    STYLES,
+    counted_receipts,
+    receipts_rows,
+    to_csv,
 )
 from domain.rules import (
     ALLOWED_ITEM_SORT_VALUES,
@@ -305,6 +316,113 @@ def get_yearly_report(
     apartments = repository.list_apartments()
     summary = summarize_year(receipts, apartments, year_value, basis, date.today())
     return summary.model_dump()
+
+
+# Out of scope for the export below: VAT split, categories, Excel .xlsx,
+# currency conversion, encryption, scheduling, any change to report totals.
+MAX_EXPORT_RECEIPTS = 500
+
+
+def _validate_export_params(
+    repository: ReceiptRepository,
+    year: str,
+    basis: str,
+    style: str,
+    apartment_id: str | None,
+) -> tuple[int, str | None]:
+    """Shared by both export routes: validates year/basis/style/
+    apartment_id and returns (year_value, apartment_id) ready to use."""
+    year_value = _parse_report_year(year)
+    if basis not in ALLOWED_REPORT_BASIS:
+        raise HTTPException(
+            status_code=422, detail=f"basis must be one of: {', '.join(ALLOWED_REPORT_BASIS)}."
+        )
+    if style not in STYLES:
+        raise HTTPException(status_code=422, detail=f"style must be one of: {', '.join(STYLES)}.")
+    if apartment_id is not None and repository.get_apartment(apartment_id) is None:
+        raise HTTPException(status_code=422, detail="Unknown apartment.")
+    return year_value, apartment_id
+
+
+def _export_filename_suffix(apartment_id: str | None) -> str:
+    return apartment_id if apartment_id is not None else "all-apartments"
+
+
+@router.get("/reports/yearly/export.csv")
+def export_yearly_receipts_csv(
+    year: str = Query(...),
+    basis: str = Query(default=DEFAULT_REPORT_BASIS),
+    style: str = Query(default=DEFAULT_EXPORT_STYLE),
+    apartment_id: str | None = Query(default=None),
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    """receipts.csv only, with no limit on the number of counted
+    receipts (unlike the ZIP export below, which also generates one PDF
+    per receipt)."""
+    year_value, apartment_id = _validate_export_params(repository, year, basis, style, apartment_id)
+
+    receipts = repository.list_matching_receipts()
+    today = date.today()
+    csv_text = to_csv(
+        RECEIPTS_HEADERS[style],
+        receipts_rows(receipts, year_value, basis, style, today, {}, apartment_id),
+        style,
+    )
+
+    filename = f"receipts-{year_value}-{_export_filename_suffix(apartment_id)}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-cache",
+        },
+    )
+
+
+@router.get("/reports/yearly/export.zip")
+def export_yearly_zip(
+    year: str = Query(...),
+    basis: str = Query(default=DEFAULT_REPORT_BASIS),
+    style: str = Query(default=DEFAULT_EXPORT_STYLE),
+    apartment_id: str | None = Query(default=None),
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    """The full export: receipts.csv, summary.csv, not_included.csv,
+    README.txt and one archive PDF per counted receipt. Limited to
+    MAX_EXPORT_RECEIPTS counted receipts -- more than that, pick one
+    apartment or use the CSV export instead, which has no such limit."""
+    year_value, apartment_id = _validate_export_params(repository, year, basis, style, apartment_id)
+
+    receipts = repository.list_matching_receipts()
+    apartments = repository.list_apartments()
+
+    counted = counted_receipts(receipts, year_value, basis, apartment_id)
+    if len(counted) > MAX_EXPORT_RECEIPTS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"This export would include {len(counted)} receipts, more than the "
+                f"maximum of {MAX_EXPORT_RECEIPTS}. Pick one apartment or use the CSV export instead."
+            ),
+        )
+
+    zip_path = build_zip(
+        receipts, apartments, year_value, basis, style, apartment_id, date.today(), file_storage.UPLOAD_DIR
+    )
+
+    filename = f"smart-receipt-report-{year_value}-{_export_filename_suffix(apartment_id)}.zip"
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=filename,
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-cache",
+        },
+        background=BackgroundTask(lambda: zip_path.unlink(missing_ok=True)),
+    )
 
 
 def get_extractor() -> ReceiptExtractor:
