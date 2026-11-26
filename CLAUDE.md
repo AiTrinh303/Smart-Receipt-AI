@@ -27,6 +27,8 @@ per-feature detail documented in `docs/notes/`.
   check:deps`, and `npm run build` (delete the resulting `dist/`
   afterward — see the color/style rule below (in Conventions) for why
   the build itself matters, not just the tests).
+  Every ticket ends with its own commit. If the ticket gives no commit
+  message, write a short imperative one.
 - **Tests.** Given/When/Then comments. Backend tests use a temporary
   database and `FakeExtractor` only — never the real database and never
   a real OpenAI call. Frontend tests mock `fetch` and reset the URL in
