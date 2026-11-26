@@ -22,6 +22,7 @@ import {
 } from './ReceiptItems'
 import { HistoryRow } from './ReceiptHistory'
 import { ExportCard } from './ReceiptReport'
+import type { ReceiptSummary } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
@@ -76,6 +77,19 @@ type ReceiptApartmentState = 'selected' | 'none' | 'saving' | 'saved' | 'error'
 type ReceiptStatusState = 'needs_review' | 'approved' | 'saving' | 'blocked'
 type BatchPauseState = 'unavailable' | 'network' | 'stopped' | 'finished'
 
+const SAMPLE_EXISTING_RECEIPT: ReceiptSummary = {
+  receipt_id: 'sample-existing-receipt-id',
+  original_filename: 'receipt.jpg',
+  store_name: 'Corner Store',
+  purchase_date: '2026-01-15',
+  currency: 'EUR',
+  total: 19.99,
+  created_at: '2026-01-15T10:00:00+00:00',
+  apartment_id: 'oberaudorf-bergblick',
+  apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
+  status: 'needs_review',
+}
+
 const SAMPLE_BATCH_ITEMS: BatchItem[] = [
   { id: 'batch-sample-1', file: new File([], 'receipt-1.jpg'), status: 'waiting' },
   { id: 'batch-sample-2', file: new File([], 'receipt-2.jpg'), status: 'uploading' },
@@ -93,6 +107,19 @@ const SAMPLE_BATCH_ITEMS: BatchItem[] = [
     status: 'failed',
     error: EXTRACTION_FAILED_MESSAGE,
     errorKind: 'unreadable',
+  },
+  {
+    id: 'batch-sample-6',
+    file: new File([], 'receipt-6.jpg'),
+    status: 'skipped',
+    errorKind: 'duplicate',
+    existing: SAMPLE_EXISTING_RECEIPT,
+  },
+  {
+    id: 'batch-sample-7',
+    file: new File([], 'receipt-7.jpg'),
+    status: 'skipped',
+    errorKind: 'duplicate_in_batch',
   },
 ]
 
@@ -886,14 +913,55 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Batch upload queue (BatchQueue -- compact rows: waiting / in progress / done with warnings / failed / rejected files)">
+      <Section title="Batch upload queue (BatchQueue -- compact rows: waiting / in progress / done with warnings / failed / already saved / same file twice / rejected files)">
         <Card className="flex flex-col gap-4">
           <BatchQueue
             items={SAMPLE_BATCH_ITEMS}
             rejected={SAMPLE_BATCH_REJECTED}
             onRetry={() => {}}
             onRemove={() => {}}
+            onUploadAnyway={() => {}}
           />
+        </Card>
+      </Section>
+
+      <Section title="Batch duplicate-check states (ReceiptUpload batch mode)">
+        <Card className="flex flex-col gap-3">
+          <h3 className="text-sm font-semibold text-ink">Checking for duplicates</h3>
+          <p role="status" className="text-sm text-ink-muted">
+            Checking for duplicates...
+          </p>
+        </Card>
+        <Card className="flex flex-col gap-3">
+          <h3 className="text-sm font-semibold text-ink">Duplicate check request failed</h3>
+          <p className="text-sm text-ink-muted">Could not check for duplicates before uploading.</p>
+          <p className="text-sm text-ink-muted">5 receipts · 1.2 MB · for Waldglück</p>
+        </Card>
+        <Card className="flex flex-col gap-3">
+          <h3 className="text-sm font-semibold text-ink">All files are already saved (0 left to read)</h3>
+          <Button disabled>Read 0 receipts</Button>
+          <p className="text-sm text-ink-muted">All files are already saved.</p>
+        </Card>
+      </Section>
+
+      <Section title="Single-file duplicate warning (ReceiptUpload -- 409 DUPLICATE_FILE)">
+        <Card className="flex flex-col gap-3">
+          <Alert variant="warning">
+            <p>
+              This file is already saved as Corner Store, 15.01.2026, EUR 19.99 (Bergblick).
+            </p>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <a
+                href="#"
+                className="text-sm font-medium text-ink underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                Open saved receipt
+              </a>
+              <Button variant="secondary" size="sm">
+                Upload anyway
+              </Button>
+            </div>
+          </Alert>
         </Card>
       </Section>
 

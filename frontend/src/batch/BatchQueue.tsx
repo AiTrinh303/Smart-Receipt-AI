@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import type { ReceiptSummary } from '../api/types'
 import Alert from '../components/ui/Alert'
 import Button from '../components/ui/Button'
+import MissingValue from '../components/ui/MissingValue'
 import Spinner from '../components/ui/Spinner'
 import { formatFileSize } from '../components/ui/formatFileSize'
+import { formatMoney } from '../components/ui/formatMoney'
+import { apartmentShortName } from '../format/apartmentShortName'
+import { formatDisplayDate } from '../format/formatDisplayDate'
 import { IMAGE_EXTENSIONS, getExtension } from '../fileValidation'
 import type { BatchItem, BatchItemStatus, RejectedFile } from './batchReducer'
 
@@ -12,7 +18,11 @@ const STATUS_LABELS: Record<BatchItemStatus, string> = {
   reading: 'Reading...',
   done: 'Done',
   failed: 'Failed',
+  skipped: 'Skipped',
 }
+
+const ALREADY_SAVED_LABEL = 'Already saved'
+const DUPLICATE_IN_BATCH_LABEL = 'Same file twice'
 
 function isImageFile(file: File): boolean {
   return IMAGE_EXTENSIONS.includes(getExtension(file.name))
@@ -57,6 +67,15 @@ function FileIcon() {
   )
 }
 
+function DuplicateIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 flex-shrink-0" fill="none">
+      <rect x="3" y="3" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="7" y="7" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
 function RemoveIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
@@ -65,7 +84,16 @@ function RemoveIcon() {
   )
 }
 
-function StatusChip({ status }: { status: BatchItemStatus }) {
+function StatusChip({ status, errorKind }: { status: BatchItemStatus; errorKind?: BatchItem['errorKind'] }) {
+  if (status === 'skipped') {
+    const label = errorKind === 'duplicate_in_batch' ? DUPLICATE_IN_BATCH_LABEL : ALREADY_SAVED_LABEL
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning">
+        <DuplicateIcon />
+        {label}
+      </span>
+    )
+  }
   if (status === 'done') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">
@@ -103,6 +131,42 @@ export interface BatchQueueProps {
   rejected: RejectedFile[]
   onRetry: (itemId: string) => void
   onRemove: (itemId: string) => void
+  onUploadAnyway: (itemId: string) => void
+}
+
+const LINK_CLASSES =
+  'text-sm font-medium text-brand underline focus-visible:outline focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2 focus-visible:outline-brand'
+
+/** "Same file as <store> · <date> · <amount> · <apartment short name>" --
+ * each part is MissingValue when the saved receipt doesn't have it. Only
+ * ever rendered for a server-matched duplicate (errorKind "duplicate"),
+ * which always has an `existing` summary; "duplicate_in_batch" has none,
+ * since no saved receipt is involved. */
+function DuplicateSummaryLine({ existing }: { existing: ReceiptSummary | null | undefined }) {
+  if (!existing) {
+    return null
+  }
+
+  const dateDisplay = formatDisplayDate(existing.purchase_date)
+  const parts: ReactNode[] = [
+    existing.store_name ?? <MissingValue />,
+    dateDisplay.kind === 'missing' ? <MissingValue /> : dateDisplay.text,
+    existing.total !== null ? formatMoney(existing.total, existing.currency) : <MissingValue />,
+    existing.apartment_name ? (apartmentShortName(existing.apartment_name) ?? existing.apartment_name) : <MissingValue />,
+  ]
+
+  return (
+    <p className="text-sm text-ink-muted">
+      Same file as{' '}
+      {parts.map((part, index) => (
+        <span key={index}>
+          {index > 0 && ' · '}
+          {part}
+        </span>
+      ))}
+    </p>
+  )
 }
 
 /** Keeps one object URL per queued IMAGE file, for the row thumbnails --
@@ -152,7 +216,7 @@ function useThumbnails(items: BatchItem[]): Map<string, string> {
   return urls
 }
 
-function BatchQueue({ items, rejected, onRetry, onRemove }: BatchQueueProps) {
+function BatchQueue({ items, rejected, onRetry, onRemove, onUploadAnyway }: BatchQueueProps) {
   const thumbnails = useThumbnails(items)
 
   return (
@@ -180,8 +244,8 @@ function BatchQueue({ items, rejected, onRetry, onRemove }: BatchQueueProps) {
                   </p>
                   <p className="text-xs text-ink-muted">{formatFileSize(item.file.size)}</p>
                 </div>
-                <StatusChip status={item.status} />
-                {(item.status === 'waiting' || item.status === 'failed') && (
+                <StatusChip status={item.status} errorKind={item.errorKind} />
+                {(item.status === 'waiting' || item.status === 'failed' || item.status === 'skipped') && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -219,6 +283,34 @@ function BatchQueue({ items, rejected, onRetry, onRemove }: BatchQueueProps) {
                   <Button variant="secondary" size="sm" className="self-start" onClick={() => onRetry(item.id)}>
                     Retry
                   </Button>
+                </div>
+              )}
+
+              {item.status === 'skipped' && (
+                <div className="flex flex-col gap-2 px-3 pb-2">
+                  <DuplicateSummaryLine existing={item.existing} />
+                  <div className="flex flex-wrap items-center gap-3">
+                    {item.existing && (
+                      <a
+                        href={`/?receipt=${item.existing.receipt_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={LINK_CLASSES}
+                      >
+                        Open saved receipt
+                      </a>
+                    )}
+                    {item.errorKind !== 'duplicate_in_batch' && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="self-start"
+                        onClick={() => onUploadAnyway(item.id)}
+                      >
+                        Upload anyway
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
             </li>

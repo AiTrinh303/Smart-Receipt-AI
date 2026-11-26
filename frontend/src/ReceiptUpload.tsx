@@ -18,6 +18,7 @@ import { IMAGE_EXTENSIONS, getExtension, isLikelyValidPdf, isValidFile } from '.
 import { navigateTo } from './navigation'
 import { apartmentPlace } from './format/apartmentPlace'
 import { apartmentShortName } from './format/apartmentShortName'
+import { formatDisplayDate } from './format/formatDisplayDate'
 import { useApartments } from './hooks/useApartments'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import BatchQueue from './batch/BatchQueue'
@@ -38,6 +39,7 @@ import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import Spinner from './components/ui/Spinner'
 import { formatFileSize } from './components/ui/formatFileSize'
+import { formatMoney } from './components/ui/formatMoney'
 
 const RECEIPT_QUERY_PARAM = 'receipt'
 const HISTORY_RETURN_PARAM = 'from'
@@ -272,6 +274,11 @@ function ReceiptUpload() {
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<UploadSuccess | null>(null)
+  // Set only for a 409 DUPLICATE_FILE on the single-file flow -- replaces
+  // the generic error Alert with one naming the already-saved receipt and
+  // an "Upload anyway" button. No pre-check request is made here; this is
+  // purely the upload call's own response.
+  const [duplicateInfo, setDuplicateInfo] = useState<ReceiptSummary | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [apartmentId, setApartmentId] = useState<string | null>(null)
 
@@ -358,22 +365,32 @@ function ReceiptUpload() {
   const batchWaitingOrInFlight = batch.items.some(
     (item) => item.status === 'waiting' || item.status === 'uploading' || item.status === 'reading',
   )
-  const isBatchFinished = isBatchActive && !batchWaitingOrInFlight
+  // Requires `batch.running` too: now that an item can become "skipped"
+  // as soon as the post-addFiles duplicate check runs (before Start is
+  // ever clicked), an all-skipped queue could otherwise look "finished"
+  // pre-start -- that case is "All files are already saved.", not Done.
+  const isBatchFinished = batch.running && isBatchActive && !batchWaitingOrInFlight
   const batchDoneCount = batch.items.filter((item) => item.status === 'done').length
   const batchFailedCount = batch.items.filter((item) => item.status === 'failed').length
+  const batchSkippedCount = batch.items.filter((item) => item.status === 'skipped').length
+  const batchNonSkippedCount = batch.items.length - batchSkippedCount
 
   // "N receipts · X MB · for <short apartment name>" -- shown before start,
   // replaced by the <progress>/"N of M read, K failed" text once running
   // (which also covers paused and finished, since `running` is never reset
-  // back to false by STOP or finishing).
+  // back to false by STOP or finishing). Gains ", S skipped" only when
+  // S > 0, so the string is byte-identical to before when nothing was
+  // skipped.
   const batchTotalBytes = batch.items.reduce((sum, item) => sum + item.file.size, 0)
   const batchSelectedApartment = apartments?.find((a) => a.id === apartmentId) ?? null
   const batchApartmentLabel = batchSelectedApartment
     ? (apartmentShortName(batchSelectedApartment.name) ?? batchSelectedApartment.name)
     : null
-  const batchSummaryText = batchApartmentLabel
+  const batchSummaryTextBase = batchApartmentLabel
     ? `${batch.items.length} receipts · ${formatFileSize(batchTotalBytes)} · for ${batchApartmentLabel}`
     : `${batch.items.length} receipts · ${formatFileSize(batchTotalBytes)}`
+  const batchSummaryText =
+    batchSkippedCount > 0 ? `${batchSummaryTextBase}, ${batchSkippedCount} skipped` : batchSummaryTextBase
 
   // Warn before leaving the page while a batch upload/extract call is
   // actually in flight -- closing the tab then would lose that receipt.
@@ -503,6 +520,7 @@ function ReceiptUpload() {
       batch.reset()
     }
     setSuccess(null)
+    setDuplicateInfo(null)
     setResult(null)
     setIsEditing(false)
     setExtractionError(null)
@@ -536,6 +554,7 @@ function ReceiptUpload() {
     setPreviewUrl(null)
     setError(null)
     setSuccess(null)
+    setDuplicateInfo(null)
     setResult(null)
     setIsEditing(false)
     setExtractionError(null)
@@ -564,6 +583,7 @@ function ReceiptUpload() {
     setFile(null)
     setPreviewUrl(null)
     setError(null)
+    setDuplicateInfo(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -613,6 +633,41 @@ function ReceiptUpload() {
     await handleBatchFilesSelected(droppedFiles)
   }
 
+  // Shared by the normal submit and "Upload anyway" -- the only difference
+  // is the allowDuplicate flag sent with the upload. Nothing is extracted
+  // until the upload itself succeeds either way.
+  const submitUpload = async (allowDuplicate: boolean) => {
+    if (!file || !apartmentId) {
+      return
+    }
+
+    setIsUploading(true)
+    setError(null)
+    setSuccess(null)
+    setDuplicateInfo(null)
+    setResult(null)
+    setIsEditing(false)
+    setExtractionError(null)
+
+    try {
+      const uploadResult = await uploadReceipt(file, apartmentId, allowDuplicate)
+      setSuccess({ receiptId: uploadResult.receipt_id, filename: uploadResult.filename })
+      setReceiptId(uploadResult.receipt_id)
+      setIsUploading(false)
+      await runExtraction(uploadResult.receipt_id)
+    } catch (err) {
+      setIsUploading(false)
+      if (err instanceof ApiError && err.code === 'DUPLICATE_FILE') {
+        const existing = (err.details?.existing as ReceiptSummary | null | undefined) ?? null
+        setDuplicateInfo(existing)
+      } else if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError(NETWORK_ERROR_MESSAGE)
+      }
+    }
+  }
+
   const handleSubmit = async () => {
     if (!file) {
       setError('Please select a file before submitting.')
@@ -621,28 +676,11 @@ function ReceiptUpload() {
     if (!apartmentId) {
       return
     }
+    await submitUpload(false)
+  }
 
-    setIsUploading(true)
-    setError(null)
-    setSuccess(null)
-    setResult(null)
-    setIsEditing(false)
-    setExtractionError(null)
-
-    try {
-      const uploadResult = await uploadReceipt(file, apartmentId)
-      setSuccess({ receiptId: uploadResult.receipt_id, filename: uploadResult.filename })
-      setReceiptId(uploadResult.receipt_id)
-      setIsUploading(false)
-      await runExtraction(uploadResult.receipt_id)
-    } catch (err) {
-      setIsUploading(false)
-      if (err instanceof ApiError) {
-        setError(err.message)
-      } else {
-        setError(NETWORK_ERROR_MESSAGE)
-      }
-    }
+  const handleUploadAnyway = async () => {
+    await submitUpload(true)
   }
 
   const handleRetryExtraction = () => {
@@ -709,6 +747,7 @@ function ReceiptUpload() {
     setPreviewUrl(null)
     setError(null)
     setSuccess(null)
+    setDuplicateInfo(null)
     setIsUploading(false)
     setReceiptId(null)
     setIsExtracting(false)
@@ -1130,9 +1169,19 @@ function ReceiptUpload() {
                     rejected={batch.rejected}
                     onRetry={batch.retry}
                     onRemove={batch.remove}
+                    onUploadAnyway={batch.uploadAnyway}
                   />
 
                   <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-3 border-t border-border bg-surface px-6 pb-6 pt-4">
+                    {batch.checkingDuplicates && (
+                      <p role="status" className="text-sm text-ink-muted">
+                        Checking for duplicates...
+                      </p>
+                    )}
+                    {!batch.checkingDuplicates && batch.duplicateCheckFailed && (
+                      <p className="text-sm text-ink-muted">Could not check for duplicates before uploading.</p>
+                    )}
+
                     {batch.running ? (
                       <div className="flex flex-col gap-1">
                         <label htmlFor="batch-progress" className="text-sm font-medium text-ink">
@@ -1140,12 +1189,13 @@ function ReceiptUpload() {
                         </label>
                         <progress
                           id="batch-progress"
-                          value={batchDoneCount + batchFailedCount}
+                          value={batchDoneCount + batchFailedCount + batchSkippedCount}
                           max={batch.items.length}
                           className="h-2 w-full accent-brand"
                         />
                         <p role="status" className="text-sm text-ink-muted">
                           {batchDoneCount} of {batch.items.length} read, {batchFailedCount} failed
+                          {batchSkippedCount > 0 ? `, ${batchSkippedCount} skipped` : ''}
                         </p>
                       </div>
                     ) : (
@@ -1156,6 +1206,7 @@ function ReceiptUpload() {
                       <>
                         <Alert variant="success">
                           Done: {batchDoneCount} read, {batchFailedCount} failed.
+                          {batchSkippedCount > 0 ? ` ${batchSkippedCount} skipped.` : ''}
                         </Alert>
                         <div className="flex gap-2">
                           <Button
@@ -1192,27 +1243,31 @@ function ReceiptUpload() {
                       <>
                         <Button
                           onClick={() => apartmentId && batch.start(apartmentId)}
-                          disabled={!apartmentId || batch.items.length === 0}
+                          disabled={!apartmentId || batchNonSkippedCount === 0 || batch.checkingDuplicates}
                         >
-                          Read {batch.items.length} receipts
+                          Read {batchNonSkippedCount} receipts
                         </Button>
-                        <p className="flex items-start gap-1.5 text-sm text-ink-muted">
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 20 20"
-                            className="mt-0.5 h-4 w-4 flex-shrink-0"
-                            fill="none"
-                          >
-                            <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
-                            <path
-                              d="M10 9v4.5M10 6.75h.01"
-                              stroke="currentColor"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                          Each receipt is sent to OpenAI to read it ({batch.items.length} requests).
-                        </p>
+                        {batchNonSkippedCount === 0 && batchSkippedCount > 0 ? (
+                          <p className="text-sm text-ink-muted">All files are already saved.</p>
+                        ) : (
+                          <p className="flex items-start gap-1.5 text-sm text-ink-muted">
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 20 20"
+                              className="mt-0.5 h-4 w-4 flex-shrink-0"
+                              fill="none"
+                            >
+                              <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.5" />
+                              <path
+                                d="M10 9v4.5M10 6.75h.01"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                            Each receipt is sent to OpenAI to read it ({batchNonSkippedCount} requests).
+                          </p>
+                        )}
                       </>
                     )}
                   </div>
@@ -1248,6 +1303,40 @@ function ReceiptUpload() {
                   )}
 
                   {error && <Alert variant="error">{error}</Alert>}
+
+                  {duplicateInfo && (
+                    <Alert variant="warning">
+                      <p>
+                        This file is already saved as {duplicateInfo.store_name ?? 'Not detected'},{' '}
+                        {(() => {
+                          const display = formatDisplayDate(duplicateInfo.purchase_date)
+                          return display.kind === 'missing' ? 'Not detected' : display.text
+                        })()}
+                        ,{' '}
+                        {duplicateInfo.total !== null
+                          ? formatMoney(duplicateInfo.total, duplicateInfo.currency)
+                          : 'Not detected'}{' '}
+                        (
+                        {duplicateInfo.apartment_name
+                          ? (apartmentShortName(duplicateInfo.apartment_name) ?? duplicateInfo.apartment_name)
+                          : 'Not detected'}
+                        ).
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        <a
+                          href={`/?receipt=${duplicateInfo.receipt_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium text-ink underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                        >
+                          Open saved receipt
+                        </a>
+                        <Button variant="secondary" size="sm" onClick={handleUploadAnyway}>
+                          Upload anyway
+                        </Button>
+                      </div>
+                    </Alert>
+                  )}
 
                   {success && (
                     <Alert variant="success">

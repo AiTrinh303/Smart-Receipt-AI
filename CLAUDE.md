@@ -61,11 +61,21 @@ the purchase info, and the result is displayed for review.
   `updateReceiptStatus.ts`, `getReceiptFacets.ts` (`GET /receipts/facets`,
   optional `apartmentId`), `listItems.ts` (`GET /items`, accepts
   `{apartmentId?, year?, status?, q?, limit?, offset?}`, same
-  query-string-building pattern as `listReceipts.ts`), shared `ApiError`
+  query-string-building pattern as `listReceipts.ts`),
+  `checkDuplicates.ts` (`POST /receipts/check-duplicates`, body
+  `{hashes: string[]}`, response `{items: [{hash, existing: ReceiptSummary
+  | null}]}` in request order), shared `ApiError`
   (carries an optional `missing:
   string[]`, set only for a `422` from `updateReceiptStatus` whose body is
   `{detail: {message, missing}}` — every other error, including a
-  malformed body, falls back to a plain message with no `missing`), shared
+  malformed body, falls back to a plain message with no `missing`; also
+  an optional `code`/`details` pair — set only when a response's `detail`
+  was an object, e.g. a `409 DUPLICATE_FILE`'s `{code, message,
+  existing}` — via the shared `apiErrorFromDetail(detail, status,
+  fallbackMessage)` builder a string `detail` still just becomes the
+  message with no `code`/`details`; `uploadReceipt.ts`/
+  `checkDuplicates.ts` both use it, `updateReceiptStatus.ts` keeps its own
+  pre-existing `{message, missing}` handling untouched), shared
   response types in
   `types.ts` — including `ReceiptSummary`, the list-row shape,
   `Apartment` (`id`/`name`), `ReceiptStatus`
@@ -145,8 +155,9 @@ the purchase info, and the result is displayed for review.
   component state, untouched by `handleRemoveFile`/`processFile`/
   `handleReset`, so it survives Remove, a new file, and "Upload another
   receipt" within the session (never persisted across a real reload).
-  `uploadReceipt(file, apartmentId)` sends `apartment_id` as a second
-  `FormData` field.
+  `uploadReceipt(file, apartmentId, allowDuplicate?)` sends `apartment_id`
+  as a second `FormData` field, and `allow_duplicate=true` as a third only
+  when `allowDuplicate` is truthy (see "Duplicate warnings" below).
   **Upload page layout (`SectionHeading`, `HelpPanel`, `TipsDetails`, all
   local to `ReceiptUpload.tsx`):** the form `Card` is split into two
   `SectionHeading`s — a small circular number badge (`aria-hidden="true"`)
@@ -1098,6 +1109,108 @@ the purchase info, and the result is displayed for review.
   item is actually `uploading`/`reading` (`batchInFlight` — stricter than
   `running`, since a stopped batch's in-flight items still finish on their
   own) and removes it the moment nothing is left in flight.
+  **Duplicate warnings before uploading (`src/hash/sha256.ts`,
+  `src/api/checkDuplicates.ts`, batch item status `"skipped"`):** the
+  backend hashes every upload and refuses (`409 DUPLICATE_FILE`) one that
+  already matches a saved receipt unless `allow_duplicate=true` is sent;
+  the frontend now also hashes client-side so the owner sees a warning
+  immediately, without waiting on that 409 — but the server's own check
+  is still the only thing that actually prevents a duplicate save, since
+  client-side hashing can fail or race another tab/device.
+  `sha256Hex(file)` reads the bytes via `FileReader` (not
+  `Blob.arrayBuffer()`, unimplemented in this project's jsdom test
+  environment, though real browsers support both) and hashes them with
+  `crypto.subtle.digest('SHA-256', ...)`; returns `null` — never throws —
+  when `crypto.subtle` isn't available (no secure context, an old
+  browser) or the bytes can't be read, so a caller always has a safe
+  "skip the check" fallback.
+  `useBatchUpload` takes an optional `{hasher, checkDuplicates}` (both
+  default to `sha256Hex`/the real `checkDuplicates` API call, but are
+  injectable so every test supplies a fake instead of mocking `fetch` or
+  polyfilling `crypto.subtle`). `BatchItem` gained `hash`/`existing`/
+  `allowDuplicate`; `BatchItemStatus` gained `"skipped"`; `BatchErrorKind`
+  gained `"duplicate"` (the server already has this file; `existing` is
+  its `ReceiptSummary`) and `"duplicate_in_batch"` (another file already
+  in this queue has the identical hash — no saved receipt, no
+  `existing`). Right after `addFiles` dispatches `ADD_FILES`, it awaits
+  one `runDuplicateCheck(toAdd)`: hashes the new items (at most 2 at a
+  time, mirroring the upload/extract scheduler's own `CONCURRENCY`),
+  flags any whose hash matches an earlier item already in the queue
+  (from this `addFiles` call or an earlier one — `knownHashes` is built
+  from every item in the current queue with a recorded hash, regardless
+  of status) as `"duplicate_in_batch"` with no server call at all, then
+  sends every remaining hash in **one** `checkDuplicates(...)` call
+  (never one per file) and flags a returned match as `"duplicate"`.
+  `BatchState` gained `checkingDuplicates`/`duplicateCheckFailed`: the
+  former is `true` only while this whole process is in flight; the
+  latter is set only when the `checkDuplicates` request itself rejects
+  (never just because hashing came back `null`, and never when there was
+  nothing left to send) — cleared again the moment a new check starts.
+  Neither hashing failure nor a failed request ever blocks `addFiles`
+  itself; the queue always continues exactly as if duplicate-checking
+  didn't exist, since the server guards every upload regardless.
+  A `409 DUPLICATE_FILE` from the upload call itself (the pre-check
+  missed it, was skipped, or raced another save) is caught in
+  `processItem` and dispatches `ITEM_SKIPPED` (`errorKind: "duplicate"`,
+  `existing` from `err.details.existing`) — never a failure, never
+  pauses the queue, exactly like any other already-handled error path
+  there. "Upload anyway" (`uploadAnyway(itemId)` → `UPLOAD_ANYWAY`)
+  clears a skipped item back to `"waiting"` and sets
+  `allowDuplicate: true`, so its next upload attempt sends
+  `allow_duplicate=true` (`processItem` now calls `uploadReceipt(item.
+  file, apartmentId, item.allowDuplicate)`) — the normal scheduler then
+  just picks it back up; the flag survives a later `RETRY`, which already
+  spreads the rest of the item unchanged. `REMOVE` now also accepts a
+  `"skipped"` item, alongside `"waiting"`/`"failed"`.
+  **`BatchQueue.tsx` skipped rows:** a badge, "Already saved" or "Same
+  file twice" (a small two-overlapping-squares icon, never color alone),
+  next to the same Remove icon button `"waiting"`/`"failed"` rows
+  already have (the condition there now includes `"skipped"`). For a
+  server match only (`duplicate_in_batch` has no saved receipt to
+  describe, so neither of these render for it): a line "Same file as
+  `<store>` · `<date DD.MM.YYYY, via formatDisplayDate>` · `<amount via
+  formatMoney>` · `<apartment short name>`" (`MissingValue` for any part
+  the saved receipt doesn't have — store/date/total/apartment each
+  checked independently), a real `<a>` "Open saved receipt"
+  (`target="_blank"`, `rel="noopener noreferrer"`) to `/?receipt=<id>`,
+  and an "Upload anyway" button (omitted for `duplicate_in_batch`, which
+  has nothing to upload "anyway" to — it's just a second copy of a file
+  still in this very queue).
+  **Counts and strings, adjusted only when something was actually
+  skipped (every existing string stays byte-identical otherwise):** the
+  pre-start summary line (`batchSummaryText`) gains `", S skipped"` only
+  when `S > 0`; the running progress line ("`X` of `Y` read, `Z`
+  failed") gains the same suffix, and its `<progress>` value now adds
+  the skipped count too (skipped counts as "finished," same as done/
+  failed, for both the bar and the "Done" summary); the Start button's
+  "Read `N` receipts" counts only non-skipped items
+  (`batchNonSkippedCount`), disabled (together with a "`All files are
+  already saved.`" line replacing the OpenAI-note line) once that count
+  is `0` with at least one item skipped; the finished `Alert` ("Done:
+  `X` read, `Y` failed.") gains `" Z skipped."` only when `Z > 0`. Above
+  all of this, a `role="status"` "Checking for duplicates..." shows
+  while `batch.checkingDuplicates` is true (Start also disabled for it),
+  and a muted "Could not check for duplicates before uploading." shows
+  only when `batch.duplicateCheckFailed` is true. **Correction:**
+  `isBatchFinished` originally only checked "nothing waiting/uploading/
+  reading" (`!batchWaitingOrInFlight`) — since a whole queue can now
+  become all-`"skipped"` *before* Start is ever clicked, that alone could
+  go true pre-start and show the finished `Alert` instead of the normal
+  pre-start panel; it now also requires `batch.running`, so an
+  all-skipped, never-started queue correctly shows "All files are
+  already saved." instead.
+  **Single-file flow:** no pre-check request at all here — only the
+  upload call's own response matters. A `409 DUPLICATE_FILE` sets a new
+  `duplicateInfo` state (a `ReceiptSummary`, cleared at every point
+  `error`/`success` already are: `processFile`, `handleBatchFilesSelected`,
+  `handleRemoveFile`, `handleReset`, and the start of every submit) and
+  renders a warning `Alert` instead of the generic error one: "This file
+  is already saved as `<store>`, `<date>`, `<amount>` (`<apartment short
+  name>`)." plus "Open saved receipt" and an "Upload anyway" button.
+  `handleSubmit`/"Upload anyway" both call one shared `submitUpload
+  (allowDuplicate: boolean)` — the only difference between them is that
+  flag — so nothing is ever extracted until the upload itself succeeds,
+  on either path.
   **Skeleton loading states (`components/ui/Skeleton.tsx`):** every
   loading area (the history list, the saved-receipt view, next to the
   extraction status) is a `role="status" aria-busy="true"` region that
@@ -1123,9 +1236,13 @@ the purchase info, and the result is displayed for review.
   `bg-brand-subtle` + `border-brand`, a visible "Browse files" button
   inside it), a `Skeleton` sample, the
   card-variant items list, the warnings panel/Edited badge/reset
-  confirmation, a `BatchQueue` sample (compact rows, one per status, plus
+  confirmation, a `BatchQueue` sample (compact rows, one per status
+  including "Already saved"/"Same file twice", plus
   rejected files — reflecting the same component the real batch flow
-  uses), the batch paused (unavailable/network/stopped)/finished
+  uses), a "Batch duplicate-check states" section ("Checking for
+  duplicates...", a failed-check sample, and "All files are already
+  saved." with its disabled button), a single-file duplicate `Alert`
+  sample, the batch paused (unavailable/network/stopped)/finished
   states, a dedicated "Batch summary line and sticky action bar" section
   (toggles between the before-start summary text and the after-start
   progress/button state, over a short scrollable sample list, for a quick

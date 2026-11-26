@@ -10,7 +10,7 @@ A web app that stores the shopping receipts of my two holiday apartments in Germ
 - Browse History and Items, filter by apartment/year/status, search items.
 - Yearly report (counts every receipt; shows warnings, possible duplicates and the largest receipts to check).
 - Download the yearly report as CSV and a ZIP with the PDFs, for the tax advisor.
-- Re-uploading the exact same file is caught before it is read by the AI.
+- Warns before reading a file that is already saved; the same file is never read by the AI twice.
 
 ## Before you start
 - Python 3 (I use 3.12) and Node.js with npm (a current LTS version). Check with `python3 --version` and `node --version`.
@@ -57,7 +57,7 @@ After changing `backend/.env`, stop and restart uvicorn. `--reload` does not wat
 
 ## What it does not do yet
 - No login. Use it only on your own machine and do not expose it to the internet.
-- Duplicate detection only catches a byte-for-byte identical file: a re-compressed or re-photographed copy of the same receipt still creates a second record.
+- Only an identical file is detected as a duplicate: a second photo of the same receipt is only flagged in the yearly report's quick check.
 - No bulk approval: receipts are approved one at a time, with a review mode that moves to the next one.
 - The AI can misread a receipt. Check each one against the original before approving it.
 - Receipt files are sent to OpenAI to be read, and deleting a receipt here cannot delete that copy.

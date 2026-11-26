@@ -1,4 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
+import { ApiError } from '../api/ApiError'
+import type { ReceiptSummary } from '../api/types'
 import {
   EXTRACTION_FAILED_MESSAGE,
   EXTRACTION_NOT_CONFIGURED_MESSAGE,
@@ -735,4 +737,354 @@ test('warningsCount is taken from the extract response', async () => {
     expect(result.current.items[0].status).toBe('done')
   })
   expect(result.current.items[0].warningsCount).toBe(2)
+})
+
+// --- Duplicate detection (injected hasher/checkDuplicates fakes) -----------
+
+function makeExisting(receiptId: string, overrides: Partial<ReceiptSummary> = {}): ReceiptSummary {
+  return {
+    receipt_id: receiptId,
+    original_filename: 'receipt.jpg',
+    store_name: 'Corner Store',
+    purchase_date: '2026-01-15',
+    currency: 'EUR',
+    total: 19.99,
+    created_at: '2026-01-15T10:00:00+00:00',
+    apartment_id: APARTMENT_ID,
+    apartment_name: 'Bergblick',
+    status: 'needs_review',
+    ...overrides,
+  }
+}
+
+/** A hasher that returns a fixed hash per file name (so two files can be
+ * made to "collide" just by giving them the same name->hash mapping). */
+function fakeHasherFromMap(hashesByName: Record<string, string | null>) {
+  return async (file: File) => hashesByName[file.name] ?? null
+}
+
+describe('duplicate detection', () => {
+  test('one hash already saved on the server -> that item is skipped "duplicate", the rest stay waiting', async () => {
+    const existing = makeExisting('existing-1')
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'hash-a', 'b.jpg': 'hash-b', 'c.jpg': 'hash-c' })
+    const checkDuplicates = jest.fn().mockResolvedValue({
+      items: [
+        { hash: 'hash-a', existing: null },
+        { hash: 'hash-b', existing },
+        { hash: 'hash-c', existing: null },
+      ],
+    })
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg'), makeFile('b.jpg'), makeFile('c.jpg')])
+    })
+
+    expect(checkDuplicates).toHaveBeenCalledTimes(1)
+    expect(checkDuplicates).toHaveBeenCalledWith(['hash-a', 'hash-b', 'hash-c'])
+
+    const byName = Object.fromEntries(result.current.items.map((item) => [item.file.name, item]))
+    expect(byName['a.jpg'].status).toBe('waiting')
+    expect(byName['c.jpg'].status).toBe('waiting')
+    expect(byName['b.jpg'].status).toBe('skipped')
+    expect(byName['b.jpg'].errorKind).toBe('duplicate')
+    expect(byName['b.jpg'].existing).toEqual(existing)
+
+    const nonSkipped = result.current.items.filter((item) => item.status !== 'skipped')
+    expect(nonSkipped).toHaveLength(2)
+  })
+
+  test('two files with the same hash in one batch: the second is skipped "duplicate_in_batch", no server match needed for it', async () => {
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'same-hash', 'b.jpg': 'same-hash' })
+    const checkDuplicates = jest.fn().mockResolvedValue({ items: [{ hash: 'same-hash', existing: null }] })
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg'), makeFile('b.jpg')])
+    })
+
+    // Only the first occurrence of the hash is ever sent to the server.
+    expect(checkDuplicates).toHaveBeenCalledTimes(1)
+    expect(checkDuplicates).toHaveBeenCalledWith(['same-hash'])
+
+    const byName = Object.fromEntries(result.current.items.map((item) => [item.file.name, item]))
+    expect(byName['a.jpg'].status).toBe('waiting')
+    expect(byName['b.jpg'].status).toBe('skipped')
+    expect(byName['b.jpg'].errorKind).toBe('duplicate_in_batch')
+    expect(byName['b.jpg'].existing).toBeNull()
+  })
+
+  test('a file matching an earlier, already-queued item (from a previous addFiles call) is also "duplicate_in_batch"', async () => {
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'hash-1', 'b.jpg': 'hash-1' })
+    const checkDuplicates = jest.fn().mockResolvedValue({ items: [{ hash: 'hash-1', existing: null }] })
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg')])
+    })
+    // Appending a second file while the batch is already running (rather
+    // than picking files again before starting, which replaces the queue)
+    // is the only way a second addFiles call keeps the first file around.
+    act(() => {
+      result.current.start(APARTMENT_ID)
+    })
+    await act(async () => {
+      await result.current.addFiles([makeFile('b.jpg')])
+    })
+
+    // "a.jpg" is still present (started uploading once the batch began
+    // running) -- never replaced by the second addFiles call, which
+    // appends while running instead of replacing the queue.
+    const byName = Object.fromEntries(result.current.items.map((item) => [item.file.name, item]))
+    expect(byName['a.jpg']).toBeDefined()
+    expect(byName['a.jpg'].status).not.toBe('skipped')
+    expect(byName['b.jpg'].status).toBe('skipped')
+    expect(byName['b.jpg'].errorKind).toBe('duplicate_in_batch')
+
+    // Cleanup: let the in-flight upload resolve so no dangling promise leaks.
+    await waitFor(() => expect(uploadDeferreds.has('a.jpg')).toBe(true))
+    act(() => resolveUpload('a.jpg', 'r-a'))
+    await waitFor(() => expect(extractDeferreds.has('r-a')).toBe(true))
+    act(() => resolveExtract('r-a'))
+    await waitFor(() => expect(result.current.items.find((i) => i.file.name === 'a.jpg')!.status).toBe('done'))
+  })
+
+  test('the check request carries every hash in exactly one call, never one call per file', async () => {
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'h1', 'b.jpg': 'h2', 'c.jpg': 'h3' })
+    const checkDuplicates = jest.fn().mockResolvedValue({
+      items: [
+        { hash: 'h1', existing: null },
+        { hash: 'h2', existing: null },
+        { hash: 'h3', existing: null },
+      ],
+    })
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg'), makeFile('b.jpg'), makeFile('c.jpg')])
+    })
+
+    expect(checkDuplicates).toHaveBeenCalledTimes(1)
+  })
+
+  test('no request is made when the hasher returns null for every file', async () => {
+    const hasher = jest.fn().mockResolvedValue(null)
+    const checkDuplicates = jest.fn()
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg'), makeFile('b.jpg')])
+    })
+
+    expect(checkDuplicates).not.toHaveBeenCalled()
+    expect(result.current.duplicateCheckFailed).toBe(false)
+    expect(result.current.items.every((item) => item.status === 'waiting')).toBe(true)
+  })
+
+  test('no request is made when there are no valid files to add', async () => {
+    const hasher = jest.fn()
+    const checkDuplicates = jest.fn()
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([new File(['x'], 'notes.txt', { type: 'text/plain' })])
+    })
+
+    expect(hasher).not.toHaveBeenCalled()
+    expect(checkDuplicates).not.toHaveBeenCalled()
+    expect(result.current.items).toHaveLength(0)
+  })
+
+  test('a failed check-duplicates request sets duplicateCheckFailed and leaves items waiting -- the queue still works', async () => {
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'hash-a' })
+    const checkDuplicates = jest.fn().mockRejectedValue(new Error('network down'))
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg')])
+    })
+
+    expect(result.current.duplicateCheckFailed).toBe(true)
+    expect(result.current.checkingDuplicates).toBe(false)
+    expect(result.current.items[0].status).toBe('waiting')
+
+    // And the queue still runs normally afterwards.
+    act(() => {
+      result.current.start(APARTMENT_ID)
+    })
+    await waitFor(() => expect(uploadDeferreds.has('a.jpg')).toBe(true))
+    act(() => resolveUpload('a.jpg', 'r1'))
+    await waitFor(() => expect(extractDeferreds.has('r1')).toBe(true))
+    act(() => resolveExtract('r1'))
+    await waitFor(() => expect(result.current.items[0].status).toBe('done'))
+  })
+
+  test('checkingDuplicates is true while the check is in flight and false once it settles', async () => {
+    let resolveCheck!: (value: unknown) => void
+    const checkPromise = new Promise((resolve) => {
+      resolveCheck = resolve
+    })
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'hash-a' })
+    const checkDuplicates = jest.fn().mockReturnValue(checkPromise)
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    let addFilesPromise!: Promise<void>
+    act(() => {
+      addFilesPromise = result.current.addFiles([makeFile('a.jpg')])
+    })
+
+    await waitFor(() => expect(result.current.checkingDuplicates).toBe(true))
+
+    await act(async () => {
+      resolveCheck({ items: [{ hash: 'hash-a', existing: null }] })
+      await addFilesPromise
+    })
+
+    expect(result.current.checkingDuplicates).toBe(false)
+  })
+
+  test('skipped items are never uploaded when the batch runs', async () => {
+    const existing = makeExisting('existing-1')
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'hash-a', 'b.jpg': 'hash-b' })
+    const checkDuplicates = jest.fn().mockResolvedValue({
+      items: [
+        { hash: 'hash-a', existing },
+        { hash: 'hash-b', existing: null },
+      ],
+    })
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg'), makeFile('b.jpg')])
+    })
+
+    act(() => {
+      result.current.start(APARTMENT_ID)
+    })
+
+    // Only "b.jpg" (not skipped) is ever uploaded.
+    await waitFor(() => expect(uploadDeferreds.has('b.jpg')).toBe(true))
+    expect(uploadDeferreds.has('a.jpg')).toBe(false)
+
+    act(() => resolveUpload('b.jpg', 'r-b'))
+    await waitFor(() => expect(extractDeferreds.has('r-b')).toBe(true))
+    act(() => resolveExtract('r-b'))
+
+    await waitFor(() => {
+      const a = result.current.items.find((item) => item.file.name === 'a.jpg')!
+      const b = result.current.items.find((item) => item.file.name === 'b.jpg')!
+      expect(a.status).toBe('skipped')
+      expect(b.status).toBe('done')
+    })
+    expect(uploadDeferreds.has('a.jpg')).toBe(false)
+  })
+
+  test('"Upload anyway" re-queues a skipped item with allowDuplicate, sending allow_duplicate=true', async () => {
+    const existing = makeExisting('existing-1')
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'hash-a' })
+    const checkDuplicates = jest.fn().mockResolvedValue({ items: [{ hash: 'hash-a', existing }] })
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg')])
+    })
+    expect(result.current.items[0].status).toBe('skipped')
+
+    act(() => {
+      result.current.uploadAnyway(result.current.items[0].id)
+    })
+    expect(result.current.items[0].status).toBe('waiting')
+    expect(result.current.items[0].allowDuplicate).toBe(true)
+
+    act(() => {
+      result.current.start(APARTMENT_ID)
+    })
+
+    await waitFor(() => expect(uploadDeferreds.has('a.jpg')).toBe(true))
+    const [, options] = fetchSpy.mock.calls.find(([url]) => String(url).endsWith('/receipts/upload'))!
+    expect(((options as RequestInit).body as FormData).get('allow_duplicate')).toBe('true')
+
+    act(() => resolveUpload('a.jpg', 'r1'))
+    await waitFor(() => expect(extractDeferreds.has('r1')).toBe(true))
+    act(() => resolveExtract('r1'))
+    await waitFor(() => expect(result.current.items[0].status).toBe('done'))
+  })
+
+  test('allowDuplicate survives a later retry', async () => {
+    const existing = makeExisting('existing-1')
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'hash-a' })
+    const checkDuplicates = jest.fn().mockResolvedValue({ items: [{ hash: 'hash-a', existing }] })
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg')])
+    })
+    act(() => result.current.uploadAnyway(result.current.items[0].id))
+    act(() => result.current.start(APARTMENT_ID))
+
+    await waitFor(() => expect(uploadDeferreds.has('a.jpg')).toBe(true))
+    act(() => {
+      uploadDeferreds.get('a.jpg')!.resolve(jsonResponse(502, { detail: 'Upload failed.' }))
+    })
+    await waitFor(() => expect(result.current.items[0].status).toBe('failed'))
+
+    act(() => {
+      result.current.retry(result.current.items[0].id)
+    })
+    expect(result.current.items[0].allowDuplicate).toBe(true)
+  })
+
+  test('a 409 DUPLICATE_FILE during upload skips the item without pausing; the other item still finishes', async () => {
+    const existing = makeExisting('existing-1')
+    const hasher = jest.fn().mockResolvedValue(null) // no pre-check, so this is purely the server's own 409
+    const checkDuplicates = jest.fn()
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg'), makeFile('b.jpg')])
+    })
+    act(() => result.current.start(APARTMENT_ID))
+
+    await waitFor(() => expect(uploadDeferreds.has('a.jpg')).toBe(true))
+    await waitFor(() => expect(uploadDeferreds.has('b.jpg')).toBe(true))
+
+    act(() => {
+      uploadDeferreds.get('a.jpg')!.resolve(
+        jsonResponse(409, {
+          detail: { code: 'DUPLICATE_FILE', message: 'This file is already saved.', existing },
+        }),
+      )
+    })
+    await waitFor(() => {
+      const a = result.current.items.find((item) => item.file.name === 'a.jpg')!
+      expect(a.status).toBe('skipped')
+      expect(a.errorKind).toBe('duplicate')
+      expect(a.existing).toEqual(existing)
+    })
+    expect(result.current.pausedReason).toBeNull()
+
+    act(() => resolveUpload('b.jpg', 'r-b'))
+    await waitFor(() => expect(extractDeferreds.has('r-b')).toBe(true))
+    act(() => resolveExtract('r-b'))
+    await waitFor(() => {
+      expect(result.current.items.find((item) => item.file.name === 'b.jpg')!.status).toBe('done')
+    })
+  })
+
+  test('skipped items can be removed, same as waiting/failed', async () => {
+    const existing = makeExisting('existing-1')
+    const hasher = fakeHasherFromMap({ 'a.jpg': 'hash-a' })
+    const checkDuplicates = jest.fn().mockResolvedValue({ items: [{ hash: 'hash-a', existing }] })
+
+    const { result } = renderHook(() => useBatchUpload({ hasher, checkDuplicates }))
+    await act(async () => {
+      await result.current.addFiles([makeFile('a.jpg')])
+    })
+    expect(result.current.items[0].status).toBe('skipped')
+
+    act(() => {
+      result.current.remove(result.current.items[0].id)
+    })
+    expect(result.current.items).toHaveLength(0)
+  })
 })

@@ -2,12 +2,14 @@
  * calls -- those live in useBatchUpload.ts, which dispatches the actions
  * defined here as each upload/extract call settles. */
 
+import type { ReceiptSummary } from '../api/types'
+
 export const MAX_BATCH = 20
 export const CONCURRENCY = 2
 
-export type BatchItemStatus = 'waiting' | 'uploading' | 'reading' | 'done' | 'failed'
+export type BatchItemStatus = 'waiting' | 'uploading' | 'reading' | 'done' | 'failed' | 'skipped'
 
-export type BatchErrorKind = 'upload' | 'unreadable' | 'unavailable' | 'network'
+export type BatchErrorKind = 'upload' | 'unreadable' | 'unavailable' | 'network' | 'duplicate' | 'duplicate_in_batch'
 
 export type PausedReason = 'unavailable' | 'network' | 'stopped' | null
 
@@ -19,6 +21,17 @@ export interface BatchItem {
   error?: string
   errorKind?: BatchErrorKind
   warningsCount?: number
+  /** This file's content hash (null when it couldn't be computed), set
+   * once the duplicate check has run for it -- used to catch a second,
+   * byte-identical file added later in the same session. */
+  hash?: string | null
+  /** The already-saved receipt a "skipped" item (errorKind "duplicate")
+   * matched -- null for "duplicate_in_batch" (no saved receipt involved,
+   * just another file already in this queue). */
+  existing?: ReceiptSummary | null
+  /** Set by "Upload anyway": the next upload attempt for this item sends
+   * allow_duplicate=true. Survives a later retry/resume. */
+  allowDuplicate?: boolean
 }
 
 export interface RejectedFile {
@@ -32,6 +45,13 @@ export interface BatchState {
   pausedReason: PausedReason
   apartmentId: string | null
   running: boolean
+  /** True only while the one-shot post-addFiles duplicate check (hashing
+   * + at most one check-duplicates request) is in flight. */
+  checkingDuplicates: boolean
+  /** True when the last duplicate check's check-duplicates request itself
+   * failed (never set just because hashing was unavailable) -- cleared the
+   * moment a new check starts. */
+  duplicateCheckFailed: boolean
 }
 
 export const INITIAL_BATCH_STATE: BatchState = {
@@ -40,6 +60,16 @@ export const INITIAL_BATCH_STATE: BatchState = {
   pausedReason: null,
   apartmentId: null,
   running: false,
+  checkingDuplicates: false,
+  duplicateCheckFailed: false,
+}
+
+export interface DuplicateCheckUpdate {
+  id: string
+  hash: string | null
+  skipped?: boolean
+  errorKind?: 'duplicate' | 'duplicate_in_batch'
+  existing?: ReceiptSummary | null
 }
 
 export type BatchAction =
@@ -59,6 +89,10 @@ export type BatchAction =
       receiptId?: string
       pausedReason: 'unavailable' | 'network'
     }
+  | { type: 'ITEM_SKIPPED'; id: string; errorKind: 'duplicate'; existing: ReceiptSummary | null }
+  | { type: 'UPLOAD_ANYWAY'; id: string }
+  | { type: 'DUPLICATE_CHECK_START' }
+  | { type: 'DUPLICATE_CHECK_RESULT'; failed: boolean; updates: DuplicateCheckUpdate[] }
   | { type: 'RETRY'; id: string }
   | { type: 'REMOVE'; id: string }
   | { type: 'RESET' }
@@ -157,6 +191,66 @@ export function batchReducer(state: BatchState, action: BatchAction): BatchState
         })),
       }
 
+    case 'ITEM_SKIPPED':
+      // The 409 DUPLICATE_FILE safety net: the server itself flagged this
+      // file as already saved during the upload call. Never a failure, and
+      // never pauses the queue -- the rest of the batch keeps going.
+      return {
+        ...state,
+        items: updateItem(state.items, action.id, (item) => ({
+          ...item,
+          status: 'skipped',
+          errorKind: action.errorKind,
+          existing: action.existing,
+          error: undefined,
+        })),
+      }
+
+    case 'UPLOAD_ANYWAY': {
+      const target = state.items.find((item) => item.id === action.id)
+      if (!target || target.status !== 'skipped') {
+        return state
+      }
+      return {
+        ...state,
+        items: updateItem(state.items, action.id, (item) => ({
+          ...item,
+          status: 'waiting',
+          allowDuplicate: true,
+          error: undefined,
+          errorKind: undefined,
+        })),
+      }
+    }
+
+    case 'DUPLICATE_CHECK_START':
+      return { ...state, checkingDuplicates: true, duplicateCheckFailed: false }
+
+    case 'DUPLICATE_CHECK_RESULT': {
+      const updatesById = new Map(action.updates.map((update) => [update.id, update]))
+      return {
+        ...state,
+        checkingDuplicates: false,
+        duplicateCheckFailed: action.failed,
+        items: state.items.map((item) => {
+          const update = updatesById.get(item.id)
+          if (!update) {
+            return item
+          }
+          if (update.skipped) {
+            return {
+              ...item,
+              status: 'skipped',
+              errorKind: update.errorKind,
+              hash: update.hash,
+              existing: update.existing ?? null,
+            }
+          }
+          return { ...item, hash: update.hash }
+        }),
+      }
+    }
+
     case 'RETRY': {
       // Goes back to the end of the processing order -- removed from its
       // current position and re-appended, status reset to "waiting" (kept
@@ -174,7 +268,10 @@ export function batchReducer(state: BatchState, action: BatchAction): BatchState
 
     case 'REMOVE': {
       const target = state.items.find((item) => item.id === action.id)
-      if (!target || (target.status !== 'waiting' && target.status !== 'failed')) {
+      if (
+        !target ||
+        (target.status !== 'waiting' && target.status !== 'failed' && target.status !== 'skipped')
+      ) {
         return state
       }
       return { ...state, items: state.items.filter((item) => item.id !== action.id) }
