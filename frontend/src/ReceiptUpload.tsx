@@ -802,9 +802,15 @@ function ReceiptUpload() {
               </svg>
               {backNavigation.label}
             </a>
-            <Button variant="ghost" size="sm" onClick={handleReset}>
+            {/* Looks like a plain text link, but stays a <button>: it resets
+                this page's state in place (handleReset), it doesn't load a URL. */}
+            <button
+              type="button"
+              onClick={handleReset}
+              className="inline-flex min-h-[44px] items-center rounded-md px-1 text-sm font-medium text-brand underline hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand sm:min-h-0 sm:py-2"
+            >
               Upload another receipt
-            </Button>
+            </button>
           </div>
         )}
 

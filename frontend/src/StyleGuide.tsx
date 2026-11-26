@@ -565,7 +565,7 @@ function StyleGuide() {
         </Alert>
       </Section>
 
-      <Section title="Receipt meta line: a raw/unrecognized date, and Discounts/Taxes with the currency in the heading">
+      <Section title="Receipt meta line, Discounts/Taxes with the currency in the heading, empty Discounts as one line, and the Total row">
         <Card className="flex flex-col gap-4">
           <div>
             <p className="text-sm font-medium text-ink">Store name</p>
@@ -598,8 +598,31 @@ function StyleGuide() {
                 </li>
               </ul>
             </div>
+            <p className="text-ink-muted">Discounts (USD): None detected</p>
           </div>
+          <p className="flex items-baseline justify-between gap-4 border-t border-border pt-3 text-lg font-bold text-ink">
+            <span className="sr-only">Total: USD 8.14</span>
+            <span aria-hidden="true">Total</span>
+            <span aria-hidden="true" className="whitespace-nowrap text-right tabular-nums">
+              USD 8.14
+            </span>
+          </p>
+          <p className="text-sm text-ink-muted">
+            The "Discounts (USD): None detected" line replaces the Discounts heading whenever a receipt has
+            no discounts (shown here under a sample with one, for comparison).
+          </p>
         </Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-1 py-2 text-sm font-medium text-ink-muted">
+            Back to history
+          </span>
+          <button
+            type="button"
+            className="inline-flex min-h-[44px] items-center rounded-md px-1 text-sm font-medium text-brand underline hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand sm:min-h-0 sm:py-2"
+          >
+            Upload another receipt
+          </button>
+        </div>
       </Section>
 
       <Section title="Apartment choice (RadioCardGroup -- none chosen / chosen / loading / failure)">
@@ -632,7 +655,7 @@ function StyleGuide() {
         </div>
       </Section>
 
-      <Section title="Apartment on a saved receipt (ReceiptApartment -- two-line short name/place, selected / none / saving / saved / error)">
+      <Section title="Apartment on a saved receipt (ReceiptApartment -- one compact line: short name only, full name in the tooltip; selected / none / saving / saved / error)">
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => setReceiptApartmentState('selected')}>
             Show selected
@@ -652,22 +675,27 @@ function StyleGuide() {
         </div>
 
         <Card className="flex flex-col gap-2">
-          <RadioCardGroup
-            legend="Apartment"
-            name="styleguide-receipt-apartment"
-            options={TWO_LINE_APARTMENT_OPTIONS}
-            value={receiptApartmentState === 'none' ? null : TWO_LINE_APARTMENT_OPTIONS[0].value}
-            onChange={() => {}}
-            disabled={receiptApartmentState === 'saving'}
-          />
-          {receiptApartmentState === 'saving' && (
-            <p className="text-sm text-ink-muted">Saving...</p>
-          )}
-          {receiptApartmentState === 'saved' && (
-            <p role="status" className="text-sm text-success">
-              Saved
-            </p>
-          )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <RadioCardGroup
+              layout="inline"
+              legend="Apartment"
+              name="styleguide-receipt-apartment"
+              options={TWO_LINE_APARTMENT_OPTIONS.map(({ value, label, accessibleName }) => ({
+                value,
+                label,
+                accessibleName,
+              }))}
+              value={receiptApartmentState === 'none' ? null : TWO_LINE_APARTMENT_OPTIONS[0].value}
+              onChange={() => {}}
+              disabled={receiptApartmentState === 'saving'}
+            />
+            {receiptApartmentState === 'saving' && <p className="text-sm text-ink-muted">Saving...</p>}
+            {receiptApartmentState === 'saved' && (
+              <p role="status" className="text-sm text-success">
+                Saved
+              </p>
+            )}
+          </div>
           {receiptApartmentState === 'error' && (
             <Alert variant="error">Could not update the apartment. Please try again.</Alert>
           )}

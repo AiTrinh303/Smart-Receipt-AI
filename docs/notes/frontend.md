@@ -704,11 +704,16 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   `ReceiptResult.tsx` itself is never touched. The same `RadioCardGroup`,
   legend "Apartment" — unchanged — with the receipt's `apartment_id`
   selected (or nothing selected, with no extra message, when it's `null`);
-  options now show `apartmentShortName(name) ?? name` (bold) and
-  `apartmentPlace(name)` (muted second line, only for a three-segment
-  name) exactly like the upload form's own apartment choice, via the same
-  `secondaryLabel`/`accessibleName` props on `RadioCardGroup` — the
-  accessible name and `title` tooltip stay the full name regardless. It
+  rendered with `RadioCardGroup`'s `layout="inline"`: one compact line —
+  the visible legend "Apartment" (a floated `<legend>`, so it sits on the
+  same line), then one small pill per apartment showing only
+  `apartmentShortName(name) ?? name` (no place line; selected = brand
+  border/fill + check icon + bold, never color alone; `h-11` below `sm`,
+  `sm:h-10`), then "Saving..."/"Saved" on the same line; an error `Alert`
+  goes below. The accessible name (`aria-label` on the radio) and the
+  `title` tooltip stay the full name. Same radios, so arrow keys and the
+  `radiogroup` named "Apartment" are unchanged. The upload form keeps the
+  default `layout="cards"`. It
   fetches
   its own apartment list via `useApartments(true)` (always enabled here,
   since it only mounts in the saved-receipt view), sharing that hook's
@@ -886,7 +891,17 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   which could misread as tax added on top of the total). A `null`
   currency simply drops the heading suffix; `formatMoney` already falls
   back to a plain number regardless of `includeCurrency`, so nothing
-  else changes. The Total row's exact text is untouched.
+  else changes. With no discounts at all, the Discounts heading and its
+  "None detected" collapse into one muted line, `` `Discounts${currencyLabel}:
+  None detected` `` (Taxes keeps its heading + "None detected").
+  **Total row:** "Total" on the left, the amount (`formatMoney`, with
+  currency) right-aligned and `tabular-nums`, ending at the card's right
+  padding like the table's Line total column. The exact string
+  `` `Total: ${formatMoney(total, currency)}` `` stays in the DOM as an
+  `sr-only` span (read once by screen readers, still what tests find); the
+  two visible parts are `aria-hidden`.
+  **Card border:** the data card (and `ReceiptFileViewer`'s card) use
+  `border-border-subtle` — decorative containers, not controls.
   An "Edited" badge (warning-toned, `edited_at` in its `title`) sits next
   to the store name when `data.edited` is `true`. In the surrounding
   container, a secondary "Reset to AI result" button appears only when
@@ -978,7 +993,10 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   built by concatenating a variable into a class name — since Tailwind's
   JIT only generates CSS for literal class-name text it finds in the
   source.
-  **"Upload another receipt" placement:** a `ghost` `Button` next to the
+  **"Upload another receipt" placement:** a text-style `<button>` (brand
+  color, underlined, `min-h-[44px]` below `sm`) — it looks like a link but
+  stays a button, since it resets this page's state rather than loading a
+  URL — next to the
   "Back to history"/"Back to items" link, in one row above the two-column
   layout (`ReceiptDetailLayout`) — moved there from a `secondary` button at
   the bottom of `ReceiptResult`'s own card (that button, and the `onReset`

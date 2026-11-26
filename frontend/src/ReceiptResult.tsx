@@ -177,7 +177,7 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
         </Alert>
       )}
 
-      <div className="flex flex-col gap-5 rounded-lg border border-border bg-surface p-6 shadow-md">
+      <div className="flex flex-col gap-5 rounded-lg border border-border-subtle bg-surface p-6 shadow-md">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-ink">
@@ -263,11 +263,13 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
       )}
 
       <div className="flex flex-col gap-3 text-sm">
-        <div>
-          <h2 className="font-medium text-ink-muted">Discounts{currencyLabel}</h2>
-          {data.discounts.length === 0 ? (
-            <p className="text-ink-muted">None detected</p>
-          ) : (
+        {data.discounts.length === 0 ? (
+          // Most receipts have no discount: one quiet line instead of a
+          // heading plus "None detected".
+          <p className="text-ink-muted">{`Discounts${currencyLabel}: None detected`}</p>
+        ) : (
+          <div>
+            <h2 className="font-medium text-ink-muted">Discounts{currencyLabel}</h2>
             <ul className="flex flex-col gap-1">
               {data.discounts.map((discount, index) => (
                 <AmountRow
@@ -278,8 +280,8 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
                 />
               ))}
             </ul>
-          )}
-        </div>
+          </div>
+        )}
 
         <div>
           <h2 className="font-medium text-ink-muted">Taxes{currencyLabel}</h2>
@@ -300,8 +302,16 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
         </div>
       </div>
 
-      <p className="border-t border-border pt-3 text-lg font-bold text-ink">
-        {`Total: ${formatMoney(data.total, data.currency)}`}
+      {/* "Total" left, the amount right-aligned with the table's Line total
+          column (both end at the card's right padding). The single string
+          "Total: <amount>" stays in the DOM for screen readers (and tests);
+          the two visible parts are aria-hidden so it's read only once. */}
+      <p className="flex items-baseline justify-between gap-4 border-t border-border pt-3 text-lg font-bold text-ink">
+        <span className="sr-only">{`Total: ${formatMoney(data.total, data.currency)}`}</span>
+        <span aria-hidden="true">Total</span>
+        <span aria-hidden="true" className="whitespace-nowrap text-right tabular-nums">
+          {formatMoney(data.total, data.currency)}
+        </span>
       </p>
       </div>
     </div>

@@ -237,7 +237,7 @@ function ReceiptFileViewer({ receiptId, fileName, contentType, fileUrl: fileUrlO
 
   return (
     <div
-      className={`flex flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-md ${
+      className={`flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-md ${
         kind === 'pdf' ? 'lg:h-[calc(100vh-6rem)]' : 'lg:max-h-[calc(100vh-6rem)]'
       }`}
     >

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { ApiError } from './api/ApiError'
 import { updateReceiptApartment } from './api/updateReceiptApartment'
 import type { SavedReceipt } from './api/getReceipt'
-import { apartmentPlace } from './format/apartmentPlace'
 import { apartmentShortName } from './format/apartmentShortName'
 import { useApartments } from './hooks/useApartments'
 import Alert from './components/ui/Alert'
@@ -68,37 +67,39 @@ function ReceiptApartment({ receiptId, apartmentId, onUpdated }: ReceiptApartmen
 
   if (isLoading || !apartments) {
     return (
-      <div role="status" aria-busy="true" className="flex flex-col gap-2">
+      <div role="status" aria-busy="true" className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-ink-muted">Loading apartments...</span>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Skeleton className="h-11 flex-1" />
-          <Skeleton className="h-11 flex-1" />
-        </div>
+        <Skeleton className="h-11 w-28 sm:h-10" />
+        <Skeleton className="h-11 w-28 sm:h-10" />
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <RadioCardGroup
-        legend="Apartment"
-        name="receipt-apartment"
-        options={apartments.map((apartment) => ({
-          value: apartment.id,
-          label: apartmentShortName(apartment.name) ?? apartment.name,
-          secondaryLabel: apartmentPlace(apartment.name),
-          accessibleName: apartment.name,
-        }))}
-        value={selected}
-        onChange={handleChange}
-        disabled={isSaving}
-      />
-      {isSaving && <p className="text-sm text-ink-muted">Saving...</p>}
-      {!isSaving && justSaved && (
-        <p role="status" className="text-sm text-success">
-          Saved
-        </p>
-      )}
+      {/* One compact line: "Apartment", the short-name options (full name
+          as accessible name and title), then "Saving..."/"Saved". */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <RadioCardGroup
+          layout="inline"
+          legend="Apartment"
+          name="receipt-apartment"
+          options={apartments.map((apartment) => ({
+            value: apartment.id,
+            label: apartmentShortName(apartment.name) ?? apartment.name,
+            accessibleName: apartment.name,
+          }))}
+          value={selected}
+          onChange={handleChange}
+          disabled={isSaving}
+        />
+        {isSaving && <p className="text-sm text-ink-muted">Saving...</p>}
+        {!isSaving && justSaved && (
+          <p role="status" className="text-sm text-success">
+            Saved
+          </p>
+        )}
+      </div>
       {saveError && <Alert variant="error">{saveError}</Alert>}
     </div>
   )

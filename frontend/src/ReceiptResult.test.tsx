@@ -305,3 +305,28 @@ test('a missing currency falls back to plain headings and plain amounts', () => 
   expect(screen.getByText('0.50')).toBeInTheDocument()
   expect(screen.getByText('0.64')).toBeInTheDocument()
 })
+
+// --- Total row and an empty Discounts list ---------------------------------
+
+test('the Total row shows "Total" and the amount as two visible parts, read once as "Total: <amount>"', () => {
+  // Given a full receipt
+  render(<ReceiptResult data={FULL_DATA} onEdit={() => {}} />)
+
+  // Then the single spoken string is there, and the visible parts are hidden from assistive tech
+  const spoken = screen.getByText('Total: USD 8.14')
+  expect(spoken).toHaveClass('sr-only')
+  const row = spoken.parentElement as HTMLElement
+  const visible = Array.from(row.querySelectorAll('[aria-hidden="true"]')).map((el) => el.textContent)
+  expect(visible).toEqual(['Total', 'USD 8.14'])
+})
+
+test('no discounts: one muted line "Discounts (USD): None detected" and no Discounts heading', () => {
+  // Given a receipt with no discounts
+  render(<ReceiptResult data={{ ...FULL_DATA, discounts: [] }} onEdit={() => {}} />)
+
+  // Then one line says so, with no separate heading
+  expect(screen.getByText('Discounts (USD): None detected')).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Discounts (USD)' })).not.toBeInTheDocument()
+  // And Taxes is unchanged
+  expect(screen.getByRole('heading', { name: 'Taxes (USD)' })).toBeInTheDocument()
+})

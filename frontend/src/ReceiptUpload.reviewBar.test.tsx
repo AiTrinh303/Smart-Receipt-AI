@@ -143,7 +143,7 @@ test('the review bar is hidden while the edit form is open', async () => {
   expect(screen.queryByRole('button', { name: 'Mark as approved' })).not.toBeInTheDocument()
 })
 
-test('apartment options show the short name and place on two lines, with the full name as the accessible name', async () => {
+test('the apartment choice is one compact line: short name visible, full name as accessible name and title, no place line', async () => {
   // Given the apartment list has a three-segment full name (the shape
   // apartmentShortName/apartmentPlace are built for)
   const threeSegmentApartment = { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick' }
@@ -170,15 +170,17 @@ test('apartment options show the short name and place on two lines, with the ful
   })
 
   await screen.findByText('Apartment')
-  // Then the radio's accessible name is the full name, but the visible
-  // text shows the short name and the place separately
+  // Then the radio's accessible name is the full name, the visible text is
+  // only the short name, and the full name is the option's title
   const radio = screen.getByRole('radio', { name: threeSegmentApartment.name })
   expect(radio).toBeInTheDocument()
   expect(screen.getByText('Bergblick')).toBeInTheDocument()
-  expect(screen.getByText('Oberaudorf')).toBeInTheDocument()
+  expect(radio.closest('label')).toHaveAttribute('title', threeSegmentApartment.name)
+  // And the place is no longer shown as a second line
+  expect(screen.queryByText('Oberaudorf')).not.toBeInTheDocument()
 })
 
-test('"Upload another receipt" is a ghost button next to "Back to history", above the columns', async () => {
+test('"Upload another receipt" is a text-style button next to "Back to history", above the columns', async () => {
   window.history.replaceState({}, '', `/?receipt=${VALID_UUID}&from=${encodeURIComponent('?view=history&apartment=oberaudorf-bergblick')}`)
   fetchSpy.mockImplementation(
     withApartments((urlString) => {

@@ -26,6 +26,12 @@ interface RadioCardGroupProps {
    * have no heading of their own and rely on this legend being the one
    * visible label. */
   hideLegend?: boolean
+  /** `cards` (default): the large selectable cards, one per row below `sm`.
+   * `inline`: one compact line -- the legend as a visible label, then small
+   * pill-shaped options (label only; `secondaryLabel` is not shown), for
+   * places where the choice is secondary to the page (the saved-receipt
+   * view). Same radios, same keyboard behavior, same accessible names. */
+  layout?: 'cards' | 'inline'
 }
 
 function CheckIcon() {
@@ -58,7 +64,59 @@ function RadioCardGroup({
   disabled = false,
   describedBy,
   hideLegend = false,
+  layout = 'cards',
 }: RadioCardGroupProps) {
+  if (layout === 'inline') {
+    return (
+      <fieldset
+        disabled={disabled}
+        aria-describedby={describedBy}
+        role="radiogroup"
+        aria-label={legend}
+        className="min-w-0"
+      >
+        {/* A floated legend is laid out like normal content (not drawn into
+            the fieldset border), so it can sit on the same line as the
+            options; the options' flex row starts its own block beside it. */}
+        <legend
+          className={
+            hideLegend ? 'sr-only' : 'float-left mr-3 flex h-11 items-center text-sm font-medium text-ink sm:h-10'
+          }
+        >
+          {legend}
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {options.map((option) => {
+            const checked = value === option.value
+            const accessibleName = option.accessibleName ?? option.label
+            return (
+              <label
+                key={option.value}
+                title={accessibleName}
+                className={`inline-flex h-11 max-w-[14rem] items-center gap-1.5 rounded-control border px-3 text-sm transition-colors duration-150 motion-reduce:transition-none focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand sm:h-10 ${
+                  checked ? 'border-brand bg-brand-subtle font-semibold text-ink' : 'border-border font-normal text-ink'
+                } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'}`}
+              >
+                {checked && <CheckIcon />}
+                <span className="truncate">{option.label}</span>
+                <input
+                  type="radio"
+                  name={name}
+                  value={option.value}
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => onChange(option.value)}
+                  aria-label={accessibleName}
+                  className="sr-only"
+                />
+              </label>
+            )
+          })}
+        </div>
+      </fieldset>
+    )
+  }
+
   return (
     <fieldset
       disabled={disabled}

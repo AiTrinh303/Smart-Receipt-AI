@@ -1998,6 +1998,47 @@ height while every other control was a `Button` (`font-medium`).
   changed. One new test checks the grouping and order (links together,
   view controls together, links first).
 
+## Receipt detail: calmer right column
+
+- **Apartment as one compact line.** `RadioCardGroup` gained
+  `layout="inline"` (default stays `"cards"`, so the upload form is
+  unchanged): a visible "Apartment" label (a floated `<legend>`, which
+  browsers lay out like normal content instead of drawing it into the
+  fieldset border), then small pills with the short name only, full name
+  as the radio's accessible name and the pill's `title`. Selected = brand
+  border + `brand-subtle` fill + check icon + bold. 44px tall below `sm`,
+  40px from `sm`. "Saving..."/"Saved" sit on the same line; the error
+  `Alert` and the revert-on-failure behavior are unchanged.
+- **Borders — what was found:** the data card (`ReceiptResult.tsx`) and
+  the file viewer card (`ReceiptFileViewer.tsx`) both used `border-border`
+  (`#64748b`, the *control* border). Both are decorative containers, so
+  both now use `border-border-subtle` (`#e2e8f0`), per "Color" above.
+  Left alone (dividers inside a card, out of this ticket's scope): the
+  table header/total/toolbar dividers (`border-border`) and the small-
+  screen item cards (`border-border`) — candidates for the same change.
+- **Total row:** "Total" left, amount right-aligned in line with the Line
+  total column. The previous single string "Total: <amount>" is kept as
+  an `sr-only` span (screen readers read it once; the visible parts are
+  `aria-hidden`), so every test asserting it still passes unchanged.
+- **No discounts:** one muted line "Discounts (EUR): None detected"
+  instead of a heading plus "None detected". Taxes unchanged.
+- **"Upload another receipt":** same text, same `handleReset`, now a
+  text-style `<button>` (brand, underlined) instead of an outlined ghost
+  button. Kept a `<button>` rather than an `<a>`: it resets state in
+  place, and every test finds it by `role="button"`.
+- **Tests changed:** `ReceiptUpload.reviewBar.test.tsx` — "apartment
+  options show the short name and place on two lines, ..." became "the
+  apartment choice is one compact line: short name visible, full name as
+  accessible name and title, no place line" (the place line is gone by
+  design; now asserts it's absent and checks the `title`); '"Upload
+  another receipt" is a ghost button next to "Back to history", ...' was
+  renamed to "... is a text-style button ..." (assertions unchanged — the
+  name described the old style). New: the Total row's spoken/visible
+  parts; the one-line empty Discounts.
+- **`?view=styleguide`:** the saved-receipt apartment sample uses the
+  inline layout; the meta-line/Discounts sample adds the one-line empty
+  Discounts, the new Total row and the text-style "Upload another receipt".
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
