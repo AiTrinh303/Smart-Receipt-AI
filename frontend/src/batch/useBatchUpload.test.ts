@@ -739,6 +739,101 @@ test('warningsCount is taken from the extract response', async () => {
   expect(result.current.items[0].warningsCount).toBe(2)
 })
 
+// --- What was read (extracted summary) -----------------------------------
+
+test('a done item keeps store_name, purchase_date, total and currency from the extract response', async () => {
+  // Given one started item
+  const { result } = renderHook(() => useBatchUpload())
+  await act(async () => {
+    await result.current.addFiles([makeFile('a.jpg')])
+  })
+  act(() => {
+    result.current.start(APARTMENT_ID)
+  })
+  await waitFor(() => expect(uploadDeferreds.has('a.jpg')).toBe(true))
+  act(() => {
+    resolveUpload('a.jpg', 'r1')
+  })
+  await waitFor(() => expect(extractDeferreds.has('r1')).toBe(true))
+
+  // When the extract answers
+  act(() => {
+    resolveExtract('r1', { store_name: 'Edeka', purchase_date: '2026-11-20', total: 23.5, currency: 'EUR' })
+  })
+
+  // Then the item carries exactly those four values
+  await waitFor(() => expect(result.current.items[0].status).toBe('done'))
+  expect(result.current.items[0].extracted).toEqual({
+    store_name: 'Edeka',
+    purchase_date: '2026-11-20',
+    total: 23.5,
+    currency: 'EUR',
+  })
+})
+
+test('missing values in the extract response are kept as null (never guessed)', async () => {
+  // Given one started item
+  const { result } = renderHook(() => useBatchUpload())
+  await act(async () => {
+    await result.current.addFiles([makeFile('a.jpg')])
+  })
+  act(() => {
+    result.current.start(APARTMENT_ID)
+  })
+  await waitFor(() => expect(uploadDeferreds.has('a.jpg')).toBe(true))
+  act(() => {
+    resolveUpload('a.jpg', 'r1')
+  })
+  await waitFor(() => expect(extractDeferreds.has('r1')).toBe(true))
+
+  // When the AI could read none of them
+  act(() => {
+    resolveExtract('r1', { store_name: null, purchase_date: null, total: null, currency: null })
+  })
+
+  // Then all four are null
+  await waitFor(() => expect(result.current.items[0].status).toBe('done'))
+  expect(result.current.items[0].extracted).toEqual({
+    store_name: null,
+    purchase_date: null,
+    total: null,
+    currency: null,
+  })
+})
+
+test('a failed or skipped item never gets an extracted summary', async () => {
+  // Given two started items, no client-side pre-check
+  const { result } = renderHook(() =>
+    useBatchUpload({ hasher: jest.fn().mockResolvedValue(null), checkDuplicates: jest.fn() }),
+  )
+  await act(async () => {
+    await result.current.addFiles([makeFile('a.jpg'), makeFile('b.jpg')])
+  })
+  act(() => result.current.start(APARTMENT_ID))
+  await waitFor(() => expect(uploadDeferreds.has('b.jpg')).toBe(true))
+
+  // When a's upload is a server-side duplicate and b's extract returns 502
+  act(() => {
+    uploadDeferreds.get('a.jpg')!.resolve(
+      jsonResponse(409, { detail: { code: 'DUPLICATE_FILE', message: 'This file is already saved.', existing: null } }),
+    )
+    resolveUpload('b.jpg', 'r-b')
+  })
+  await waitFor(() => expect(extractDeferreds.has('r-b')).toBe(true))
+  act(() => {
+    extractDeferreds.get('r-b')!.resolve(jsonResponse(502, { detail: 'boom' }))
+  })
+
+  // Then neither carries an extracted summary
+  await waitFor(() => {
+    expect(result.current.items.find((i) => i.file.name === 'a.jpg')!.status).toBe('skipped')
+    expect(result.current.items.find((i) => i.file.name === 'b.jpg')!.status).toBe('failed')
+  })
+  for (const item of result.current.items) {
+    expect(item.extracted).toBeUndefined()
+  }
+})
+
 // --- Duplicate detection (injected hasher/checkDuplicates fakes) -----------
 
 function makeExisting(receiptId: string, overrides: Partial<ReceiptSummary> = {}): ReceiptSummary {

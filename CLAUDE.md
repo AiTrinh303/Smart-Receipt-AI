@@ -990,7 +990,10 @@ the purchase info, and the result is displayed for review.
   `status` (`"waiting" | "uploading" | "reading" | "done" | "failed"`),
   and optional `receiptId`/`error`/`errorKind`
   (`"upload" | "unreadable" | "unavailable" | "network"`)/
-  `warningsCount`. `BatchState` holds `items`, `rejected`
+  `warningsCount`/`extracted` (`ExtractedSummary`: `store_name`/
+  `purchase_date`/`total`/`currency`, each nullable, copied from the
+  extract response by `ITEM_DONE` — set only on a done item, never on a
+  skipped/failed one). `BatchState` holds `items`, `rejected`
   (`{fileName, reason}`), `pausedReason`
   (`"unavailable" | "network" | "stopped" | null`), the `apartmentId`
   captured once at `start()`, and `running`.
@@ -1079,7 +1082,10 @@ the purchase info, and the result is displayed for review.
   `'Remove <name>'` name; the single-file flow's own, separate "Remove"
   button is untouched). A **done** row's `<a href="/?receipt=<id>"
   target="_blank" rel="noopener noreferrer">Open</a>`/"Check values (N)"
-  badge, and a **failed** row's error text (same shared messages as the
+  badge — preceded by an `ExtractedSummaryLine`, "`<store>` · `<date via
+  DateCell>` · `<formatMoney(total, currency)>`" (`MissingValue` for a
+  missing part, `DateCell`'s "Date not recognized" marker for a non-ISO
+  date; rendered only when `extracted` is set) — and a **failed** row's error text (same shared messages as the
   single-file flow) + "Retry" button, now render on their own line
   *beneath* the main 56px line, so every row's main line stays the same
   height regardless of status. "Remove" is offered for waiting/failed rows
@@ -1138,7 +1144,8 @@ the purchase info, and the result is displayed for review.
   `STOPPED_MESSAGE` ("Stopped. The remaining receipts were not
   processed.") plus a "Resume" button. Once nothing is waiting or in
   flight (`batchWaitingOrInFlight`, derived from item statuses), a success
-  `Alert` ("Done: X read, Y failed.") offers "Review in History"
+  `Alert` ("Done: X read, Y failed.", text unchanged, now followed by an
+  "Open yearly report" link to `?view=report` via `navigateTo`) offers "Review in History"
   (`navigateTo('?view=history&apartment=<id>&status=needs_review')`,
   reading the component's own `apartmentId` state, which can't drift from
   what `start()` captured since the apartment group is disabled for the

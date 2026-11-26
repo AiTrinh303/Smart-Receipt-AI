@@ -458,3 +458,34 @@ test('files are queued in natural filename order regardless of selection order',
   const names = screen.getAllByTitle(/^img\d+\.jpg$/).map((el) => el.textContent)
   expect(names).toEqual(['img1.jpg', 'img2.jpg', 'img10.jpg'])
 })
+
+test('Given a finished batch, Then the done alert keeps its text, gains an "Open yearly report" link, and each done row shows what was read', async () => {
+  // Given 2 files read to the end
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+  selectFiles([makeFile('a.jpg'), makeFile('b.jpg')])
+  await chooseApartment()
+  fireEvent.click(getStartButton(2))
+  await waitFor(() => expect(uploadDeferreds.size).toBe(2))
+  resolveUpload('a.jpg', 'ra')
+  resolveUpload('b.jpg', 'rb')
+  await waitFor(() => expect(extractDeferreds.size).toBe(2))
+  resolveExtract('ra', { store_name: 'Edeka', purchase_date: '2026-11-20', total: 23.5, currency: 'EUR' })
+  resolveExtract('rb', { store_name: null, total: null })
+
+  // Then the finished alert keeps its exact text and links to the report
+  await waitFor(() => expect(screen.getByText('Done: 2 read, 0 failed.')).toBeInTheDocument())
+  const reportLink = screen.getByRole('link', { name: 'Open yearly report' })
+  expect(reportLink).toHaveAttribute('href', '/?view=report')
+
+  // And each done row shows store · date · amount (MissingValue when absent)
+  expect(screen.getByText('Edeka').closest('p')).toHaveTextContent('Edeka · 20.11.2026 · EUR 23.50')
+  const rowB = screen.getByText('b.jpg').closest('li') as HTMLElement
+  expect(rowB).toHaveTextContent('—Not detected · 15.01.2026 · —Not detected')
+
+  // When the link is clicked
+  fireEvent.click(reportLink)
+
+  // Then the app navigates to the report view
+  expect(window.location.search).toBe('?view=report')
+})

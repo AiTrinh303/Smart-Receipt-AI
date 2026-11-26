@@ -282,6 +282,12 @@ export function useBatchUpload(deps: UseBatchUploadDeps = {}): UseBatchUploadRes
         id: item.id,
         receiptId,
         warningsCount: extractResult.warnings.length,
+        extracted: {
+          store_name: extractResult.store_name ?? null,
+          purchase_date: extractResult.purchase_date ?? null,
+          total: extractResult.total ?? null,
+          currency: extractResult.currency ?? null,
+        },
       })
     } catch (err) {
       if (!mountedRef.current) {

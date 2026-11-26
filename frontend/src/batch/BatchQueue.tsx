@@ -10,7 +10,8 @@ import { formatMoney } from '../components/ui/formatMoney'
 import { apartmentShortName } from '../format/apartmentShortName'
 import { formatDisplayDate } from '../format/formatDisplayDate'
 import { IMAGE_EXTENSIONS, getExtension } from '../fileValidation'
-import type { BatchItem, BatchItemStatus, RejectedFile } from './batchReducer'
+import { DateCell } from '../ReceiptItems'
+import type { BatchItem, BatchItemStatus, ExtractedSummary, RejectedFile } from './batchReducer'
 
 const STATUS_LABELS: Record<BatchItemStatus, string> = {
   waiting: 'Waiting',
@@ -169,6 +170,29 @@ function DuplicateSummaryLine({ existing }: { existing: ReceiptSummary | null | 
   )
 }
 
+/** "<store> · <date> · <amount>" for a done row -- what the AI read, so
+ * the owner can spot an obviously wrong result without opening it. Same
+ * display rules as everywhere else: MissingValue for a missing part, and
+ * DateCell's "Date not recognized" marker for a non-ISO date. */
+function ExtractedSummaryLine({ extracted }: { extracted: ExtractedSummary }) {
+  const parts: ReactNode[] = [
+    extracted.store_name ? <span title={extracted.store_name}>{extracted.store_name}</span> : <MissingValue />,
+    <DateCell value={extracted.purchase_date} />,
+    extracted.total !== null ? formatMoney(extracted.total, extracted.currency) : <MissingValue />,
+  ]
+
+  return (
+    <p className="break-words text-sm text-ink">
+      {parts.map((part, index) => (
+        <span key={index}>
+          {index > 0 && ' · '}
+          {part}
+        </span>
+      ))}
+    </p>
+  )
+}
+
 /** Keeps one object URL per queued IMAGE file, for the row thumbnails --
  * created lazily as items appear, revoked the moment an item's id drops out
  * of `items` (covers Remove, a whole-queue replace before starting, and
@@ -256,6 +280,12 @@ function BatchQueue({ items, rejected, onRetry, onRemove, onUploadAnyway }: Batc
                   </Button>
                 )}
               </div>
+
+              {item.status === 'done' && item.extracted && (
+                <div className="px-3 pb-1">
+                  <ExtractedSummaryLine extracted={item.extracted} />
+                </div>
+              )}
 
               {item.status === 'done' && (item.receiptId || (item.warningsCount ?? 0) > 0) && (
                 <div className="flex flex-wrap items-center gap-2 px-3 pb-2">

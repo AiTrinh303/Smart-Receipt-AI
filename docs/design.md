@@ -1834,6 +1834,19 @@ useful on the hundredth visit too.
   - **Refresh:** once after a single upload's extraction, once when a
     batch finishes -- the current content stays visible while it
     reloads (the skeleton is first-load only).
+- **What was read, in each finished batch row.** `ITEM_DONE` now also
+  keeps `store_name`/`purchase_date`/`total`/`currency` (each nullable)
+  from the extract response as the item's `extracted`; skipped and
+  failed items never get one. A done row adds a line "`<store>` ·
+  `<date>` · `<amount>`" (amount through `formatMoney`, so "EUR 23.50";
+  `MissingValue` for a missing part; `DateCell`'s warning icon and hidden
+  "Date not recognized" for a non-ISO date) above the unchanged "Open"
+  link and "Check values (N)" badge -- an obviously wrong store or total
+  is visible without opening each receipt. The finished `Alert` keeps
+  "Done: X read, Y failed." (and " Z skipped." when relevant) word for
+  word and gains an "Open yearly report" link (`?view=report`), since
+  the Report already counts these receipts whether or not they are
+  reviewed.
 
 ## Changelog
 

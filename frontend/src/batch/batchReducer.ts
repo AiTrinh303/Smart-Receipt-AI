@@ -21,6 +21,8 @@ export interface BatchItem {
   error?: string
   errorKind?: BatchErrorKind
   warningsCount?: number
+  /** Set only when the item is "done". */
+  extracted?: ExtractedSummary
   /** This file's content hash (null when it couldn't be computed), set
    * once the duplicate check has run for it -- used to catch a second,
    * byte-identical file added later in the same session. */
@@ -32,6 +34,16 @@ export interface BatchItem {
   /** Set by "Upload anyway": the next upload attempt for this item sends
    * allow_duplicate=true. Survives a later retry/resume. */
   allowDuplicate?: boolean
+}
+
+/** What the AI read for a done item -- kept from the extract response so
+ * the queue row can show it without another request. Every field is
+ * nullable, exactly as the extract response's own. */
+export interface ExtractedSummary {
+  store_name: string | null
+  purchase_date: string | null
+  total: number | null
+  currency: string | null
 }
 
 export interface RejectedFile {
@@ -79,7 +91,7 @@ export type BatchAction =
   | { type: 'RESUME' }
   | { type: 'ITEM_UPLOADING'; id: string }
   | { type: 'ITEM_READING'; id: string; receiptId: string }
-  | { type: 'ITEM_DONE'; id: string; receiptId: string; warningsCount: number }
+  | { type: 'ITEM_DONE'; id: string; receiptId: string; warningsCount: number; extracted: ExtractedSummary }
   | { type: 'ITEM_FAILED'; id: string; error: string; errorKind: BatchErrorKind; receiptId?: string }
   | {
       type: 'ITEM_FAILED_AND_PAUSE'
@@ -161,6 +173,7 @@ export function batchReducer(state: BatchState, action: BatchAction): BatchState
           status: 'done',
           receiptId: action.receiptId,
           warningsCount: action.warningsCount,
+          extracted: action.extracted,
           error: undefined,
           errorKind: undefined,
         })),

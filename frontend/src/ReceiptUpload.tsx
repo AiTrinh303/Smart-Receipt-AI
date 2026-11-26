@@ -1182,7 +1182,17 @@ function ReceiptUpload() {
                       <>
                         <Alert variant="success">
                           Done: {batchDoneCount} read, {batchFailedCount} failed.
-                          {batchSkippedCount > 0 ? ` ${batchSkippedCount} skipped.` : ''}
+                          {batchSkippedCount > 0 ? ` ${batchSkippedCount} skipped.` : ''}{' '}
+                          <a
+                            href="/?view=report"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              navigateTo('?view=report')
+                            }}
+                            className="rounded-sm font-medium underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                          >
+                            Open yearly report
+                          </a>
                         </Alert>
                         <div className="flex gap-2">
                           <Button

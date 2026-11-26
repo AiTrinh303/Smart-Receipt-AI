@@ -141,6 +141,14 @@ const SAMPLE_BATCH_ITEMS: BatchItem[] = [
     status: 'done',
     receiptId: 'sample-receipt-id',
     warningsCount: 2,
+    extracted: { store_name: 'Edeka Center Sankt Englmar', purchase_date: '2026-11-20', total: 23.5, currency: 'EUR' },
+  },
+  {
+    id: 'batch-sample-4b',
+    file: new File([], 'receipt-4b.jpg'),
+    status: 'done',
+    receiptId: 'sample-receipt-id-2',
+    extracted: { store_name: null, purchase_date: '26/06/2025', total: null, currency: null },
   },
   {
     id: 'batch-sample-5',
@@ -952,7 +960,7 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Batch upload queue (BatchQueue -- compact rows: waiting / in progress / done with warnings / failed / already saved / same file twice / rejected files)">
+      <Section title="Batch upload queue (BatchQueue -- compact rows: waiting / in progress / done with what was read, incl. warnings and missing values / failed / already saved / same file twice / rejected files)">
         <Card className="flex flex-col gap-4">
           <BatchQueue
             items={SAMPLE_BATCH_ITEMS}
@@ -1096,7 +1104,15 @@ function StyleGuide() {
         <Card className="flex flex-col gap-3">
           {batchPauseState === 'finished' ? (
             <>
-              <Alert variant="success">Done: 3 read, 1 failed.</Alert>
+              <Alert variant="success">
+                Done: 3 read, 1 failed.{' '}
+                <a
+                  href="/?view=report"
+                  className="rounded-sm font-medium underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                >
+                  Open yearly report
+                </a>
+              </Alert>
               <div className="flex gap-2">
                 <Button size="sm">Review in History</Button>
                 <Button variant="secondary" size="sm">
