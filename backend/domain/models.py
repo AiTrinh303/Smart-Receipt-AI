@@ -293,6 +293,18 @@ class ApartmentAssignment(BaseModel):
     apartment_id: str = Field(min_length=1)
 
 
+class DuplicateHashesRequest(BaseModel):
+    """Body of POST /receipts/check-duplicates. The route itself validates
+    the count (<= 50) and each entry's shape (is_valid_sha256_hex) -- kept
+    out of this model so domain/models.py never needs to import
+    domain/rules.py (which already imports domain/models.py) and risk a
+    circular import."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hashes: list[str] = Field(default_factory=list)
+
+
 class StatusAssignment(BaseModel):
     """Body of PUT /receipts/{id}/status -- strict, only the two allowed
     status values."""

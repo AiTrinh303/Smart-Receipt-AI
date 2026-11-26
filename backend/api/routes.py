@@ -18,6 +18,7 @@ from adapters.report_export import build_zip
 from adapters.sqlite_repository import SqliteReceiptRepository
 from domain.models import (
     ApartmentAssignment,
+    DuplicateHashesRequest,
     ReceiptStatus,
     ReceiptUpdate,
     StatusAssignment,
@@ -46,7 +47,9 @@ from domain.rules import (
     UnsupportedFileTypeError,
     archive_filename,
     check_receipt,
+    content_hash,
     flatten_line_items,
+    is_valid_sha256_hex,
     matches_query,
     media_type_for_extension,
     normalize_purchase_date,
@@ -120,6 +123,7 @@ def health():
 async def upload_receipt(
     file: UploadFile = File(...),
     apartment_id: str = Form(...),
+    allow_duplicate: bool = Form(default=False),
     repository: ReceiptRepository = Depends(get_repository),
 ):
     # Apartment choice is validated before anything touches disk or the
@@ -146,6 +150,22 @@ async def upload_receipt(
     except FileTooLargeError:
         raise HTTPException(status_code=413, detail="File exceeds the maximum size of 10 MB.")
 
+    # Computed from the bytes already read above -- no second read, no extra
+    # I/O. Checked before anything is written to disk or the database, and
+    # before any AI call could ever happen, so a flagged duplicate costs
+    # nothing beyond this one lookup.
+    sha256 = content_hash(contents)
+    existing = repository.find_saved_by_hashes([sha256]).get(sha256)
+    if existing is not None and not allow_duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "DUPLICATE_FILE",
+                "message": "This file is already saved.",
+                "existing": existing.model_dump(),
+            },
+        )
+
     receipt_id = save_file(contents, extension)
     repository.save_upload(
         receipt_id=receipt_id,
@@ -153,6 +173,7 @@ async def upload_receipt(
         stored_filename=f"{receipt_id}{extension}",
         content_type=file.content_type,
         apartment_id=apartment_id,
+        content_sha256=sha256,
     )
 
     return {
@@ -162,6 +183,42 @@ async def upload_receipt(
         "size_bytes": len(contents),
         "apartment_id": apartment.id,
         "apartment_name": apartment.name,
+    }
+
+
+MAX_DUPLICATE_CHECK_HASHES = 50
+
+
+@router.post("/receipts/check-duplicates")
+def check_duplicates(
+    request: DuplicateHashesRequest,
+    repository: ReceiptRepository = Depends(get_repository),
+):
+    # A fixed literal path, POST only -- can never collide with
+    # POST /receipts/upload (a different path) or GET /receipts/{receipt_id}
+    # (a different HTTP method on an otherwise-matching prefix); registered
+    # here, next to the upload route it supports, for the same reason.
+    if len(request.hashes) > MAX_DUPLICATE_CHECK_HASHES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"hashes must have at most {MAX_DUPLICATE_CHECK_HASHES} entries.",
+        )
+    for value in request.hashes:
+        if not is_valid_sha256_hex(value):
+            raise HTTPException(status_code=422, detail=f"Invalid hash: {value!r}")
+
+    if not request.hashes:
+        return {"items": []}
+
+    existing_by_hash = repository.find_saved_by_hashes(request.hashes)
+    return {
+        "items": [
+            {
+                "hash": value,
+                "existing": existing_by_hash[value].model_dump() if value in existing_by_hash else None,
+            }
+            for value in request.hashes
+        ]
     }
 
 

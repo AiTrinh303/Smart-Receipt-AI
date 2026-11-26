@@ -1468,7 +1468,84 @@ the purchase info, and the result is displayed for review.
     `422`; unknown -> `422` "Unknown apartment."; inactive -> `422` "This
     apartment is no longer active." — none of these touch disk or create
     an uploads row), stored on the uploads row, echoed in the response as
-    `apartment_id`/`apartment_name`,
+    `apartment_id`/`apartment_name`.
+    **Duplicate-file detection (`domain.rules.content_hash`/
+    `is_valid_sha256_hex`, `uploads.content_sha256`,
+    `POST /receipts/check-duplicates`, `scripts/backfill_hashes.py`):** the
+    same receipt file must never be uploaded, read by the AI (which costs
+    money) and counted twice. `content_hash(data: bytes) -> str` (pure,
+    stdlib `hashlib` only) is SHA-256 as a lowercase 64-char hex string;
+    `is_valid_sha256_hex(value)` is true only for exactly that shape
+    (uppercase, short or non-hex all `False`). The upload route computes
+    `content_hash()` on the bytes it already read, right after the
+    existing file-type/size/emptiness validation (so those keep their own
+    `400`/`413` even when the bytes would otherwise match a saved receipt)
+    and *before* `save_file`/`save_upload` — a flagged duplicate writes
+    nothing to disk and no `uploads` row. A new optional form field,
+    `allow_duplicate` (`bool`, default `false`): when a **saved** receipt
+    (one with a `receipts` row — an upload that was never extracted, or
+    whose receipt was since deleted, doesn't count) already has this exact
+    hash and `allow_duplicate` is `false`, the route returns `409` with
+    `{"detail": {"code": "DUPLICATE_FILE", "message": "This file is
+    already saved.", "existing": <ReceiptSummary>}}` — the same field set
+    `GET /receipts`'s list rows use (`receipt_id`/`original_filename`/
+    `store_name`/`purchase_date` (normalized for display, like
+    `get_receipt()`)/`currency`/`total`/`created_at`/`apartment_id`/
+    `apartment_name`/`status`); the `201` response shape is otherwise
+    unchanged, and the hash itself is never part of it. `allow_duplicate:
+    true` (or no existing match) continues exactly as before, storing the
+    hash on the `uploads` row. `POST /receipts/check-duplicates` (body
+    `{"hashes": [...]}` validated against `DuplicateHashesRequest`, a
+    bare `list[str]`, `extra="forbid"`) lets the frontend batch-check
+    several files before even starting an upload: at most 50 entries
+    (`MAX_DUPLICATE_CHECK_HASHES`), each must pass `is_valid_sha256_hex`
+    (else `422`); an empty list is `{"items": []}`; otherwise
+    `{"items": [{"hash", "existing": <ReceiptSummary> or null}, ...]}` in
+    request order — a repeated hash is answered per entry, never
+    deduplicated. Never calls the extractor, never writes anything.
+    Registered as a plain `POST` on a fixed literal path, so it can never
+    collide with `POST /receipts/upload` (different path) or
+    `GET /receipts/{receipt_id}` (different HTTP method). `ReceiptRepository`
+    gained `find_saved_by_hashes(hashes) -> dict[hash, ReceiptSummary]`
+    (parameterized `IN`, chunked at 200 per query — defensive, SQLite's
+    own parameter limit is much higher; when several uploads share a hash,
+    picks the **oldest** by `receipts.created_at`), `set_upload_hash(
+    receipt_id, content_sha256)` (used only by the backfill script),
+    `list_uploads_without_hash()`, `count_uploads()`, and
+    `list_saved_hash_duplicate_groups()` (groups of 2+ saved receipts
+    sharing a hash — used only by the backfill script's `--report`, a
+    different, unrelated notion of "duplicate" from the yearly report's
+    own apartment/date/store/total-based `possible_duplicates`). `save_
+    upload(...)` gained an optional `content_sha256` parameter, stored in
+    a new, non-unique (`allow_duplicate` can legitimately create more than
+    one upload with the same hash) `uploads.content_sha256 TEXT NULL`
+    column plus `idx_uploads_content_sha256`, added via the same existing
+    `PRAGMA table_info` + `ALTER TABLE ADD COLUMN`-if-missing migration
+    guard as every other additive column here — an old database's
+    existing rows keep `content_sha256 = NULL` until backfilled.
+    `scripts/backfill_hashes.py` (operational, like `backup.py` —
+    `BACKEND_DIR` on `sys.path`, `config`/`adapters.sqlite_repository`
+    imported lazily inside `main()`, never imported *by* domain/adapters/
+    api) hashes every `uploads` row still missing one: `run_backfill(
+    repository, dry_run=False)` finds each file via the existing safe,
+    UUID-based `adapters.file_storage.find_file` lookup, hashes it in
+    64 KiB chunks via `scripts._common.sha256_file` (already used by
+    `backup.py`, just a smaller `chunk_size` here), and stores it through
+    `repository.set_upload_hash(...)` — never raw SQL in the script
+    itself. A missing file is skipped and counted, never fatal; idempotent
+    (only rows still missing a hash are ever touched, so a second run
+    with nothing new to do changes nothing); `--dry-run` runs the same
+    logic but skips the `set_upload_hash` write; `--report` additionally
+    calls `list_saved_hash_duplicate_groups()` and prints each group
+    (apartment short name via a tiny script-local `_short_apartment_name`
+    — the frontend's `apartmentShortName` has no backend equivalent —
+    store, date, total, receipt ids, oldest first) without changing or
+    deleting anything. Prints only a summary (hashed/already hashed/
+    missing file counts, plus the report) — never file contents or full
+    paths. **Out of scope, both here and for the 409 check:** near-
+    duplicate or image-similarity detection — only a byte-for-byte
+    identical file is ever caught; a re-compressed or re-photographed
+    copy of the same receipt is not.
     `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`,
     `GET /receipts?limit=N&offset=M` — list, newest first, `limit`
     default 50 (1–200, else `422`), `offset` default 0 (`>= 0`, else

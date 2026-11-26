@@ -1,3 +1,4 @@
+import hashlib
 import re
 import unicodedata
 from datetime import date, timedelta
@@ -51,6 +52,25 @@ def media_type_for_extension(extension: str) -> str | None:
     the client-supplied content_type and never sniffed from the file's
     contents, both of which a client could spoof."""
     return EXTENSION_MEDIA_TYPES.get(extension.lower())
+
+
+# --- Duplicate-file detection by content hash ------------------------------
+
+_SHA256_HEX_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
+def content_hash(data: bytes) -> str:
+    """SHA-256 of `data` as a lowercase 64-char hex string -- used to detect
+    an identical file re-uploaded, before anything is written to disk or the
+    database and before any AI call. Pure, no I/O."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def is_valid_sha256_hex(value: str) -> bool:
+    """True only for exactly 64 lowercase hex characters -- the exact shape
+    content_hash() produces. An uppercase, short, or non-hex value is never
+    valid; never raises."""
+    return bool(_SHA256_HEX_PATTERN.match(value))
 
 
 def validate_upload(extension: str, content_type: str | None, size_bytes: int) -> None:

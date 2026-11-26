@@ -7,7 +7,10 @@ VALID_APARTMENT_ID = "oberaudorf-bergblick"
 OTHER_APARTMENT_ID = "sankt-englmar-waldglueck"
 
 
-def upload_with_apartment(client, files, apartment_id: str = VALID_APARTMENT_ID, **extra):
-    return client.post(
-        "/receipts/upload", files=files, data={"apartment_id": apartment_id}, **extra
-    )
+def upload_with_apartment(
+    client, files, apartment_id: str = VALID_APARTMENT_ID, allow_duplicate: bool | None = None, **extra
+):
+    data = {"apartment_id": apartment_id}
+    if allow_duplicate is not None:
+        data["allow_duplicate"] = str(allow_duplicate).lower()
+    return client.post("/receipts/upload", files=files, data=data, **extra)

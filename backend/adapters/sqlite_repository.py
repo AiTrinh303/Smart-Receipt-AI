@@ -112,6 +112,14 @@ class SqliteReceiptRepository:
             uploads_columns = {row[1] for row in conn.execute("PRAGMA table_info(uploads)")}
             if "apartment_id" not in uploads_columns:
                 conn.execute("ALTER TABLE uploads ADD COLUMN apartment_id TEXT NULL")
+            if "content_sha256" not in uploads_columns:
+                conn.execute("ALTER TABLE uploads ADD COLUMN content_sha256 TEXT NULL")
+            # Non-unique: allow_duplicate lets more than one upload share a
+            # hash on purpose, so this only speeds up the lookup, never
+            # constrains it.
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_uploads_content_sha256 ON uploads(content_sha256)"
+            )
 
             # Idempotent: INSERT OR IGNORE never touches a row that already
             # exists (e.g. one a user later deactivated), so this is safe to
@@ -129,22 +137,32 @@ class SqliteReceiptRepository:
         stored_filename: str,
         content_type: str | None,
         apartment_id: str | None = None,
+        content_sha256: str | None = None,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO uploads (
                     receipt_id, original_filename, stored_filename, content_type, created_at,
-                    apartment_id
+                    apartment_id, content_sha256
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(receipt_id) DO UPDATE SET
                     original_filename = excluded.original_filename,
                     stored_filename = excluded.stored_filename,
                     content_type = excluded.content_type,
-                    apartment_id = excluded.apartment_id
+                    apartment_id = excluded.apartment_id,
+                    content_sha256 = excluded.content_sha256
                 """,
-                (receipt_id, original_filename, stored_filename, content_type, _utc_now_iso(), apartment_id),
+                (
+                    receipt_id,
+                    original_filename,
+                    stored_filename,
+                    content_type,
+                    _utc_now_iso(),
+                    apartment_id,
+                    content_sha256,
+                ),
             )
 
     def get_upload(self, receipt_id: str) -> SavedUpload | None:
@@ -170,6 +188,194 @@ class SqliteReceiptRepository:
             created_at=row[4],
             apartment_id=row[5],
         )
+
+    def set_upload_hash(self, receipt_id: str, content_sha256: str) -> None:
+        """Used only by scripts/backfill_hashes.py, to fill in the hash for
+        an uploads row that predates duplicate detection -- never touches
+        any other column."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE uploads SET content_sha256 = ? WHERE receipt_id = ?",
+                (content_sha256, receipt_id),
+            )
+
+    def list_uploads_without_hash(self) -> list[SavedUpload]:
+        """Every uploads row with no content_sha256 yet -- the backfill
+        script's own worklist. Independent of whether a receipts row
+        exists (the hash lives on uploads, regardless of extraction)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT receipt_id, original_filename, stored_filename, content_type, created_at,
+                       apartment_id
+                FROM uploads
+                WHERE content_sha256 IS NULL
+                ORDER BY created_at ASC, receipt_id ASC
+                """
+            ).fetchall()
+
+        return [
+            SavedUpload(
+                receipt_id=row[0],
+                original_filename=row[1],
+                stored_filename=row[2],
+                content_type=row[3],
+                created_at=row[4],
+                apartment_id=row[5],
+            )
+            for row in rows
+        ]
+
+    def count_uploads(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM uploads").fetchone()[0]
+
+    def _receipt_summary_from_hash_join_row(
+        self,
+        receipt_id: str,
+        extracted_json: str,
+        created_at: str,
+        original_filename: str | None,
+        apartment_id_value: str | None,
+        apartment_name: str | None,
+        status_value: str,
+    ) -> ReceiptSummary | None:
+        """Shared by find_saved_by_hashes/list_saved_hash_duplicate_groups:
+        builds one ReceiptSummary from a receipts/uploads/apartments join
+        row, normalizing purchase_date for display the same way
+        get_receipt() does (never rewriting the stored row). Returns None
+        (never raises) for a row whose extracted_json is unparseable --
+        same "skip, log receipt_id only, keep going" rule as everywhere
+        else in this file."""
+        try:
+            extracted = ReceiptData.model_validate_json(extracted_json)
+        except Exception:
+            logger.error("Skipping receipt with unparseable extracted_json: receipt_id=%s", receipt_id)
+            return None
+
+        normalized_date = normalize_purchase_date(extracted.purchase_date)
+        display_date = normalized_date if normalized_date is not None else extracted.purchase_date
+
+        return ReceiptSummary(
+            receipt_id=receipt_id,
+            original_filename=original_filename,
+            store_name=extracted.store_name,
+            purchase_date=display_date,
+            currency=extracted.currency,
+            total=extracted.total,
+            created_at=created_at,
+            apartment_id=apartment_id_value,
+            apartment_name=apartment_name,
+            status=status_value,
+        )
+
+    def find_saved_by_hashes(self, hashes: list[str]) -> dict[str, ReceiptSummary]:
+        """For each given hash, the SAVED receipt (a receipts row exists)
+        whose upload carries that content_sha256 -- the OLDEST one (by
+        receipts.created_at) when more than one upload shares the hash
+        (e.g. via allow_duplicate). A hash with no saved receipt is simply
+        absent from the result -- never a KeyError for the caller to
+        guard against."""
+        if not hashes:
+            return {}
+
+        chunk_size = 200  # keeps well under SQLite's default parameter limit
+        results: dict[str, ReceiptSummary] = {}
+
+        with self._connect() as conn:
+            for start in range(0, len(hashes), chunk_size):
+                chunk = hashes[start : start + chunk_size]
+                placeholders = ",".join("?" for _ in chunk)
+                rows = conn.execute(
+                    f"""
+                    SELECT u.content_sha256, r.receipt_id, r.extracted_json, r.created_at,
+                           u.original_filename, r.apartment_id, ap.name, r.status
+                    FROM uploads u
+                    JOIN receipts r ON r.receipt_id = u.receipt_id
+                    LEFT JOIN apartments ap ON ap.id = r.apartment_id
+                    WHERE u.content_sha256 IN ({placeholders})
+                    ORDER BY r.created_at ASC, r.receipt_id ASC
+                    """,
+                    chunk,
+                ).fetchall()
+
+                for (
+                    content_sha256,
+                    receipt_id,
+                    extracted_json,
+                    created_at,
+                    original_filename,
+                    apartment_id_value,
+                    apartment_name,
+                    status_value,
+                ) in rows:
+                    if content_sha256 in results:
+                        continue  # already have the oldest, from the ASC order above
+
+                    summary = self._receipt_summary_from_hash_join_row(
+                        receipt_id,
+                        extracted_json,
+                        created_at,
+                        original_filename,
+                        apartment_id_value,
+                        apartment_name,
+                        status_value,
+                    )
+                    if summary is not None:
+                        results[content_sha256] = summary
+
+        return results
+
+    def list_saved_hash_duplicate_groups(self) -> list[list[ReceiptSummary]]:
+        """Groups of 2+ SAVED receipts (a receipts row exists) whose upload
+        shares one content_sha256 -- used only by the backfill script's
+        --report, never by any API route or the report's own duplicate
+        groups (which match on apartment/date/store/total, a separate,
+        unrelated notion of "duplicate"). Each group is ordered oldest
+        first (receipts.created_at ASC); groups themselves are ordered by
+        their own oldest member's created_at."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT u.content_sha256, r.receipt_id, r.extracted_json, r.created_at,
+                       u.original_filename, r.apartment_id, ap.name, r.status
+                FROM uploads u
+                JOIN receipts r ON r.receipt_id = u.receipt_id
+                LEFT JOIN apartments ap ON ap.id = r.apartment_id
+                WHERE u.content_sha256 IS NOT NULL
+                ORDER BY u.content_sha256 ASC, r.created_at ASC, r.receipt_id ASC
+                """
+            ).fetchall()
+
+        grouped: dict[str, list[ReceiptSummary]] = {}
+        order: list[str] = []
+        for (
+            content_sha256,
+            receipt_id,
+            extracted_json,
+            created_at,
+            original_filename,
+            apartment_id_value,
+            apartment_name,
+            status_value,
+        ) in rows:
+            summary = self._receipt_summary_from_hash_join_row(
+                receipt_id,
+                extracted_json,
+                created_at,
+                original_filename,
+                apartment_id_value,
+                apartment_name,
+                status_value,
+            )
+            if summary is None:
+                continue
+            if content_sha256 not in grouped:
+                grouped[content_sha256] = []
+                order.append(content_sha256)
+            grouped[content_sha256].append(summary)
+
+        return [grouped[h] for h in order if len(grouped[h]) >= 2]
 
     def save_receipt(
         self, receipt_id: str, data: ReceiptData, apartment_id: str | None = None

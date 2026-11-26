@@ -10,6 +10,7 @@ A web app that stores the shopping receipts of my two holiday apartments in Germ
 - Browse History and Items, filter by apartment/year/status, search items.
 - Yearly report (counts every receipt; shows warnings, possible duplicates and the largest receipts to check).
 - Download the yearly report as CSV and a ZIP with the PDFs, for the tax advisor.
+- Re-uploading the exact same file is caught before it is read by the AI.
 
 ## Before you start
 - Python 3 (I use 3.12) and Node.js with npm (a current LTS version). Check with `python3 --version` and `node --version`.
@@ -56,7 +57,7 @@ After changing `backend/.env`, stop and restart uvicorn. `--reload` does not wat
 
 ## What it does not do yet
 - No login. Use it only on your own machine and do not expose it to the internet.
-- No duplicate detection: uploading the same receipt twice creates two records.
+- Duplicate detection only catches a byte-for-byte identical file: a re-compressed or re-photographed copy of the same receipt still creates a second record.
 - No bulk approval: receipts are approved one at a time, with a review mode that moves to the next one.
 - The AI can misread a receipt. Check each one against the original before approving it.
 - Receipt files are sent to OpenAI to be read, and deleting a receipt here cannot delete that copy.
@@ -71,6 +72,7 @@ Why it is built this way, in short:
 - **Warnings do not block.** A total that does not match or an odd date only warns me. Three things are required to approve a receipt: an apartment, a valid date and a total.
 - **One apartment per receipt, no categories.** The report only needs apartment, year and review status, so categories were removed.
 - **No login, one local SQLite file.** It is a personal tool, so I kept it simple and listed the risk above.
+- **Duplicate files are caught by content, not by name.** Uploading a file now hashes it (SHA-256) before anything is written or sent to the AI; if an identical file is already saved, the upload is refused with a 409 pointing at the existing receipt, unless I explicitly say to keep it anyway. The 46 receipts saved before this existed have no hash yet — `python scripts/backfill_hashes.py` (run once inside `backend/`, after activating the venv) fills them in; `--dry-run` previews it first, and `--report` lists any receipts that turn out to already share an identical file.
 
 The decisions are written down in `docs/adr/`:
 - [ADR 0001: layered backend](docs/adr/0001-layered-backend.md)
@@ -89,7 +91,7 @@ Smart-Receipt-AI/
 │   ├── domain/            # pure rules: models, dates, money, warnings, interfaces
 │   ├── adapters/          # outside world: OpenAI, SQLite, uploads folder, PDF export
 │   ├── api/               # FastAPI routes and error handling
-│   ├── scripts/           # backup.py and restore.py
+│   ├── scripts/           # backup.py, restore.py, backfill_hashes.py
 │   ├── tests/             # pytest
 │   ├── data/              # SQLite database (not in git)
 │   └── uploads/           # original receipt files (not in git)

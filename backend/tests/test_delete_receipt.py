@@ -62,11 +62,18 @@ SAMPLE_RECEIPT_DATA = ReceiptData(
 
 
 def upload_and_extract(
-    upload_dir, extension: str = ".jpg", content_type: str = "image/jpeg", filename: str = "receipt.jpg"
+    upload_dir,
+    extension: str = ".jpg",
+    content_type: str = "image/jpeg",
+    filename: str = "receipt.jpg",
+    content: bytes = b"fake-bytes",
 ) -> str:
     """Goes through the real upload + extract endpoints so both an uploads
-    row and a receipts row exist, and a real file sits in the uploads dir."""
-    files = {"file": (filename, io.BytesIO(b"fake-bytes"), content_type)}
+    row and a receipts row exist, and a real file sits in the uploads dir.
+    `content` defaults to a fixed value -- callers that need two distinct,
+    simultaneously-saved receipts must pass different bytes for each, since
+    identical bytes are now flagged as a duplicate upload."""
+    files = {"file": (filename, io.BytesIO(content), content_type)}
     upload_response = upload_with_apartment(client, files)
     assert upload_response.status_code == 201
     receipt_id = upload_response.json()["receipt_id"]
@@ -132,8 +139,8 @@ def test_unknown_valid_uuid_returns_404_and_leaves_other_data_untouched(temp_upl
 
 def test_deleting_one_receipt_leaves_a_second_receipt_intact(temp_upload_dir, temp_repository):
     # Given two saved receipts
-    first_id = upload_and_extract(temp_upload_dir, filename="first.jpg")
-    second_id = upload_and_extract(temp_upload_dir, filename="second.jpg")
+    first_id = upload_and_extract(temp_upload_dir, filename="first.jpg", content=b"fake-bytes-first")
+    second_id = upload_and_extract(temp_upload_dir, filename="second.jpg", content=b"fake-bytes-second")
 
     # When the first is deleted
     response = client.delete(f"/receipts/{first_id}")
