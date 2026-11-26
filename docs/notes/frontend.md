@@ -786,8 +786,10 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   real `<a href="/?receipt=<id>&from=<from>">` links to an existing
   neighbour (so opening one in a new tab works), or a plain, non-
   interactive `<span aria-disabled="true">` at either end — and, only
-  when `status === 'needs_review'`, a second primary "Approve and next"
-  button next to "Mark as approved". **Staying mounted across moves:**
+  when `status === 'needs_review'`, an "Approve and next" button: the one
+  primary button, placed first, with "Mark as approved" stepping down to
+  `secondary` next to it (outside review mode "Mark as approved" stays the
+  only, primary button). **Staying mounted across moves:**
   Previous/Next/"Approve and next" never go through `navigateTo` (whose
   `pushState` + synthetic `popstate` would trigger `App.tsx`'s
   `key={locationKey}` remount, forcing a wasteful re-fetch of the same
@@ -842,8 +844,20 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   **Data-quality warnings, Edited badge, reset
   (`ReceiptResult.tsx`, `src/api/resetReceipt.ts`):** when `data.warnings`
   is non-empty, `ReceiptResult` renders an `Alert variant="warning"`
-  ("Check these values", icon + bulleted messages) above the data card;
-  empty `warnings` renders nothing, and warnings never block any action.
+  ("Check these values" + bulleted messages, with only the `Alert`'s own
+  icon — a second, inline icon was removed) above the data card; empty
+  `warnings` renders nothing, and warnings never block any action. The
+  "Check these values" line has `id={WARNINGS_HEADING_ID}` (exported,
+  `'receipt-warnings-heading'`) and `tabIndex={-1}`, with a `focus:` ring
+  (not `focus-visible:`, since it's only ever focused by a click):
+  `ReviewBar`'s `warningCount`/`warningsTargetId` props (passed by
+  `ReceiptUpload.tsx` as `result.warnings.length` and that id) show, only
+  while `status === 'needs_review'` and the count is non-zero, a link
+  "1 warning to check"/"N warnings to check" (warning icon + text,
+  `text-warning` underlined, 4.92:1 on white) — a real `href="#<id>"`
+  whose click calls `scrollIntoView({block: 'center'})` (clear of the
+  sticky/fixed bar, no smooth scrolling) and then `focus({preventScroll:
+  true})` on that line. It never blocks or disables approving.
   **"Fix in Edit"**: a warning whose `field` is exactly `purchase_date` or
   `total` (the only two `check_receipt` field names with one single input
   to jump to) additionally renders a small "Fix in Edit" button next to
@@ -858,8 +872,8 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   `PurchaseDateMeta`, `UNRECOGNIZED_DATE_TITLE` now exported from
   `ReceiptItems.tsx` rather than duplicated): follows the exact same rule
   the Items table's `DateCell` already uses, via the same
-  `formatDisplayDate()` — a valid ISO date renders unchanged (this never
-  reformats a *valid* date, only marks an *invalid* one); an unrecognized
+  `formatDisplayDate()` — a valid ISO date renders as `DD.MM.YYYY` (its
+  `aria-label`, "Date: ..., Currency: ...", says the same); an unrecognized
   value shows that raw text next to a small warning icon, the same
   `title`, and a hidden "Date not recognized"; a missing date renders
   `MissingValue`.

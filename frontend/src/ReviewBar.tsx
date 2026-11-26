@@ -35,6 +35,12 @@ interface ReviewBarProps {
    * control below is simply absent, and ReviewBar behaves exactly as it
    * did before review mode existed. */
   reviewNavigation?: ReviewNavigation
+  /** How many data-quality warnings this receipt has. While it still needs
+   * review, a non-zero count shows a "N warnings to check" link to the
+   * element with id `warningsTargetId` (the warning panel's heading line).
+   * Purely a pointer -- approving is never blocked by it. */
+  warningCount?: number
+  warningsTargetId?: string
 }
 
 /** The saved-receipt view's main action, placed at the top of the data
@@ -52,7 +58,14 @@ interface ReviewBarProps {
  * the list it was opened from ("N of M"), Previous/Next links to its
  * neighbours, and a second "Approve and next" button next to "Mark as
  * approved". */
-function ReviewBar({ receiptId, status, onUpdated, reviewNavigation }: ReviewBarProps) {
+function ReviewBar({
+  receiptId,
+  status,
+  onUpdated,
+  reviewNavigation,
+  warningCount = 0,
+  warningsTargetId,
+}: ReviewBarProps) {
   const { isSavingStatus, statusError, handleStatusChange } = useReceiptReviewStatus(receiptId, onUpdated)
   const useBottomVariant = useBottomBarVariant()
 
@@ -74,19 +87,23 @@ function ReviewBar({ receiptId, status, onUpdated, reviewNavigation }: ReviewBar
           <StatusBadge status={status} />
           {status === 'needs_review' ? (
             <>
+              {/* In review mode "Approve and next" is the main action (one
+                  primary button, first); "Mark as approved" steps down to
+                  secondary. Outside review mode it stays the only, primary
+                  button. */}
+              {reviewNavigation && (
+                <Button variant="primary" size="sm" disabled={isSavingStatus} onClick={handleApproveAndNext}>
+                  Approve and next
+                </Button>
+              )}
               <Button
-                variant="primary"
+                variant={reviewNavigation ? 'secondary' : 'primary'}
                 size="sm"
                 disabled={isSavingStatus}
                 onClick={() => handleStatusChange('approved')}
               >
                 Mark as approved
               </Button>
-              {reviewNavigation && (
-                <Button variant="primary" size="sm" disabled={isSavingStatus} onClick={handleApproveAndNext}>
-                  Approve and next
-                </Button>
-              )}
             </>
           ) : (
             <Button
@@ -99,6 +116,9 @@ function ReviewBar({ receiptId, status, onUpdated, reviewNavigation }: ReviewBar
             </Button>
           )}
           {isSavingStatus && <p className="text-sm text-ink-muted">Saving...</p>}
+          {status === 'needs_review' && warningCount > 0 && warningsTargetId && (
+            <WarningsLink count={warningCount} targetId={warningsTargetId} />
+          )}
         </div>
 
         {reviewNavigation && (
@@ -117,6 +137,41 @@ function ReviewBar({ receiptId, status, onUpdated, reviewNavigation }: ReviewBar
         </div>
       )}
     </div>
+  )
+}
+
+function WarningIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 flex-shrink-0" fill="none">
+      <path d="M10 3.5l8 13.5H2l8-13.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M10 8.5v3.5M10 14.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** A real in-page link (`href="#<id>"`, so it still works without script),
+ * whose click scrolls the warning panel into the middle of the viewport --
+ * clear of the sticky bar at the top (lg up) or the fixed bar at the bottom
+ * (below lg) -- and moves focus there, so keyboard and screen-reader users
+ * land on it too. No smooth scrolling, so reduced-motion needs nothing. */
+function WarningsLink({ count, targetId }: { count: number; targetId: string }) {
+  return (
+    <a
+      href={`#${targetId}`}
+      onClick={(e) => {
+        const target = document.getElementById(targetId)
+        if (!target) {
+          return
+        }
+        e.preventDefault()
+        target.scrollIntoView?.({ block: 'center' })
+        target.focus({ preventScroll: true })
+      }}
+      className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-warning underline hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand sm:min-h-0"
+    >
+      <WarningIcon />
+      {count === 1 ? '1 warning to check' : `${count} warnings to check`}
+    </a>
   )
 }
 

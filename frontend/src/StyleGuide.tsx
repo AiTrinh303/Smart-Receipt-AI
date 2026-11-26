@@ -516,16 +516,8 @@ function StyleGuide() {
 
       <Section title="Data-quality warnings, Edited badge and reset confirmation">
         <Alert variant="warning">
-          <div className="flex gap-2">
-            <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 flex-shrink-0" fill="none">
-              <path
-                d="M10 3.5l8 13.5H2l8-13.5z"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinejoin="round"
-              />
-              <path d="M10 8.5v3.5M10 14.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
+          {/* One icon only -- the Alert's own. */}
+          <div>
             <div>
               <p className="font-semibold">Check these values</p>
               <ul className="mt-1 flex flex-col gap-1.5 list-disc pl-4">
@@ -763,17 +755,28 @@ function StyleGuide() {
           Shown only when the receipt was opened from a history list with a tab/filter active (so a
           snapshot of up to 200 matching receipts could be fetched) and this receipt is in it; otherwise
           ReviewBar looks exactly like the sample above with no position/Previous/Next/"Approve and next".
+          In review mode "Approve and next" is the one primary button and comes first; "Mark as approved"
+          is secondary (outside review mode it stays primary). "2 warnings to check" appears whenever a
+          needs-review receipt has warnings (review mode or not): in the app it is a link that scrolls to
+          and focuses the warning panel's "Check these values" line, and never blocks approving.
         </p>
         <div className="rounded-card border border-border-subtle bg-surface px-4 py-3 shadow-card">
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-3">
               <StatusBadge status="needs_review" />
               <Button variant="primary" size="sm">
-                Mark as approved
-              </Button>
-              <Button variant="primary" size="sm">
                 Approve and next
               </Button>
+              <Button variant="secondary" size="sm">
+                Mark as approved
+              </Button>
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-warning underline">
+                <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 flex-shrink-0" fill="none">
+                  <path d="M10 3.5l8 13.5H2l8-13.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                  <path d="M10 8.5v3.5M10 14.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                2 warnings to check
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <p role="status" className="text-ink-muted">

@@ -91,6 +91,49 @@ test('the review bar shows "Back to needs review" for an approved receipt', asyn
   expect(screen.getByRole('button', { name: 'Back to needs review' })).toBeInTheDocument()
 })
 
+const TWO_WARNINGS = [
+  { code: 'MISSING_STORE', field: 'store_name', message: 'Store name is missing.', details: {} },
+  { code: 'MISSING_TOTAL', field: 'total', message: 'Total is missing.', details: {} },
+]
+
+test('a needs_review receipt with warnings shows "N warnings to check", which focuses the warning panel', async () => {
+  // Given a needs_review receipt with two warnings
+  await openSavedReceipt(savedReceipt({ warnings: TWO_WARNINGS }))
+  const user = userEvent.setup()
+
+  // When the link in the review bar is clicked
+  const link = screen.getByRole('link', { name: '2 warnings to check' })
+  await user.click(link)
+
+  // Then focus moves to the warning panel's "Check these values" line
+  expect(screen.getByText('Check these values')).toHaveFocus()
+  // And approving is still possible
+  expect(screen.getByRole('button', { name: 'Mark as approved' })).toBeEnabled()
+})
+
+test('one warning reads "1 warning to check"', async () => {
+  await openSavedReceipt(savedReceipt({ warnings: [TWO_WARNINGS[0]] }))
+
+  expect(screen.getByRole('link', { name: '1 warning to check' })).toBeInTheDocument()
+})
+
+test('no warnings link for a receipt without warnings', async () => {
+  // Given a needs_review receipt without warnings
+  await openSavedReceipt()
+
+  // Then there is no warnings link
+  expect(screen.queryByRole('link', { name: /warnings? to check/ })).not.toBeInTheDocument()
+})
+
+test('an approved receipt with warnings shows no warnings link', async () => {
+  // Given an approved receipt that still has warnings
+  await openSavedReceipt(savedReceipt({ status: 'approved', warnings: TWO_WARNINGS }))
+
+  // Then the review bar shows no link (the panel itself is still shown)
+  expect(screen.queryByRole('link', { name: /warnings? to check/ })).not.toBeInTheDocument()
+  expect(screen.getByText('Check these values')).toBeInTheDocument()
+})
+
 test('the review bar is hidden while the edit form is open', async () => {
   await openSavedReceipt()
   const user = userEvent.setup()

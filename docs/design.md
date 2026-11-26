@@ -1354,7 +1354,8 @@ scrollbar, a large dark empty area) inside an already-framed panel.
   now follows the same three-way rule the Items table's `DateCell`
   already uses, via the same `formatDisplayDate()`: a valid ISO date
   renders exactly as before (unchanged raw text — this ticket never
-  reformats a *valid* date, only adds a marker for an *invalid* one); an
+  reformats a *valid* date, only adds a marker for an *invalid* one --
+  later changed to `DD.MM.YYYY`, see "Receipt detail: data column"); an
   unrecognized value shows that raw text next to a small warning icon,
   `title="This date could not be read as a valid date. Open the receipt
   and fix it with Edit."` and a visually hidden "Date not recognized"
@@ -1935,6 +1936,43 @@ photo could only be read by turning your head.
   narrow panel (toolbar wraps), a sideways sample to rotate, and a PDF
   toolbar (no Rotate), using inline SVG sample images via an optional
   `fileUrl` prop that the app itself never passes.
+
+## Receipt detail: data column
+
+- **Meta-line date as `DD.MM.YYYY`.** `PurchaseDateMeta` now renders a
+  valid ISO date through `formatDisplayDate()`'s text ("2026-10-31" ->
+  "31.10.2026"), like History and Items; the meta line's `aria-label`
+  uses the same text. Raw (warning icon + hidden "Date not recognized")
+  and missing (`MissingValue`) are unchanged. This replaces the earlier
+  "a valid date renders unchanged" rule in "The meta line's date" above.
+- **One icon in the warning panel.** The `Alert` already draws its own
+  warning icon; the second, inline one inside its content is gone.
+- **Review mode: "Approve and next" leads.** Only in review mode, it is
+  the one primary button and comes first; "Mark as approved" is
+  secondary. Outside review mode, "Mark as approved" stays primary.
+- **"N warnings to check" in `ReviewBar`.** While a receipt needs review
+  and has warnings, the bar shows "1 warning to check"/"N warnings to
+  check" (icon + underlined `text-warning` text, 4.92:1 on white, so never
+  color alone). It's a real `#receipt-warnings-heading` link; a click
+  scrolls the "Check these values" line to the middle of the viewport
+  (clear of the sticky/fixed bar) and focuses it (`tabIndex={-1}`, a
+  `focus:` ring). Approving is never blocked. "Check these values"
+  stays a `<p>`, not a heading element: the panel sits above the store
+  name's `<h1>`, and an `<h2>` before the page's only `<h1>` would break
+  heading order.
+- **Tests changed** (`ReceiptResult.test.tsx`): "full data: store, date,
+  every item row, ..." now expects "15.01.2026 · USD" instead of
+  "2026-01-15 · USD"; "a valid ISO purchase_date is shown unchanged, with
+  no warning marker" became "... is shown as DD.MM.YYYY, with no warning
+  marker" (same fixture, now also checks the `aria-label`). New tests:
+  one icon in the panel and its focus target; "Approve and next" primary
+  and first with "Mark as approved" secondary in review mode, "Mark as
+  approved" primary outside it; "1 warning"/"2 warnings to check", the
+  link moving focus with approving still enabled; no link without
+  warnings or once approved.
+- **`?view=styleguide`:** the warning-panel sample has one icon; the
+  review-mode sample shows the new button order/variants and the
+  "2 warnings to check" link.
 
 ## Changelog
 

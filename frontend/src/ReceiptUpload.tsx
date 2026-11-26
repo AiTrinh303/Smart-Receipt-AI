@@ -27,7 +27,7 @@ import { MAX_BATCH } from './batch/batchReducer'
 import ReceiptApartment from './ReceiptApartment'
 import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
-import ReceiptResult from './ReceiptResult'
+import ReceiptResult, { WARNINGS_HEADING_ID } from './ReceiptResult'
 import ReviewBar from './ReviewBar'
 import UploadSidePanel, { TIPS_ITEMS } from './UploadSidePanel'
 import type { ReviewNavigation } from './ReviewBar'
@@ -815,6 +815,8 @@ function ReceiptUpload() {
               status={result.status}
               onUpdated={handleReviewUpdated}
               reviewNavigation={reviewNavigation}
+              warningCount={result.warnings.length}
+              warningsTargetId={WARNINGS_HEADING_ID}
             />
             <ReceiptApartment
               receiptId={result.receipt_id}

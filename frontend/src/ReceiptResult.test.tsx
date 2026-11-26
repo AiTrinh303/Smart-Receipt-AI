@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import ReceiptResult from './ReceiptResult'
+import ReceiptResult, { WARNINGS_HEADING_ID } from './ReceiptResult'
 import type { ReceiptExtraction } from './api/types'
 
 const FULL_DATA: ReceiptExtraction = {
@@ -40,7 +40,7 @@ test('full data: store, date, every item row, discounts, taxes and total are sho
 
   // Then the store, date, currency, every item row, discounts, taxes and total are shown
   expect(screen.getByRole('heading', { level: 1, name: 'Corner Store' })).toBeInTheDocument()
-  expect(screen.getByText('2026-01-15 · USD')).toBeInTheDocument()
+  expect(screen.getByText('15.01.2026 · USD')).toBeInTheDocument()
   expect(screen.getByText('Milk')).toBeInTheDocument()
   expect(screen.getByText('Bread')).toBeInTheDocument()
   expect(screen.getByText('2')).toBeInTheDocument()
@@ -218,11 +218,33 @@ test('a missing purchase_date shows MissingValue (a dash, with "Not detected" as
   expect(screen.queryByText('Date not recognized')).not.toBeInTheDocument()
 })
 
-test('a valid ISO purchase_date is shown unchanged, with no warning marker', () => {
+test('a valid ISO purchase_date is shown as DD.MM.YYYY, with no warning marker', () => {
+  // Given a receipt whose purchase_date is the valid ISO date 2026-01-15
+  // When it is rendered
   render(<ReceiptResult data={FULL_DATA} onEdit={() => {}} />)
 
-  expect(screen.getByText('2026-01-15 · USD')).toBeInTheDocument()
+  // Then the meta line shows 15.01.2026, and its spoken label says the same
+
+  expect(screen.getByText('15.01.2026 · USD')).toBeInTheDocument()
+  expect(screen.getByLabelText('Date: 15.01.2026, Currency: USD')).toBeInTheDocument()
   expect(screen.queryByText('Date not recognized')).not.toBeInTheDocument()
+})
+
+test('the warning panel shows exactly one warning icon (the Alert\'s own)', () => {
+  // Given a receipt with one warning
+  render(
+    <ReceiptResult
+      data={{ ...FULL_DATA, warnings: [{ code: 'MISSING_STORE', field: 'store_name', message: 'Store name is missing.', details: {} }] }}
+      onEdit={() => {}}
+    />,
+  )
+
+  // Then the panel has one icon, and its heading line is a focus target for ReviewBar's link
+  const heading = screen.getByText('Check these values')
+  const panel = heading.closest('[class*="bg-warning-soft"]') as HTMLElement
+  expect(panel.querySelectorAll('svg')).toHaveLength(1)
+  expect(heading).toHaveAttribute('id', WARNINGS_HEADING_ID)
+  expect(heading).toHaveAttribute('tabindex', '-1')
 })
 
 // --- "Fix in Edit" on purchase_date/total warnings -------------------------

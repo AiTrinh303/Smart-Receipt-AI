@@ -209,6 +209,30 @@ test('Next is disabled (not a link) at the end of the snapshot', async () => {
   expect(screen.getByRole('link', { name: 'Previous' })).toBeInTheDocument()
 })
 
+test('in review mode "Approve and next" is the one primary button, first, and "Mark as approved" is secondary', async () => {
+  // Given a needs_review receipt opened from a filtered history list
+  await open(ID_B, FROM_HISTORY, {
+    get: (id) => jsonResponse(200, savedReceipt(id)),
+    list: () => listOf([ID_A, ID_B, ID_C]),
+  })
+  await screen.findByText('2 of 3')
+
+  // Then "Approve and next" is primary and comes first; "Mark as approved" is secondary
+  const approveAndNext = screen.getByRole('button', { name: 'Approve and next' })
+  const markAsApproved = screen.getByRole('button', { name: 'Mark as approved' })
+  expect(approveAndNext.className).toMatch(/\bbg-brand\b/)
+  expect(markAsApproved.className).not.toMatch(/\bbg-brand\b/)
+  expect(approveAndNext.compareDocumentPosition(markAsApproved) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+test('outside review mode "Mark as approved" stays the primary button', async () => {
+  // Given a needs_review receipt opened without a `from` param
+  await open(ID_A, null, { get: (id) => jsonResponse(200, savedReceipt(id)) })
+
+  // Then "Mark as approved" is primary
+  expect(screen.getByRole('button', { name: 'Mark as approved' }).className).toMatch(/\bbg-brand\b/)
+})
+
 test('"Approve and next" sends exactly one PUT .../status and navigates to the next receipt still needing review, skipping an already-approved one', async () => {
   await open(ID_A, FROM_HISTORY, {
     get: (id) => jsonResponse(200, savedReceipt(id)),

@@ -17,20 +17,6 @@ function displayQuantity(value: number | null | undefined): string {
   return value === null || value === undefined || Number.isNaN(value) ? NOT_DETECTED : String(value)
 }
 
-function WarningIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 flex-shrink-0" fill="none">
-      <path
-        d="M10 3.5l8 13.5H2l8-13.5z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <path d="M10 8.5v3.5M10 14.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 function DateWarningIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 flex-shrink-0 text-warning" fill="none">
@@ -64,8 +50,18 @@ function PurchaseDateMeta({ value }: { value: string | null | undefined }) {
       </span>
     )
   }
-  return <>{value}</>
+  return <>{display.text}</>
 }
+
+/** The meta line's spoken date, matching what PurchaseDateMeta shows. */
+function purchaseDateLabel(value: string | null | undefined): string {
+  const display = formatDisplayDate(value ?? null)
+  return display.kind === 'missing' ? NOT_DETECTED : display.text
+}
+
+/** id of the warning panel's "Check these values" line, which ReviewBar's
+ * "N warnings to check" link scrolls to and focuses. */
+export const WARNINGS_HEADING_ID = 'receipt-warnings-heading'
 
 function PencilIcon() {
   return (
@@ -151,26 +147,32 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
     <div className="flex flex-col gap-4">
       {data.warnings.length > 0 && (
         <Alert variant="warning">
-          <div className="flex gap-2">
-            <WarningIcon />
-            <div>
-              <p className="font-semibold">Check these values</p>
-              <ul className="mt-1 flex flex-col gap-1.5 list-disc pl-4">
-                {data.warnings.map((warning, index) => {
-                  const field = warning.field
-                  return (
-                    <li key={index} className="flex flex-wrap items-center gap-2">
-                      <span>{warning.message}</span>
-                      {isEditableWarningField(field) && (
-                        <Button variant="secondary" size="sm" onClick={() => onEdit(field)}>
-                          Fix in Edit
-                        </Button>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
+          <div>
+            {/* The target of ReviewBar's "N warnings to check" link:
+                focusable by script only (tabIndex -1), with a ring that
+                shows on any focus, since that focus comes from a click. */}
+            <p
+              id={WARNINGS_HEADING_ID}
+              tabIndex={-1}
+              className="font-semibold focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-brand"
+            >
+              Check these values
+            </p>
+            <ul className="mt-1 flex flex-col gap-1.5 list-disc pl-4">
+              {data.warnings.map((warning, index) => {
+                const field = warning.field
+                return (
+                  <li key={index} className="flex flex-wrap items-center gap-2">
+                    <span>{warning.message}</span>
+                    {isEditableWarningField(field) && (
+                      <Button variant="secondary" size="sm" onClick={() => onEdit(field)}>
+                        Fix in Edit
+                      </Button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
           </div>
         </Alert>
       )}
@@ -191,7 +193,7 @@ function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
           </h1>
           <p
             className="mt-1 text-sm text-ink-muted"
-            aria-label={`Date: ${displayText(data.purchase_date)}, Currency: ${displayText(data.currency)}`}
+            aria-label={`Date: ${purchaseDateLabel(data.purchase_date)}, Currency: ${displayText(data.currency)}`}
           >
             <PurchaseDateMeta value={data.purchase_date} /> · {displayText(data.currency)}
           </p>
