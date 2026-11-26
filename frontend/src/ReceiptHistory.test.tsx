@@ -378,7 +378,8 @@ describe('ReceiptHistory', () => {
     })
   })
 
-  test('a row shows its status as a badge', async () => {
+  test('under the "All" status filter, only a needs_review row shows a status badge', async () => {
+    // Given one approved and one needs_review receipt
     fetchSpy.mockImplementation(
       routeFetch({
         list: () =>
@@ -395,19 +396,33 @@ describe('ReceiptHistory', () => {
                   created_at: '2026-01-15T00:00:00+00:00',
                   status: 'approved',
                 },
+                {
+                  receipt_id: '22222222-2222-2222-2222-222222222222',
+                  original_filename: 'b.jpg',
+                  store_name: 'Store B',
+                  purchase_date: '2026-01-16',
+                  currency: 'USD',
+                  total: 20,
+                  created_at: '2026-01-16T00:00:00+00:00',
+                  status: 'needs_review',
+                },
               ],
-              count: 1,
-              total: 1,
+              count: 2,
+              total: 2,
             }),
           ),
       }),
     )
 
+    // When the history renders with no status filter
     render(<ReceiptHistory />)
 
+    // Then the needs_review row shows its badge, and the approved row shows none
     await waitFor(() => {
-      expect(within(screen.getByRole('list')).getByText('Approved')).toBeInTheDocument()
+      expect(within(screen.getByRole('list')).getByText('Needs review')).toBeInTheDocument()
     })
+    expect(within(screen.getByRole('list')).queryByText('Approved')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('link', { name: /store a/i })).queryByText('Needs review')).not.toBeInTheDocument()
   })
 
   // --- Tabs ----------------------------------------------------------------
@@ -798,24 +813,27 @@ describe('ReceiptHistory', () => {
   })
 
   test('the status badge is shown only when the Status filter is "All"', async () => {
+    // Given a needs_review receipt and no status filter: its badge shows
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'approved' })], count: 1 , total: 1 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'needs_review' })], count: 1 , total: 1 })) }),
     )
     const { unmount } = render(<ReceiptHistory />)
     await waitFor(() => {
-      expect(within(screen.getByRole('list')).getByText('Approved')).toBeInTheDocument()
+      expect(within(screen.getByRole('list')).getByText('Needs review')).toBeInTheDocument()
     })
     unmount()
 
-    window.history.replaceState({}, '', '/?view=history&status=approved')
+    // When the Status filter is "Needs review"
+    window.history.replaceState({}, '', '/?view=history&status=needs_review')
     fetchSpy.mockImplementation(
-      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'approved' })], count: 1 , total: 1 })) }),
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'needs_review' })], count: 1 , total: 1 })) }),
     )
     render(<ReceiptHistory />)
     await waitFor(() => {
       expect(screen.getByText('Store A')).toBeInTheDocument()
     })
-    expect(within(screen.getByRole('list')).queryByText('Approved')).not.toBeInTheDocument()
+    // Then the row shows no badge (redundant with the filter)
+    expect(within(screen.getByRole('list')).queryByText('Needs review')).not.toBeInTheDocument()
   })
 
   test('an apartment tab with a three-segment name shows the short name and count, full name as the accessible name and title', async () => {

@@ -309,28 +309,42 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   name="theme-color" content="#4f46e5">` and a `<meta name="description">`,
   and its static `<title>` is `"Smart Receipt AI"` (the per-view
   `document.title` effect still overwrites it on mount).
-  `ReceiptHistory.tsx` lists saved receipts as compact rows
-  (`HistoryRow`, exported) — one ~56px row from `sm` up (store via
-  `ClampedText`, 1 line/full text in `title`; the date via `DateCell`,
-  imported from `ReceiptItems.tsx` rather than duplicated — `DD.MM.YYYY`
-  for a valid ISO date, the raw text + the same warning icon/`title`/
-  hidden "Date not recognized" for anything else, `MissingValue` when
-  missing; the total right-aligned via `formatMoney`; then the badges),
-  two lines below `sm` (store+total; date+badges) — only one layout
+  `ReceiptHistory.tsx` lists saved receipts as rows (`HistoryRow`,
+  exported) inside one `Card` (`HistoryRowList`, exported): rows are
+  separated by a decorative `divide-y divide-border-subtle` line and carry
+  no border of their own; the list's negative margins (`-m-5 sm:-m-6`)
+  cancel the `Card`'s padding so a row's `hover:bg-slate-50` reaches the
+  card's edges, and `overflow-hidden` clips it to the rounded corners —
+  which is why the row's focus ring is drawn inset
+  (`focus-visible:outline-offset-[-2px]`). Each row is `min-h-[44px]`.
+  From `sm` up, fixed columns so values line up row to row: store
+  (`flex-1`, `ClampedText` 1 line, full text in `title`), date (`w-28`,
+  `tabular-nums`, via `DateCell`, imported from `ReceiptItems.tsx` rather
+  than duplicated — `DD.MM.YYYY` for a valid ISO date, the raw text + the
+  same warning icon/`title`/hidden "Date not recognized" for anything
+  else, `MissingValue` when missing), amount (`w-28`, right-aligned,
+  `tabular-nums`, `whitespace-nowrap`, via `formatMoney`), then the
+  apartment (`w-24`) and status (`w-28`) columns — each column reserved
+  whenever it's shown at all, even if a given row's cell is empty. Two
+  lines below `sm` (store+total; date+apartment+status) — only one layout
   ever mounted, via `useMediaQuery('(max-width: 639px)')`, same pattern
   as `ReceiptResult.tsx`/`ReceiptItems.tsx`. Each row's `apartment_name`
-  is a small icon+text badge showing `apartmentShortName(name)` (`aria-
-  hidden`, decorative) with the full name as both its `title` and a
-  hidden (`sr-only`) span, or plain muted "Not assigned" when it's
+  is a muted icon+text (`text-xs text-ink-muted`, no filled pill)
+  showing `apartmentShortName(name)` (`aria-hidden`, decorative,
+  truncated) with the full name as both its `title` and a hidden
+  (`sr-only`) span, or plain muted "Not assigned" when it's
   `null`/missing — shown only in "All apartments" (hidden inside a
-  specific apartment tab — redundant there). `status` is a `StatusBadge`
-  (icon+text, shared with `ReceiptReviewStatus.tsx`/`ReviewBar.tsx`),
-  shown only when the Status filter is "All" — redundant otherwise, same
-  reasoning as the apartment badge. Each row is a real `<a href="/?
-  receipt=<id>{&from=...}">` (not a `<button>`, so opening one in a new
-  tab works) with the exact same `from` mechanism/target as before;
-  `ReceiptUpload.tsx` adds a "Back to history" link when showing a
-  result.
+  specific apartment tab — redundant there). Status: only when the Status
+  filter is "All", and then only a `needs_review` row shows a
+  `StatusBadge` (icon+text, shared with `ReceiptReviewStatus.tsx`/
+  `ReviewBar.tsx`); an approved row shows nothing, so the rows that still
+  need attention stand out. Under a specific Status filter no row shows a
+  badge (redundant, same reasoning as the apartment). Each row is a real
+  `<a href="/?receipt=<id>{&from=...}">` (not a `<button>`, so opening
+  one in a new tab works) with the exact same `from` mechanism/target as
+  before; `ReceiptUpload.tsx` adds a "Back to history" link when showing
+  a result. `?view=styleguide`'s "History rows" section renders the real
+  `HistoryRowList`/`HistoryRow` for both layouts.
   **Splitting the history by apartment, with filters:** all state lives in
   the URL (`?view=history&apartment=<id>&year=<v>&status=<v>`), never
   component state — a tab/select change calls the existing

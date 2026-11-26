@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError } from './api/ApiError'
 import { getReceiptFacets } from './api/getReceiptFacets'
 import { listReceipts } from './api/listReceipts'
@@ -8,6 +8,7 @@ import { DateCell } from './ReceiptItems'
 import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
+import Card from './components/ui/Card'
 import ClampedText from './components/ui/ClampedText'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
@@ -41,29 +42,36 @@ function ApartmentIcon() {
   )
 }
 
-/** The apartment badge now shows the short name visibly (same convenience
- * as the Items view's ApartmentCell and the upload form's apartment
- * choice), but keeps the full name available both as a `title` tooltip
- * and as hidden text for assistive tech that doesn't read `title` --
- * the visible short name is purely decorative (`aria-hidden`) so the two
- * are never both announced. */
+/** The apartment shows the short name visibly (same convenience as the
+ * Items view's ApartmentCell and the upload form's apartment choice), but
+ * keeps the full name available both as a `title` tooltip and as hidden
+ * text for assistive tech that doesn't read `title` -- the visible short
+ * name is purely decorative (`aria-hidden`) so the two are never both
+ * announced. Muted icon + text rather than a filled pill, so a list of
+ * rows doesn't turn into a column of colored blocks. */
 function ApartmentBadge({ apartmentName }: { apartmentName: string | null | undefined }) {
   if (!apartmentName) {
-    return <span className="text-ink-muted">{NOT_ASSIGNED}</span>
+    return <span className="text-xs text-ink-muted">{NOT_ASSIGNED}</span>
   }
 
   const short = apartmentShortName(apartmentName) ?? apartmentName
 
   return (
-    <span
-      title={apartmentName}
-      className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand"
-    >
+    <span title={apartmentName} className="inline-flex min-w-0 items-center gap-1 text-xs text-ink-muted">
       <ApartmentIcon />
-      <span aria-hidden="true">{short}</span>
+      <span aria-hidden="true" className="truncate">
+        {short}
+      </span>
       <span className="sr-only">{apartmentName}</span>
     </span>
   )
+}
+
+/** Under the "All" status filter only a receipt that still needs review
+ * gets a badge; an approved one shows nothing (the calm, expected state),
+ * so the rows that need attention stand out. */
+function RowStatus({ status }: { status: ReceiptSummary['status'] }) {
+  return status === 'needs_review' ? <StatusBadge status={status} /> : null
 }
 
 interface HistoryRowProps {
@@ -75,24 +83,20 @@ interface HistoryRowProps {
   isSmallScreen: boolean
 }
 
-/** One compact row (~56px from `sm` up, two lines below it) instead of the
- * previous ~80px stacked layout -- a real `<a>` link (same href/`from`
- * mechanism as before, now matching the Items view's row links) rather
- * than a `<button>`, so opening one in a new tab works. Only one of the
- * two layouts is ever mounted, decided in JS via `isSmallScreen`, same
- * pattern as ReceiptResult.tsx/ReceiptItems.tsx. */
+/** One row of the History list, rendered inside `HistoryRowList` (one Card,
+ * rows separated by a divider). A real `<a>` link (same href/`from`
+ * mechanism as the Items view's row links), so opening one in a new tab
+ * works. From `sm` up, every value sits in a fixed-width column (store
+ * takes the rest) so dates and amounts line up from row to row; the status
+ * column is reserved even when it's empty, for the same reason. Below `sm`
+ * it's two lines. Only one of the two layouts is ever mounted, decided in
+ * JS via `isSmallScreen`, same pattern as ReceiptResult.tsx/ReceiptItems.tsx. */
 export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusBadge, isSmallScreen }: HistoryRowProps) {
   const amount = formatMoney(item.total, item.currency)
   const store = item.store_name ? (
     <ClampedText text={item.store_name} lines={1} className="min-w-0 flex-1 font-medium text-ink" />
   ) : (
     <span className="min-w-0 flex-1 font-medium text-ink">{NOT_DETECTED}</span>
-  )
-  const badges = (showApartmentBadge || showStatusBadge) && (
-    <span className="flex flex-wrap items-center gap-1.5">
-      {showApartmentBadge && <ApartmentBadge apartmentName={item.apartment_name} />}
-      {showStatusBadge && <StatusBadge status={item.status} />}
-    </span>
   )
 
   return (
@@ -102,30 +106,57 @@ export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusB
         e.preventDefault()
         onOpen(item.receipt_id)
       }}
-      className="flex min-h-[44px] items-center gap-3 rounded-md border border-border bg-surface px-3 py-2 text-left text-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      className="flex min-h-[44px] items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand"
     >
       {isSmallScreen ? (
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex items-center justify-between gap-3">
             {store}
-            <span className="flex-shrink-0 font-semibold text-ink">{amount}</span>
+            <span className="flex-shrink-0 whitespace-nowrap font-semibold tabular-nums text-ink">{amount}</span>
           </span>
-          <span className="flex flex-wrap items-center gap-1.5 text-ink-muted">
-            <DateCell value={item.purchase_date} />
-            {badges}
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ink-muted">
+            <span className="tabular-nums">
+              <DateCell value={item.purchase_date} />
+            </span>
+            {showApartmentBadge && <ApartmentBadge apartmentName={item.apartment_name} />}
+            {showStatusBadge && <RowStatus status={item.status} />}
           </span>
         </span>
       ) : (
         <>
           {store}
-          <span className="flex-shrink-0 whitespace-nowrap text-ink-muted">
+          <span className="w-28 flex-shrink-0 whitespace-nowrap tabular-nums text-ink-muted">
             <DateCell value={item.purchase_date} />
           </span>
-          <span className="flex-shrink-0 whitespace-nowrap font-semibold text-ink">{amount}</span>
-          {badges}
+          <span className="w-28 flex-shrink-0 whitespace-nowrap text-right font-semibold tabular-nums text-ink">
+            {amount}
+          </span>
+          {showApartmentBadge && (
+            <span className="flex w-24 min-w-0 flex-shrink-0">
+              <ApartmentBadge apartmentName={item.apartment_name} />
+            </span>
+          )}
+          {showStatusBadge && (
+            <span className="flex w-28 flex-shrink-0">
+              <RowStatus status={item.status} />
+            </span>
+          )}
         </>
       )}
     </a>
+  )
+}
+
+/** The list around `HistoryRow`s: one Card, rows separated by a decorative
+ * `divide-border-subtle` line (the rows themselves carry no border). The
+ * negative margins cancel the Card's own padding so a row's hover
+ * background reaches the card's edges; `overflow-hidden` clips it to the
+ * rounded corners, which is why the row's focus ring is drawn inset. */
+export function HistoryRowList({ children }: { children: ReactNode }) {
+  return (
+    <Card className="overflow-hidden">
+      <ul className="-m-5 divide-y divide-border-subtle sm:-m-6">{children}</ul>
+    </Card>
   )
 }
 
@@ -442,7 +473,7 @@ function ReceiptHistory() {
         )
       ) : (
         <>
-          <ul className="flex flex-col gap-2">
+          <HistoryRowList>
             {items?.map((item) => (
               <li key={item.receipt_id}>
                 <HistoryRow
@@ -455,7 +486,7 @@ function ReceiptHistory() {
                 />
               </li>
             ))}
-          </ul>
+          </HistoryRowList>
 
           <div className="flex flex-col gap-2">
             {loadMoreError && (

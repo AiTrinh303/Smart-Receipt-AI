@@ -1432,7 +1432,8 @@ Items view already used short names.
   now with a short visible name). The status badge is now shown only when
   the Status filter is "All" (`statusValue === null`) — in a filtered tab
   or select, the same information is already in the URL/UI, so repeating
-  "Needs review" on every row added nothing.
+  "Needs review" on every row added nothing. (Both badges were later made
+  quieter — see "Calmer, aligned History rows" below.)
 - **Apartment tabs: short name + count, full name as the accessible
   name.** `ReceiptFilters.tsx`'s `FilterTab` gained an optional
   `accessibleName` (falls back to `label`, so the Items view's tabs — no
@@ -1846,6 +1847,55 @@ useful on the hundredth visit too.
   word and gains an "Open yearly report" link (`?view=report`), since
   the Report already counts these receipts whether or not they are
   reviewed.
+
+## Calmer, aligned History rows
+
+The compact rows above were still one bordered box each, with every value
+in a variable-width position (so dates and amounts zig-zagged from row to
+row), a filled apartment pill and a status badge on every row under
+"All" — mostly green "Approved", the expected state, drowning out the
+rows that actually need attention.
+
+- **One `Card`, rows separated by dividers** (`HistoryRowList`, exported
+  from `ReceiptHistory.tsx`): `divide-y divide-border-subtle` between rows
+  — `border-subtle` is fine here because the divider is decorative; the
+  row itself (an interactive `<a>`) carries no border at all. The list's
+  `-m-5 sm:-m-6` cancels the `Card`'s own padding so `hover:bg-slate-50`
+  reaches the edges; `overflow-hidden` keeps it inside the rounded
+  corners, so the focus ring is drawn inset
+  (`focus-visible:outline-offset-[-2px]`, checked in the built CSS:
+  `outline-offset:-2px`) instead of being clipped. Rows stay real links,
+  `min-h-[44px]`.
+- **Fixed columns from `sm` up:** store `flex-1` (`ClampedText`, 1 line),
+  date `w-28`, amount `w-28` right-aligned, then apartment `w-24` and
+  status `w-28` — all `flex-shrink-0`, date/amount `tabular-nums` and
+  `whitespace-nowrap`. A column that's shown is always reserved, even
+  when a row's cell is empty (an approved row's status), so amounts line
+  up. `w-28` for the date fits a short raw value like "27.06.26 09:52"
+  plus its warning icon; a longer raw value can overflow it.
+- **Status only where it matters:** under Status "All", only a
+  `needs_review` row shows a `StatusBadge`; an approved row shows nothing.
+  Under a specific Status filter, no row shows one (unchanged).
+- **Apartment as muted icon + text** (`text-xs text-ink-muted`, was a
+  `bg-brand-soft` pill), short name visible and truncated, full name in
+  `title` and an `sr-only` span (unchanged accessibility).
+- **Below `sm`:** the same two-line layout (store + amount; date +
+  apartment + status), with the same divider list, status rule and muted
+  apartment; amount `tabular-nums`.
+- **Test changes** (`ReceiptHistory.test.tsx`): "a row shows its status
+  as a badge" (asserted "Approved" on an approved row under "All") became
+  "under the "All" status filter, only a needs_review row shows a status
+  badge" — an approved and a needs_review row; asserts "Needs review" on
+  one and no "Approved" anywhere in the list. "the status badge is shown
+  only when the Status filter is "All"" now uses a needs_review row (an
+  approved row no longer shows a badge under "All" either, so it couldn't
+  demonstrate the filter rule) and `?status=needs_review` for the hidden
+  case.
+- **`?view=styleguide`:** "Compact History rows" became "History rows",
+  rendering the real `HistoryRowList`/`HistoryRow` twice (from `sm` up and
+  below `sm`) with an approved row, a needs-review row with an
+  unrecognized date, a missing date/apartment, and a clamped long store
+  name as in a filtered tab.
 
 ## Changelog
 

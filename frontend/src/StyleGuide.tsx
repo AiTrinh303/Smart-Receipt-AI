@@ -21,7 +21,7 @@ import {
   StatusCell,
   StoreCell,
 } from './ReceiptItems'
-import { HistoryRow } from './ReceiptHistory'
+import { HistoryRow, HistoryRowList } from './ReceiptHistory'
 import { ExportCard } from './ReceiptReport'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
 import type { ReceiptFacets, ReceiptSummary } from './api/types'
@@ -237,6 +237,72 @@ const SAMPLE_ITEM_ROWS = [
     store_name: 'Amazon EU S.a r.l., Niederlassung Deutschland',
     apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück',
     status: 'approved' as const,
+  },
+]
+
+const HISTORY_SAMPLE_BASE = {
+  original_filename: 'a.jpg',
+  currency: 'USD',
+  created_at: '2026-01-15T00:00:00+00:00',
+}
+
+const HISTORY_SAMPLE_ROWS: { item: ReceiptSummary; showApartmentBadge: boolean; showStatusBadge: boolean }[] = [
+  {
+    item: {
+      ...HISTORY_SAMPLE_BASE,
+      receipt_id: 'sg-1',
+      store_name: 'Corner Store',
+      purchase_date: '2026-01-15',
+      total: 10,
+      apartment_id: 'oberaudorf-bergblick',
+      apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
+      status: 'approved',
+    },
+    showApartmentBadge: true,
+    showStatusBadge: true,
+  },
+  {
+    item: {
+      ...HISTORY_SAMPLE_BASE,
+      receipt_id: 'sg-2',
+      store_name: 'A receipt with an unrecognized date',
+      purchase_date: '27.06.26 09:52',
+      total: 1234.5,
+      apartment_id: 'sankt-englmar-waldglueck',
+      apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück',
+      status: 'needs_review',
+    },
+    showApartmentBadge: true,
+    showStatusBadge: true,
+  },
+  {
+    item: {
+      ...HISTORY_SAMPLE_BASE,
+      receipt_id: 'sg-3',
+      store_name: 'Bakery',
+      purchase_date: null,
+      total: 3.2,
+      apartment_id: null,
+      apartment_name: null,
+      status: 'needs_review',
+    },
+    showApartmentBadge: true,
+    showStatusBadge: true,
+  },
+  {
+    item: {
+      ...HISTORY_SAMPLE_BASE,
+      receipt_id: 'sg-4',
+      store_name:
+        'A very long store name that needs to be clamped to one line instead of wrapping and growing the row',
+      purchase_date: '2026-01-13',
+      total: 30,
+      apartment_id: null,
+      apartment_name: null,
+      status: 'needs_review',
+    },
+    showApartmentBadge: false,
+    showStatusBadge: false,
   },
 ]
 
@@ -708,72 +774,33 @@ function StyleGuide() {
         </div>
       </Section>
 
-      <Section title="Compact History rows (HistoryRow -- normal/unrecognized/missing date, long store name, All tab vs. a filtered tab)">
-        <ul className="flex flex-col gap-2">
-          <HistoryRow
-            item={{
-              receipt_id: 'sg-1',
-              original_filename: 'a.jpg',
-              store_name: 'Corner Store',
-              purchase_date: '2026-01-15',
-              currency: 'USD',
-              total: 10,
-              created_at: '2026-01-15T00:00:00+00:00',
-              apartment_id: 'oberaudorf-bergblick',
-              apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
-              status: 'approved',
-            }}
-            href="#"
-            onOpen={() => {}}
-            showApartmentBadge
-            showStatusBadge
-            isSmallScreen={false}
-          />
-          <HistoryRow
-            item={{
-              receipt_id: 'sg-2',
-              original_filename: 'b.jpg',
-              store_name: 'A receipt with an unrecognized date',
-              purchase_date: '02 Juni 2026',
-              currency: 'USD',
-              total: 20,
-              created_at: '2026-01-14T00:00:00+00:00',
-              apartment_id: null,
-              apartment_name: null,
-              status: 'needs_review',
-            }}
-            href="#"
-            onOpen={() => {}}
-            showApartmentBadge
-            showStatusBadge
-            isSmallScreen={false}
-          />
-          <HistoryRow
-            item={{
-              receipt_id: 'sg-3',
-              original_filename: 'c.jpg',
-              store_name:
-                'A very long store name that needs to be clamped to one line instead of wrapping and growing the row',
-              purchase_date: null,
-              currency: 'USD',
-              total: 30,
-              created_at: '2026-01-13T00:00:00+00:00',
-              apartment_id: null,
-              apartment_name: null,
-              status: 'needs_review',
-            }}
-            href="#"
-            onOpen={() => {}}
-            showApartmentBadge={false}
-            showStatusBadge={false}
-            isSmallScreen={false}
-          />
-        </ul>
+      <Section title="History rows (HistoryRowList + HistoryRow -- one Card with dividers; approved vs. needs review, unrecognized/missing date, long store name, All tab vs. a filtered tab, wide vs. small screen)">
+        {[false, true].map((small) => (
+          <div key={String(small)} className="flex flex-col gap-2">
+            <p className="text-sm font-medium text-ink">{small ? 'Below sm (two lines)' : 'From sm up (fixed columns)'}</p>
+            <HistoryRowList>
+              {HISTORY_SAMPLE_ROWS.map(({ item, showApartmentBadge, showStatusBadge }) => (
+                <li key={item.receipt_id}>
+                  <HistoryRow
+                    item={item}
+                    href="#"
+                    onOpen={() => {}}
+                    showApartmentBadge={showApartmentBadge}
+                    showStatusBadge={showStatusBadge}
+                    isSmallScreen={small}
+                  />
+                </li>
+              ))}
+            </HistoryRowList>
+          </div>
+        ))}
         <p className="text-sm text-ink-muted">
-          The first row (All apartments, Status "All") shows both badges; the second shows the raw,
-          unrecognized date with the same warning marker the Items view uses; the third demonstrates a
-          clamped long store name with no badges -- as they would appear inside a specific apartment tab
-          with a Status filter active.
+          Rows 1-3 are as in the "All apartments" tab with Status "All": the muted apartment (short name,
+          full name in the tooltip), and a status badge only for a receipt that still needs review -- an
+          approved one shows nothing, but its column stays reserved so amounts line up. Row 2 shows an
+          unrecognized date with the same warning marker the Items view uses, row 3 a missing date and a
+          missing apartment. Row 4 is a clamped long store name inside a specific apartment tab with a
+          Status filter active (no apartment, no status).
         </p>
       </Section>
 
