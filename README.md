@@ -8,9 +8,20 @@ A web app that stores the shopping receipts of my two holiday apartments in
 Germany. I upload photos or PDFs, AI reads the date, store, items and total,
 I check the result against the original, and the yearly report and export go
 to my tax advisor. It is built for one person, the owner of the apartments,
-and runs only on my own computer. It is not a multi-user product.
+and runs on my own computer; a demo with sample data is online (see
+[Live demo](#live-demo)). It is not a multi-user product.
 
 ![Upload page: choose an apartment, add receipts, see your latest uploads](docs/images/upload-page.png)
+
+## Live demo
+- App: <https://smart-receipt-ai.onrender.com>
+- API: <https://smart-receipt-ai-backend.onrender.com> (health check:
+  `/health`)
+
+This is a demo with sample data only. There is no login, so anyone with
+the link can use it: please do not upload real receipts. On the free plan
+the first request can take a minute (the service sleeps when idle), and
+saved data may be lost when it restarts.
 
 ## Before you start
 - Python 3 (I use 3.12) and Node.js with npm (a current LTS version). Check
@@ -22,8 +33,8 @@ and runs only on my own computer. It is not a multi-user product.
   Each receipt is one API call, so set a monthly limit and watch the usage
   page.
 - `backend/.env` holds your key. Never commit it.
-- No login: use it only on your own machine and do not expose it to the
-  internet.
+- No login: use it only on your own machine, or on the demo with sample
+  data. Do not expose a copy with real receipts to the internet.
 - Receipt files are sent to OpenAI to be read, and deleting a receipt in
   the app cannot delete that copy.
 
@@ -164,3 +175,13 @@ python scripts/restore.py ../backups/receipts-backup-<date>.zip --target DIR
 a separate folder, never over the live data. It refuses a folder that
 already has data unless you add `--force`, which moves the old data aside
 first.
+
+## Deploy
+- Backend (Render Web Service): Root Directory `backend`, Build `pip install -r requirements.txt`,
+  Start `uvicorn main:app --host 0.0.0.0 --port $PORT`; environment variables
+  `OPENAI_API_KEY` and `CORS_ORIGINS` (the frontend address, no trailing slash).
+- Frontend (Render Static Site): Root Directory `frontend`, Build `npm install && npm run build`,
+  Publish `dist`; environment variable `VITE_API_URL` (the backend address, no trailing
+  slash). It is read when the site is built, so redeploy after changing it.
+- The SQLite database (`DATABASE_PATH`) and `backend/uploads/` need persistent storage
+  (a disk) if the data must survive a restart.
