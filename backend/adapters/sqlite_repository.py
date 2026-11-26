@@ -25,6 +25,15 @@ from domain.rules import normalize_purchase_date
 logger = logging.getLogger(__name__)
 
 
+def _display_purchase_date(raw: str | None) -> str | None:
+    """purchase_date as shown in a response: normalized to ISO via the shared
+    domain rule when it can be, else the raw stored text unchanged (so a date
+    the AI read wrong stays visible). Display only -- the stored row is never
+    rewritten."""
+    normalized = normalize_purchase_date(raw)
+    return normalized if normalized is not None else raw
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -253,8 +262,7 @@ class SqliteReceiptRepository:
             logger.error("Skipping receipt with unparseable extracted_json: receipt_id=%s", receipt_id)
             return None
 
-        normalized_date = normalize_purchase_date(extracted.purchase_date)
-        display_date = normalized_date if normalized_date is not None else extracted.purchase_date
+        display_date = _display_purchase_date(extracted.purchase_date)
 
         return ReceiptSummary(
             receipt_id=receipt_id,
@@ -477,8 +485,7 @@ class SqliteReceiptRepository:
         # value like "2025-06-26 11"; normalize it for display here (never
         # written back -- no migration of the stored data) so older receipts
         # show the clean date too.
-        normalized_date = normalize_purchase_date(extracted.purchase_date)
-        display_date = normalized_date if normalized_date is not None else extracted.purchase_date
+        display_date = _display_purchase_date(extracted.purchase_date)
 
         edited_at = row[6]
 
@@ -624,7 +631,9 @@ class SqliteReceiptRepository:
                 receipt_id=receipt_id,
                 original_filename=original_filename,
                 store_name=extracted.store_name,
-                purchase_date=extracted.purchase_date,
+                # Normalized for display, same as get_receipt() and the
+                # duplicate-check summaries -- never written back.
+                purchase_date=_display_purchase_date(extracted.purchase_date),
                 currency=extracted.currency,
                 total=extracted.total,
                 created_at=created_at,
