@@ -789,9 +789,11 @@ function StyleGuide() {
         </div>
       </Section>
 
-      <Section title="Receipt file viewer (toolbar wrapping in a narrow panel, capped height, Rotate for images only)">
+      <Section title="Receipt file viewer (two-row toolbar, capped height, Rotate for images only)">
         <p className="text-sm text-ink-muted">
-          Static inline images stand in for saved files. Try Rotate on the sideways sample: after one
+          Toolbar row 1: file name (truncated) and the two links, styled exactly like secondary buttons;
+          row 2 (images only): zoom out, zoom %, zoom in, Fit, Rotate. In the narrow panel the links drop
+          under the name, left-aligned. Static inline images stand in for saved files. Try Rotate on the sideways sample: after one
           turn it reads upright and Fit fills the panel width. "Open original" and "Download PDF" point at
           sample ids and won&apos;t work here.
         </p>

@@ -930,9 +930,15 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   at this iframe's width; any other browser simply ignores an
   unrecognized fragment, and the browser's own PDF toolbar is never
   hidden (only the plugin's optional extras are).
-  **Toolbar wrapping:** both the header row and the control group are
-  `flex-wrap` (the file name keeps `min-w-[8rem]`), so in a narrow panel
-  the controls move to a second row instead of overflowing it.
+  **Toolbar, two rows:** row 1 holds the file name (`min-w-0 flex-1
+  basis-40`, truncated, full name in `title`) and the two links; row 2,
+  images only (and not after a failed load), holds zoom out, zoom %, zoom
+  in, Fit and Rotate as one group. Every row is `flex-wrap` and
+  left-aligned (no `justify-end`/`justify-between`), so in a narrow panel
+  the links drop under the name and the view controls wrap among
+  themselves — nothing is clipped and there is no leading gap. The links
+  (`LINK_BUTTON_CLASSES`) copy `Button`'s `secondary`/`sm` classes: `h-11`
+  (44px) below `sm`, `sm:h-10`, `rounded-control`, `font-medium`, `gap-2`.
   **Rotate (view only):** 0°/90°/180°/270°, never saved or sent anywhere.
   Stored together with the receipt id it was set for, so it reads as 0°
   the moment another receipt loads into the same mounted viewer (e.g.

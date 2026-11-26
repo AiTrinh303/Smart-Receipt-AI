@@ -1909,7 +1909,8 @@ photo could only be read by turning your head.
 
 - **Toolbar wraps.** The header row and the control group are both
   `flex-wrap`; the file name keeps `min-w-[8rem]` and truncates. A narrow
-  panel moves the controls to a second row.
+  panel moves the controls to a second row. (Reworked into two fixed rows
+  -- see "File viewer toolbar: two tidy rows".)
 - **Capped, not stretched.** The panel is `lg:sticky lg:top-20
   lg:self-start` (no fixed height); the viewer card itself is
   `lg:max-h-[calc(100vh-6rem)]` (80px from the top + 16px below), with
@@ -1973,6 +1974,29 @@ photo could only be read by turning your head.
 - **`?view=styleguide`:** the warning-panel sample has one icon; the
   review-mode sample shows the new button order/variants and the
   "2 warnings to check" link.
+
+## File viewer toolbar: two tidy rows
+
+At ~1185px the single wrapping toolbar right-aligned its control group, so
+when it wrapped it left a gap on the left and "Download PDF" ended up alone
+on a second row; the two links were also `font-semibold` with their own
+height while every other control was a `Button` (`font-medium`).
+
+- **Row 1:** file name on the left (one line, truncated, full name in
+  `title`, `min-w-0 flex-1 basis-40`), then "Open original" and "Download
+  PDF" together. The links stay real `<a>`s but now use exactly
+  `Button`'s `secondary`/`sm` classes (`h-11 sm:h-10`, `rounded-control`,
+  `font-medium`, `gap-2`, `px-3 sm:px-3.5`, the same hover/transition), so
+  all controls share one height and weight; icon + text at every width.
+- **Row 2 (images only):** zoom out, zoom % (`tabular-nums`, so the width
+  doesn't jump), zoom in, Fit, Rotate — one left-aligned group. A PDF, or
+  an image that failed to load, has no second row.
+- **Wrapping:** both rows are `flex-wrap` and left-aligned. When the name
+  plus links don't fit, the links move under the name, starting at the
+  left edge; row 2 wraps among itself. Nothing is clipped.
+- Behavior, strings and accessible names unchanged; no existing test
+  changed. One new test checks the grouping and order (links together,
+  view controls together, links first).
 
 ## Changelog
 

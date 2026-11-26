@@ -273,3 +273,17 @@ test('rotation resets when another receipt loads into the same viewer, and never
   expect(fetchSpy).not.toHaveBeenCalled()
   globalThis.fetch = originalFetch
 })
+
+test('toolbar: the links sit in the first row and the view controls follow as one group', () => {
+  // Given an image receipt
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+
+  // Then "Open original" and "Download PDF" share one group, which comes before the zoom/Fit/Rotate group
+  const download = screen.getByRole('link', { name: /download pdf/i })
+  const openOriginal = screen.getByRole('link', { name: /open original/i })
+  expect(download.parentElement).toBe(openOriginal.parentElement)
+  const zoomOut = screen.getByRole('button', { name: 'Zoom out' })
+  const rotate = screen.getByRole('button', { name: 'Rotate 90 degrees clockwise' })
+  expect(zoomOut.parentElement).toBe(rotate.parentElement)
+  expect(download.compareDocumentPosition(zoomOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})

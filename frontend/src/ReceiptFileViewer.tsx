@@ -19,11 +19,15 @@ const NOT_AVAILABLE_MESSAGE = 'The original file is not available.'
  * harmless. Never hides the browser's own PDF toolbar. */
 export const PDF_VIEW_FRAGMENT = '#view=FitH&navpanes=0'
 
+/** "Open original"/"Download PDF" stay real links (so "Open original" keeps
+ * `role="link"` for `target="_blank"`), styled to match `Button`'s
+ * `secondary`/`sm` exactly: same height (44px below `sm`, 40px from `sm`),
+ * padding, radius, border, `font-medium` weight and icon gap. */
 const LINK_BUTTON_CLASSES =
-  'inline-flex min-h-[44px] flex-shrink-0 items-center justify-center gap-1.5 rounded-md border ' +
-  'border-border bg-white px-3 py-2 text-sm font-semibold text-ink hover:bg-slate-50 ' +
+  'inline-flex h-11 flex-shrink-0 items-center justify-center gap-2 rounded-control border border-border ' +
+  'bg-white px-3 text-sm font-medium text-ink hover:bg-slate-50 ' +
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ' +
-  'sm:min-h-0 sm:py-1.5'
+  'transition-colors duration-150 motion-reduce:transition-none sm:h-10 sm:px-3.5'
 
 function getExtension(name: string): string {
   const index = name.lastIndexOf('.')
@@ -237,73 +241,69 @@ function ReceiptFileViewer({ receiptId, fileName, contentType, fileUrl: fileUrlO
         kind === 'pdf' ? 'lg:h-[calc(100vh-6rem)]' : 'lg:max-h-[calc(100vh-6rem)]'
       }`}
     >
-      {/* Both the outer row and the control group wrap: when the panel is
-          narrow, the controls move to a second row (and wrap among
-          themselves) instead of overflowing it. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
-        {fileName ? (
-          <p className="min-w-[8rem] flex-1 truncate text-sm font-medium text-ink" title={fileName}>
-            {fileName}
-          </p>
-        ) : (
-          <span className="flex-1" />
-        )}
+      {/* Two rows. Row 1: the file name (takes the free space, truncated)
+          and the two links. Row 2, images only: the view controls as one
+          group. Every row wraps left-aligned (no justify-end/between), so a
+          narrow panel never shows a leading gap or clips a control: the
+          links drop under the name, and the view controls wrap among
+          themselves. */}
+      <div className="flex flex-col gap-2 border-b border-border px-4 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {fileName ? (
+            <p className="min-w-0 flex-1 basis-40 truncate text-sm font-medium text-ink" title={fileName}>
+              {fileName}
+            </p>
+          ) : (
+            <span className="flex-1" />
+          )}
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {kind === 'image' && !hasError && (
-            <div className="flex flex-wrap items-center gap-1">
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-label="Zoom out"
-                onClick={zoomOut}
-                disabled={zoom <= MIN_ZOOM}
-              >
-                <ZoomOutIcon />
-              </Button>
-              <span className="min-w-[3rem] text-center text-sm text-ink-muted">{zoom}%</span>
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-label="Zoom in"
-                onClick={zoomIn}
-                disabled={zoom >= MAX_ZOOM}
-              >
-                <ZoomInIcon />
-              </Button>
-              <Button variant="secondary" size="sm" aria-label="Fit" onClick={fit}>
-                Fit
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-label="Rotate 90 degrees clockwise"
-                onClick={rotate}
-                className="gap-1.5"
-              >
-                <RotateIcon />
-                Rotate
-              </Button>
+          {!hasError && (
+            <div className="flex flex-wrap items-center gap-2">
+              <a href={fileUrl} target="_blank" rel="noopener noreferrer" className={LINK_BUTTON_CLASSES}>
+                <ExternalLinkIcon />
+                Open original
+              </a>
+              {/* A plain <a href> -- the server's Content-Disposition:
+                  attachment header triggers the browser's download directly,
+                  so no fetch (and therefore no CORS) is needed here. */}
+              <a href={archiveUrl} className={LINK_BUTTON_CLASSES}>
+                <DownloadIcon />
+                Download PDF
+              </a>
             </div>
           )}
-
-          {!hasError && (
-            <a href={fileUrl} target="_blank" rel="noopener noreferrer" className={LINK_BUTTON_CLASSES}>
-              <ExternalLinkIcon />
-              Open original
-            </a>
-          )}
-
-          {!hasError && (
-            // A plain <a href> -- the server's Content-Disposition:
-            // attachment header triggers the browser's download directly,
-            // so no fetch (and therefore no CORS) is needed here.
-            <a href={archiveUrl} className={LINK_BUTTON_CLASSES}>
-              <DownloadIcon />
-              Download PDF
-            </a>
-          )}
         </div>
+
+        {kind === 'image' && !hasError && (
+          <div className="flex flex-wrap items-center gap-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label="Zoom out"
+              onClick={zoomOut}
+              disabled={zoom <= MIN_ZOOM}
+            >
+              <ZoomOutIcon />
+            </Button>
+            <span className="min-w-[3rem] text-center text-sm tabular-nums text-ink-muted">{zoom}%</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label="Zoom in"
+              onClick={zoomIn}
+              disabled={zoom >= MAX_ZOOM}
+            >
+              <ZoomInIcon />
+            </Button>
+            <Button variant="secondary" size="sm" aria-label="Fit" onClick={fit}>
+              Fit
+            </Button>
+            <Button variant="secondary" size="sm" aria-label="Rotate 90 degrees clockwise" onClick={rotate}>
+              <RotateIcon />
+              Rotate
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto bg-slate-100">
