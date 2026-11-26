@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { receiptArchiveUrl } from './api/receiptArchiveUrl'
 import { receiptFileUrl } from './api/receiptFileUrl'
 import Alert from './components/ui/Alert'
@@ -92,6 +92,20 @@ function ExternalLinkIcon() {
   )
 }
 
+function RotateIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+      <path
+        d="M15.5 9.5a5.5 5.5 0 11-1.6-3.9M15.5 3v3.5H12"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function DownloadIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
@@ -110,37 +124,134 @@ interface ReceiptFileViewerProps {
   receiptId: string
   fileName: string | null
   contentType: string | null
+  /** Only for `?view=styleguide`'s static samples (an inline image instead
+   * of a real saved file); the app never passes it, so the viewer always
+   * loads `GET /receipts/{id}/file` there. */
+  fileUrl?: string
 }
 
-function ReceiptFileViewer({ receiptId, fileName, contentType }: ReceiptFileViewerProps) {
+type Rotation = 0 | 90 | 180 | 270
+
+interface NaturalSize {
+  width: number
+  height: number
+}
+
+/** How the image is drawn for a given zoom/rotation. 0° and 180° keep the
+ * plain `<img style="width: zoom%">` (180° only adds a transform -- the
+ * layout box is the same). 90°/270° need the layout to follow the rotation,
+ * which a CSS transform alone never does: a wrapper takes the rotated
+ * image's place (`width: zoom%` of the panel, `aspect-ratio` = natural
+ * height / natural width, i.e. the rotated shape), and the image inside is
+ * absolutely centered, sized so that its *height* equals the wrapper's
+ * width (`width: (naturalWidth / naturalHeight) * 100%` of the wrapper),
+ * then rotated. So "Fit" (100%) fits the rotated image to the panel's
+ * width, exactly as it does for an unrotated one. Before the image has
+ * loaded its natural size is unknown, so there is no wrapper yet and the
+ * transform is applied alone. */
+function imageLayout(
+  zoom: number,
+  rotation: Rotation,
+  natural: NaturalSize | null,
+  isLoaded: boolean,
+): { wrapperStyle: CSSProperties | null; imageStyle: CSSProperties } {
+  const display = isLoaded ? 'block' : 'none'
+  const sideways = rotation === 90 || rotation === 270
+
+  if (sideways && natural && natural.width > 0 && natural.height > 0) {
+    return {
+      wrapperStyle: {
+        position: 'relative',
+        width: `${zoom}%`,
+        aspectRatio: `${natural.height} / ${natural.width}`,
+        flexShrink: 0,
+        display,
+      },
+      imageStyle: {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        width: `${(natural.width / natural.height) * 100}%`,
+        maxWidth: 'none',
+        transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+        display: 'block',
+      },
+    }
+  }
+
+  return {
+    wrapperStyle: null,
+    imageStyle: {
+      width: `${zoom}%`,
+      display,
+      ...(rotation === 0 ? {} : { transform: `rotate(${rotation}deg)` }),
+    },
+  }
+}
+
+function ReceiptFileViewer({ receiptId, fileName, contentType, fileUrl: fileUrlOverride }: ReceiptFileViewerProps) {
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
+  // Rotation is view-only (never saved or sent anywhere) and belongs to one
+  // receipt: it's stored together with the receipt id it was set for, so
+  // the moment another receipt loads into this same mounted viewer (e.g.
+  // Previous/Next in review mode, which never remounts it) it reads as 0
+  // again -- no effect needed.
+  const [rotationState, setRotationState] = useState<{ receiptId: string; rotation: Rotation }>({
+    receiptId,
+    rotation: 0,
+  })
+  const rotation: Rotation = rotationState.receiptId === receiptId ? rotationState.rotation : 0
+  const [natural, setNatural] = useState<NaturalSize | null>(null)
 
-  const fileUrl = receiptFileUrl(receiptId)
+  const fileUrl = fileUrlOverride ?? receiptFileUrl(receiptId)
   const archiveUrl = receiptArchiveUrl(receiptId)
   const kind = decideKind(contentType, fileName)
 
   const zoomIn = () => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))
   const zoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP))
   const fit = () => setZoom(DEFAULT_ZOOM)
+  const rotate = () =>
+    setRotationState({ receiptId, rotation: (((rotation + 90) % 360) as Rotation) })
 
   const imageAlt = fileName ? `Original receipt image (${fileName})` : 'Original receipt image'
+  const layout = imageLayout(zoom, rotation, natural, isLoaded)
+  const image = (
+    <img
+      src={fileUrl}
+      alt={imageAlt}
+      style={layout.imageStyle}
+      className="mx-auto"
+      onLoad={(e) => {
+        setNatural({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })
+        setIsLoaded(true)
+      }}
+      onError={() => setHasError(true)}
+    />
+  )
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-md">
+    <div
+      className={`flex flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-md ${
+        kind === 'pdf' ? 'lg:h-[calc(100vh-6rem)]' : 'lg:max-h-[calc(100vh-6rem)]'
+      }`}
+    >
+      {/* Both the outer row and the control group wrap: when the panel is
+          narrow, the controls move to a second row (and wrap among
+          themselves) instead of overflowing it. */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
         {fileName ? (
-          <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={fileName}>
+          <p className="min-w-[8rem] flex-1 truncate text-sm font-medium text-ink" title={fileName}>
             {fileName}
           </p>
         ) : (
           <span className="flex-1" />
         )}
 
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {kind === 'image' && !hasError && (
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               <Button
                 variant="secondary"
                 size="sm"
@@ -162,6 +273,16 @@ function ReceiptFileViewer({ receiptId, fileName, contentType }: ReceiptFileView
               </Button>
               <Button variant="secondary" size="sm" aria-label="Fit" onClick={fit}>
                 Fit
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Rotate 90 degrees clockwise"
+                onClick={rotate}
+                className="gap-1.5"
+              >
+                <RotateIcon />
+                Rotate
               </Button>
             </div>
           )}
@@ -185,7 +306,7 @@ function ReceiptFileViewer({ receiptId, fileName, contentType }: ReceiptFileView
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto bg-slate-100">
+      <div className="min-h-0 flex-1 overflow-auto bg-slate-100">
         {hasError ? (
           <div className="p-4">
             <Alert variant="info">{NOT_AVAILABLE_MESSAGE}</Alert>
@@ -194,19 +315,18 @@ function ReceiptFileViewer({ receiptId, fileName, contentType }: ReceiptFileView
           <iframe
             src={`${fileUrl}${PDF_VIEW_FRAGMENT}`}
             title={fileName ? `Original receipt PDF (${fileName})` : 'Original receipt PDF'}
-            className="h-[600px] w-full lg:h-full lg:min-h-[600px]"
+            className="h-[600px] w-full lg:h-full"
           />
         ) : (
           <div className="flex min-h-[200px] items-center justify-center p-4">
             {!isLoaded && <p className="text-sm text-ink-muted">Loading image...</p>}
-            <img
-              src={fileUrl}
-              alt={imageAlt}
-              style={{ width: `${zoom}%`, display: isLoaded ? 'block' : 'none' }}
-              className="mx-auto"
-              onLoad={() => setIsLoaded(true)}
-              onError={() => setHasError(true)}
-            />
+            {layout.wrapperStyle ? (
+              <div style={layout.wrapperStyle} className="mx-auto">
+                {image}
+              </div>
+            ) : (
+              image
+            )}
           </div>
         )}
       </div>

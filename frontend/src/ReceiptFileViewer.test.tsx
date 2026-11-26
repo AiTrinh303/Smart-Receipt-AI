@@ -158,3 +158,118 @@ test('onError shows the "not available" message and no <img>', () => {
   expect(screen.getByText('The original file is not available.')).toBeInTheDocument()
   expect(screen.queryByRole('img', { hidden: true })).not.toBeInTheDocument()
 })
+
+// --- Rotate (view only) ----------------------------------------------------
+
+const OTHER_RECEIPT_ID = '22222222-2222-2222-2222-222222222222'
+
+/** The <img> is re-created when it moves into/out of the rotation wrapper,
+ * so tests re-query it after each rotation instead of keeping a reference. */
+function currentImage(): HTMLImageElement {
+  return screen.getByRole('img', { hidden: true }) as HTMLImageElement
+}
+
+/** jsdom never decodes images, so naturalWidth/naturalHeight are 0; stub
+ * them on the element before firing load, as a real browser would set them. */
+function loadImageWithSize(img: HTMLElement, width: number, height: number) {
+  Object.defineProperty(img, 'naturalWidth', { configurable: true, value: width })
+  Object.defineProperty(img, 'naturalHeight', { configurable: true, value: height })
+  fireEvent.load(img)
+}
+
+test('an image shows a "Rotate" button with visible text and a descriptive accessible name', () => {
+  // Given an image receipt
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+
+  // Then the Rotate button is there, named "Rotate 90 degrees clockwise", showing "Rotate"
+  const button = screen.getByRole('button', { name: 'Rotate 90 degrees clockwise' })
+  expect(button).toHaveTextContent('Rotate')
+})
+
+test('a PDF shows no "Rotate" button', () => {
+  // Given a PDF receipt
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.pdf" contentType="application/pdf" />)
+
+  // Then there is no Rotate button
+  expect(screen.queryByRole('button', { name: /rotate/i })).not.toBeInTheDocument()
+})
+
+test('rotating a loaded landscape image 90 degrees lays it out in the rotated shape, at the current zoom', () => {
+  // Given a loaded 1200x800 (landscape) image
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+  const img = screen.getByRole('img', { hidden: true }) as HTMLImageElement
+  loadImageWithSize(img, 1200, 800)
+
+  // When it is rotated once
+  fireEvent.click(screen.getByRole('button', { name: 'Rotate 90 degrees clockwise' }))
+
+  // Then a wrapper takes the rotated (portrait) shape at 100% of the panel width
+  const rotated = currentImage()
+  const wrapper = rotated.parentElement as HTMLElement
+  expect(wrapper.style.width).toBe('100%')
+  expect(wrapper.style.aspectRatio).toBe('800 / 1200')
+  // And the image itself is sized so its height fills that width, then rotated
+  expect(rotated.style.width).toBe('150%')
+  expect(rotated.style.transform).toBe('translate(-50%, -50%) rotate(90deg)')
+})
+
+test('zoom and Fit size the rotated image, keeping the rotation', () => {
+  // Given a loaded image rotated 90 degrees
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+  const img = screen.getByRole('img', { hidden: true }) as HTMLImageElement
+  loadImageWithSize(img, 1200, 800)
+  fireEvent.click(screen.getByRole('button', { name: 'Rotate 90 degrees clockwise' }))
+
+  // When zooming in, the rotated image's width grows
+  fireEvent.click(screen.getByRole('button', { name: /zoom in/i }))
+  expect((currentImage().parentElement as HTMLElement).style.width).toBe('125%')
+
+  // When Fit is clicked, it fits the panel width again, still rotated
+  fireEvent.click(screen.getByRole('button', { name: /^fit$/i }))
+  expect((currentImage().parentElement as HTMLElement).style.width).toBe('100%')
+  expect(currentImage().style.transform).toContain('rotate(90deg)')
+})
+
+test('four rotations return to the original, unwrapped image', () => {
+  // Given a loaded image
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+  const img = screen.getByRole('img', { hidden: true }) as HTMLImageElement
+  loadImageWithSize(img, 1200, 800)
+  const button = screen.getByRole('button', { name: 'Rotate 90 degrees clockwise' })
+
+  // When rotated twice, it is turned upside down with the same layout box
+  fireEvent.click(button)
+  fireEvent.click(button)
+  expect(currentImage().style.transform).toBe('rotate(180deg)')
+  expect(currentImage().style.width).toBe('100%')
+
+  // When rotated twice more, it is back to the original
+  fireEvent.click(button)
+  fireEvent.click(button)
+  expect(currentImage().style.transform).toBe('')
+  expect(currentImage().style.width).toBe('100%')
+})
+
+test('rotation resets when another receipt loads into the same viewer, and never makes a request', () => {
+  const originalFetch = globalThis.fetch
+  const fetchSpy = jest.fn()
+  globalThis.fetch = fetchSpy as unknown as typeof fetch
+  // Given a rotated image
+  const { rerender } = render(
+    <ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />,
+  )
+  loadImageWithSize(screen.getByRole('img', { hidden: true }), 1200, 800)
+  fireEvent.click(screen.getByRole('button', { name: 'Rotate 90 degrees clockwise' }))
+  expect(currentImage().style.transform).toContain('rotate(90deg)')
+
+  // When another receipt is shown without remounting (as Previous/Next in review mode does)
+  rerender(<ReceiptFileViewer receiptId={OTHER_RECEIPT_ID} fileName="other.jpg" contentType="image/jpeg" />)
+
+  // Then the new image is not rotated
+  const img = screen.getByRole('img', { hidden: true }) as HTMLImageElement
+  expect(img.style.transform).toBe('')
+  expect(img.style.width).toBe('100%')
+  // And rotating never sent anything to the server
+  expect(fetchSpy).not.toHaveBeenCalled()
+  globalThis.fetch = originalFetch
+})

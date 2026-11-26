@@ -893,7 +893,9 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   image vs. PDF from `contentType` first, then the filename extension,
   else defaults to image. Renders as a framed card: a header row with the
   (truncated, `title`-attributed) file name, icon zoom/fit controls for
-  images (`aria-label`s "Zoom out"/"Zoom in"/"Fit", 50%–300%), an
+  images (`aria-label`s "Zoom out"/"Zoom in"/"Fit", 50%–300%) plus a
+  "Rotate" button (icon + visible "Rotate", `aria-label` "Rotate 90 degrees
+  clockwise"; images only, never shown for a PDF), an
   "Open original" link-styled `<a>` (kept a real anchor, not the `Button`
   component, so it stays `role="link"` for `target="_blank"`), and a
   "Download PDF" link-styled `<a>` right next to it, built from
@@ -914,10 +916,35 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   at this iframe's width; any other browser simply ignores an
   unrecognized fragment, and the browser's own PDF toolbar is never
   hidden (only the plugin's optional extras are).
+  **Toolbar wrapping:** both the header row and the control group are
+  `flex-wrap` (the file name keeps `min-w-[8rem]`), so in a narrow panel
+  the controls move to a second row instead of overflowing it.
+  **Rotate (view only):** 0°/90°/180°/270°, never saved or sent anywhere.
+  Stored together with the receipt id it was set for, so it reads as 0°
+  the moment another receipt loads into the same mounted viewer (e.g.
+  Previous/Next in review mode, which never remounts it) — no effect
+  needed. 0°/180° keep the plain `<img style="width: zoom%">` (180° only
+  adds a transform). For 90°/270° a CSS transform alone wouldn't move the
+  layout box, so a wrapper takes the rotated image's place (`width:
+  zoom%`, `aspect-ratio: naturalHeight / naturalWidth`) and the image is
+  absolutely centered inside it at `width: (naturalWidth /
+  naturalHeight) * 100%` of the wrapper (so its *height* equals the
+  wrapper's width), then rotated — so zoom and "Fit" (100%) size the
+  rotated image to the panel width exactly as they do an unrotated one.
+  The natural size comes from the `<img>`'s `onLoad`; before that, no
+  wrapper. Moving the `<img>` into/out of the wrapper re-creates the
+  element (tests re-query it). An optional `fileUrl` prop exists only for
+  `?view=styleguide`'s static samples; the app never passes it.
+  **Height:** from `lg` up the viewer card is capped at
+  `lg:max-h-[calc(100vh-6rem)]` (a PDF gets exactly that height, since an
+  iframe has no intrinsic height), its body `min-h-0 flex-1 overflow-auto`
+  so the image scrolls inside it; below `lg` unchanged.
   `ReceiptDetailLayout` wraps the saved-receipt view (`ReceiptResult`) and
   the edit view (`ReceiptEditForm`) in a shared two-column layout
-  (`lg:grid-cols-[5fr_6fr]`, file left/data right, file panel `sticky`
-  with its own scroll area near viewport height) from the `lg` breakpoint
+  (`lg:grid-cols-[5fr_6fr]`, file left/data right, file panel
+  `lg:sticky lg:top-20 lg:self-start` — it never stretches to the data
+  column's height; the viewer inside caps its own height, see above) from
+  the `lg` breakpoint
   up, inside the shell's wider `xl` `Container` size; below `lg` it
   renders a "Receipt data"/"Original" segmented control
   (`role="tablist"`/`role="tab"`, `aria-selected`) that toggles visibility

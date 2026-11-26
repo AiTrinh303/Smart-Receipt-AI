@@ -63,7 +63,7 @@ function ReceiptDetailLayout({ receiptId, fileName, contentType, children }: Rec
           role="tabpanel"
           aria-labelledby="receipt-tab-original"
           hidden={activeTab !== 'original'}
-          className="lg:order-1 lg:!block lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]"
+          className="lg:order-1 lg:!block lg:sticky lg:top-20 lg:self-start"
         >
           <ReceiptFileViewer receiptId={receiptId} fileName={fileName} contentType={contentType} />
         </div>

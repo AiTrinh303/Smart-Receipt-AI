@@ -22,6 +22,7 @@ import {
   StoreCell,
 } from './ReceiptItems'
 import { HistoryRow, HistoryRowList } from './ReceiptHistory'
+import ReceiptFileViewer from './ReceiptFileViewer'
 import { ExportCard } from './ReceiptReport'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
 import type { ReceiptFacets, ReceiptSummary } from './api/types'
@@ -239,6 +240,17 @@ const SAMPLE_ITEM_ROWS = [
     status: 'approved' as const,
   },
 ]
+
+/** Inline SVG "receipts" for the file viewer samples: a tall portrait one,
+ * and the same shape turned sideways (text running bottom-to-top), so
+ * Rotate can be tried without a backend. No real store or amount. */
+const SAMPLE_RECEIPT_LINES = Array.from({ length: 8 }, (_, i) => `<rect x="30" y="${120 + i * 50}" width="${i % 3 === 0 ? 240 : 180}" height="14" rx="3" fill="#cbd5e1"/>`).join('')
+const SAMPLE_PORTRAIT_RECEIPT_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="600" viewBox="0 0 300 600"><rect width="300" height="600" fill="#ffffff"/><rect x="30" y="40" width="160" height="28" rx="4" fill="#94a3b8"/>${SAMPLE_RECEIPT_LINES}<rect x="30" y="540" width="240" height="20" rx="3" fill="#64748b"/></svg>`,
+)}`
+const SAMPLE_SIDEWAYS_RECEIPT_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><g transform="translate(0 300) rotate(-90)"><rect width="300" height="600" fill="#ffffff"/><rect x="30" y="40" width="160" height="28" rx="4" fill="#94a3b8"/>${SAMPLE_RECEIPT_LINES}<rect x="30" y="540" width="240" height="20" rx="3" fill="#64748b"/></g></svg>`,
+)}`
 
 const HISTORY_SAMPLE_BASE = {
   original_filename: 'a.jpg',
@@ -770,6 +782,47 @@ function StyleGuide() {
               <span className="font-medium text-brand hover:underline">Previous</span>
               <span className="font-medium text-brand hover:underline">Next</span>
             </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Receipt file viewer (toolbar wrapping in a narrow panel, capped height, Rotate for images only)">
+        <p className="text-sm text-ink-muted">
+          Static inline images stand in for saved files. Try Rotate on the sideways sample: after one
+          turn it reads upright and Fit fills the panel width. "Open original" and "Download PDF" point at
+          sample ids and won&apos;t work here.
+        </p>
+        <div className="flex flex-wrap items-start gap-6">
+          <div className="flex w-[22rem] flex-col gap-2">
+            <p className="text-sm font-medium text-ink">Narrow panel, portrait photo (toolbar wraps)</p>
+            <div>
+              <ReceiptFileViewer
+                receiptId="sg-viewer-1"
+                fileName="a-long-original-file-name-from-the-phone.jpg"
+                contentType="image/svg+xml"
+                fileUrl={SAMPLE_PORTRAIT_RECEIPT_URL}
+              />
+            </div>
+          </div>
+          <div className="flex w-[28rem] flex-col gap-2">
+            <p className="text-sm font-medium text-ink">Sideways photo (rotate once)</p>
+            <div>
+              <ReceiptFileViewer
+                receiptId="sg-viewer-2"
+                fileName="sideways.jpg"
+                contentType="image/svg+xml"
+                fileUrl={SAMPLE_SIDEWAYS_RECEIPT_URL}
+              />
+            </div>
+          </div>
+          <div className="flex w-[22rem] flex-col gap-2">
+            <p className="text-sm font-medium text-ink">PDF (no zoom, no Rotate)</p>
+            <ReceiptFileViewer
+              receiptId="sg-viewer-3"
+              fileName="receipt.pdf"
+              contentType="application/pdf"
+              fileUrl="about:blank"
+            />
           </div>
         </div>
       </Section>

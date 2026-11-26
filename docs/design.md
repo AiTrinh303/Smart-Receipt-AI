@@ -1037,7 +1037,8 @@ reach for these rather than re-deriving its own formatting.
   is not available.") state, via the same condition. Not added to
   `?view=styleguide`, since `ReceiptFileViewer` itself isn't shown there
   at all (no network-free way to demo an `<img>`/`<iframe>` pointed at a
-  real file).
+  real file). (It is now -- see "Receipt file viewer: wrapping toolbar, capped
+  height, Rotate".)
 
 ## Batch upload queue UI
 
@@ -1896,6 +1897,44 @@ rows that actually need attention.
   below `sm`) with an approved row, a needs-review row with an
   unrecognized date, a missing date/apartment, and a clamped long store
   name as in a filtered tab.
+
+## Receipt file viewer: wrapping toolbar, capped height, Rotate
+
+At ~1185px the toolbar's control group (`flex-shrink-0`, no wrapping)
+pushed "Download PDF" past the panel's edge, the viewer card was a fixed
+viewport-height box at `top-4` (sliding under the 64px header area and
+showing a tall empty grey area for a small image), and a sideways phone
+photo could only be read by turning your head.
+
+- **Toolbar wraps.** The header row and the control group are both
+  `flex-wrap`; the file name keeps `min-w-[8rem]` and truncates. A narrow
+  panel moves the controls to a second row.
+- **Capped, not stretched.** The panel is `lg:sticky lg:top-20
+  lg:self-start` (no fixed height); the viewer card itself is
+  `lg:max-h-[calc(100vh-6rem)]` (80px from the top + 16px below), with
+  the image area `min-h-0 flex-1 overflow-auto` scrolling inside it. A
+  PDF gets `lg:h-[calc(100vh-6rem)]` instead, since an iframe has no
+  height of its own. Below `lg`: unchanged (iframe `h-[600px]`, image at
+  natural height).
+- **Rotate (images only, view only).** "Rotate" (icon + text, accessible
+  name "Rotate 90 degrees clockwise") turns the image 90° clockwise per
+  click; never saved or sent, and back to 0° whenever another receipt
+  loads (including Previous/Next in review mode). Fit fits the *rotated*
+  image to the panel width: for 90°/270°, a wrapper sized `width: zoom%`
+  with `aspect-ratio: naturalHeight / naturalWidth` holds the absolutely
+  centered image at `(naturalWidth / naturalHeight) * 100%` of the
+  wrapper's width, then `translate(-50%, -50%) rotate(...)` — a transform
+  alone never changes the layout box, so without the wrapper a rotated
+  landscape photo would overlap the toolbar and leave a gap below.
+- **Unchanged:** zoom steps and limits, "Fit" = 100%, "Open original"/
+  "Download PDF" hrefs and their hide-on-error rule. No existing test
+  changed; six new tests cover Rotate (present for images, absent for
+  PDFs, the rotated layout, zoom/Fit while rotated, four turns = original,
+  reset on a new receipt id with no request made).
+- **`?view=styleguide`:** a new "Receipt file viewer" section with a
+  narrow panel (toolbar wraps), a sideways sample to rotate, and a PDF
+  toolbar (no Rotate), using inline SVG sample images via an optional
+  `fileUrl` prop that the app itself never passes.
 
 ## Changelog
 
