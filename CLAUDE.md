@@ -143,7 +143,12 @@ the purchase info, and the result is displayed for review.
   instead (same `id` reused — `apartmentId && !file` and `!apartmentId &&
   !file` can never both be true at once). The button's `aria-describedby`
   is simply `!file ? FILE_HELPER_ID : undefined` — true for exactly those
-  two under-the-button cases, never the apartment-only one.
+  two under-the-button cases, never the apartment-only one. Both
+  under-the-button lines carry `role="status"` (texts unchanged).
+  Section 2's heading reads "Receipts" plus, once an apartment is chosen,
+  a muted `for <apartmentShortName>` span (full name in its `title`)
+  inside the same `<h2>` — so its accessible name becomes e.g. "Receipts
+  for Waldglück".
   A closed-by-default `<details>`/`<summary>` ("Tips for better reading",
   styled as a text-style control — no box, `list-none` +
   `[&::-webkit-details-marker]:hidden` to remove the native disclosure
@@ -175,7 +180,9 @@ the purchase info, and the result is displayed for review.
   `HelpPanel` is decided in JS, not CSS: `isWideScreen =
   useMediaQuery('(min-width: 1024px)')` — `true` renders the static,
   no-fetch `HelpPanel` ("How it works": choose the apartment / add photos
-  or PDFs / review and approve, each with its own number badge, plus the
+  or PDFs / "Check the result in History or Items. The Report counts
+  every receipt, reviewed or not." — approval is optional, so nothing on
+  the upload screen implies it's required — each with its own number badge, plus the
   same tips list already expanded) and skips `TipsDetails` entirely;
   `false` (including whenever `matchMedia` doesn't exist, jsdom's
   default) renders `TipsDetails` and skips `HelpPanel` — **never both**,
@@ -198,12 +205,14 @@ the purchase info, and the result is displayed for review.
   saturated block on the page; corrected), hover **and** drag-over both
   step up to `bg-brand-subtle` plus `border-brand` (treated as the same
   "engaged" strength, one step stronger than idle either way). The full
-  variant's instructional text is now "Drag a receipt here, or" followed
+  variant's instructional text is now "Drag receipts here, or" followed
   by a real secondary `Button` reading "Browse files" (`onClick` calls
   `e.stopPropagation()` before `openFilePicker()`, since the button sits
   nested inside the dropzone's own `role="button"` `<div>` which already
   opens the picker on any click — without stopping propagation the click
-  bubbles up and double-fires it) then the size/type line — replacing the
+  bubbles up and double-fires it) then the size/type line ("JPG, PNG or
+  PDF, up to 10 MB each. Up to `${MAX_BATCH}` files at once.", built from
+  `batchReducer.ts`'s `MAX_BATCH`, never a hardcoded 20) — replacing the
   previous plain-text "...or choose a file", which read as inert text
   rather than an obvious control. The batch queue and sticky
   action bar are functionally untouched — only their column got

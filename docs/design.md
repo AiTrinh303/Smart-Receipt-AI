@@ -1780,6 +1780,34 @@ another tab/device.
   "All files are already saved." state, and the single-file duplicate
   Alert.
 
+## Upload page for repeat use
+
+The owner uploads receipts often, usually in batches, and approval is
+optional (the yearly Report counts every receipt, reviewed or not). The
+Upload page was written for a first-time visitor; this pass makes it
+useful on the hundredth visit too.
+
+- **Copy that matches reality.** The dropzone reads "Drag receipts here,
+  or" (plural -- 2+ files switch to the batch queue) and "JPG, PNG or
+  PDF, up to 10 MB each. Up to `MAX_BATCH` files at once." -- the number
+  comes from `batchReducer.ts`'s `MAX_BATCH`, so the text can never drift
+  from the real limit. The help's third step is now "Check the result in
+  History or Items. The Report counts every receipt, reviewed or not."
+  (was "Review the result and approve it in History or Items.") -- a
+  grep for "approv" over the upload screen (`ReceiptUpload.tsx`'s form
+  branch, `BatchQueue.tsx`, the help content) found that step as the
+  only user-visible hit; the "Review in History" button after a batch
+  stays, since reviewing is still useful, just not required.
+- **Where the receipts will go.** Section 2's `<h2>` reads "Receipts"
+  and, once an apartment is chosen, gains a muted `for <short name>`
+  span (`font-normal text-ink-muted`, full name in `title`) inside the
+  same heading, so a screen reader hears "Receipts for Waldglück" too.
+- **The status line under "Read receipt"** ("Choose an apartment and add
+  a receipt to continue." / "Choose a file to continue.") is now
+  `role="status"`, so the change from one hint to the other is
+  announced; the texts and the button's `aria-describedby` are
+  unchanged.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

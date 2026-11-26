@@ -35,7 +35,7 @@ afterEach(() => {
 })
 
 function getDropzone() {
-  return screen.getByRole('button', { name: /drag a receipt here/i })
+  return screen.getByRole('button', { name: /drag receipts here/i })
 }
 
 function getSubmitButton() {

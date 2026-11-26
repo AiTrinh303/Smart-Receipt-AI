@@ -23,6 +23,7 @@ import { useApartments } from './hooks/useApartments'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import BatchQueue from './batch/BatchQueue'
 import { useBatchUpload } from './batch/useBatchUpload'
+import { MAX_BATCH } from './batch/batchReducer'
 import ReceiptApartment from './ReceiptApartment'
 import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
@@ -47,6 +48,7 @@ const APARTMENT_HELPER_ID = 'apartment-helper'
 const FILE_HELPER_ID = 'file-helper'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const UPLOAD_DESCRIPTION = 'Read the date, store, items and total automatically.'
+const DROPZONE_LIMITS_TEXT = `JPG, PNG or PDF, up to 10 MB each. Up to ${MAX_BATCH} files at once.`
 
 function isValidUuid(value: string): boolean {
   return UUID_PATTERN.test(value)
@@ -171,7 +173,7 @@ const TIPS_ITEMS = [
 const HOW_IT_WORKS_STEPS = [
   'Choose the apartment.',
   'Add photos or PDFs.',
-  'Review the result and approve it in History or Items.',
+  'Check the result in History or Items. The Report counts every receipt, reviewed or not.',
 ]
 
 /** A numbered section heading inside the upload form card -- the number is
@@ -382,12 +384,12 @@ function ReceiptUpload() {
   // S > 0, so the string is byte-identical to before when nothing was
   // skipped.
   const batchTotalBytes = batch.items.reduce((sum, item) => sum + item.file.size, 0)
-  const batchSelectedApartment = apartments?.find((a) => a.id === apartmentId) ?? null
-  const batchApartmentLabel = batchSelectedApartment
-    ? (apartmentShortName(batchSelectedApartment.name) ?? batchSelectedApartment.name)
+  const selectedApartment = apartments?.find((a) => a.id === apartmentId) ?? null
+  const selectedApartmentLabel = selectedApartment
+    ? (apartmentShortName(selectedApartment.name) ?? selectedApartment.name)
     : null
-  const batchSummaryTextBase = batchApartmentLabel
-    ? `${batch.items.length} receipts · ${formatFileSize(batchTotalBytes)} · for ${batchApartmentLabel}`
+  const batchSummaryTextBase = selectedApartmentLabel
+    ? `${batch.items.length} receipts · ${formatFileSize(batchTotalBytes)} · for ${selectedApartmentLabel}`
     : `${batch.items.length} receipts · ${formatFileSize(batchTotalBytes)}`
   const batchSummaryText =
     batchSkippedCount > 0 ? `${batchSummaryTextBase}, ${batchSkippedCount} skipped` : batchSummaryTextBase
@@ -1059,7 +1061,17 @@ function ReceiptUpload() {
             </div>
 
             <div className="flex flex-col gap-4">
-              <SectionHeading number={2}>Receipts</SectionHeading>
+              <SectionHeading number={2}>
+                Receipts
+                {selectedApartment && (
+                  <>
+                    {' '}
+                    <span className="font-normal text-ink-muted" title={selectedApartment.name}>
+                      for {selectedApartmentLabel}
+                    </span>
+                  </>
+                )}
+              </SectionHeading>
 
               <label htmlFor="receipt-file" className="sr-only">
                 Upload receipt (JPG, PNG, or PDF)
@@ -1134,7 +1146,7 @@ function ReceiptUpload() {
                       strokeLinejoin="round"
                     />
                   </svg>
-                  <p className="text-sm font-medium text-ink">Drag a receipt here, or</p>
+                  <p className="text-sm font-medium text-ink">Drag receipts here, or</p>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1146,7 +1158,7 @@ function ReceiptUpload() {
                   >
                     Browse files
                   </Button>
-                  <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB</p>
+                  <p className="text-sm text-ink-muted">{DROPZONE_LIMITS_TEXT}</p>
                 </div>
               )}
 
@@ -1380,12 +1392,12 @@ function ReceiptUpload() {
                   </Button>
 
                   {!apartmentId && !file && (
-                    <p id={FILE_HELPER_ID} className="text-sm text-ink-muted">
+                    <p id={FILE_HELPER_ID} role="status" className="text-sm text-ink-muted">
                       Choose an apartment and add a receipt to continue.
                     </p>
                   )}
                   {apartmentId && !file && (
-                    <p id={FILE_HELPER_ID} className="text-sm text-ink-muted">
+                    <p id={FILE_HELPER_ID} role="status" className="text-sm text-ink-muted">
                       Choose a file to continue.
                     </p>
                   )}

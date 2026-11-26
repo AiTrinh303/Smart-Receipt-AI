@@ -82,7 +82,7 @@ test('at a wide (lg) screen, the static help panel is shown and the collapsible 
   expect(screen.getByRole('heading', { level: 2, name: 'How it works' })).toBeInTheDocument()
   expect(screen.getByText('Choose the apartment.')).toBeInTheDocument()
   expect(screen.getByText('Add photos or PDFs.')).toBeInTheDocument()
-  expect(screen.getByText('Review the result and approve it in History or Items.')).toBeInTheDocument()
+  expect(screen.getByText('Check the result in History or Items. The Report counts every receipt, reviewed or not.')).toBeInTheDocument()
 
   // Tips text appears exactly once (inside the panel), never in a <details>
   expect(screen.getAllByText('Lay the receipt flat.')).toHaveLength(1)
@@ -134,7 +134,7 @@ test('dropzone remains functional and visible with a brand-subtle idle backgroun
   render(<ReceiptUpload />)
   await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
 
-  const dropzone = screen.getByRole('button', { name: /drag a receipt here/i })
+  const dropzone = screen.getByRole('button', { name: /drag receipts here/i })
   expect(dropzone.className).toContain('bg-brand-subtle')
   expect(dropzone.className).toContain('border-border')
 })

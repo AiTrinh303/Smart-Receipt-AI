@@ -10,6 +10,7 @@ import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
 import BatchQueue from './batch/BatchQueue'
+import { MAX_BATCH } from './batch/batchReducer'
 import type { BatchItem, RejectedFile } from './batch/batchReducer'
 import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_ERROR_MESSAGE } from './errorMessages'
 import {
@@ -266,6 +267,21 @@ function StyleGuide() {
             </span>
             <h2 className="text-base font-semibold text-ink">Receipts</h2>
           </div>
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-semibold text-white"
+            >
+              2
+            </span>
+            <h2 className="text-base font-semibold text-ink">
+              Receipts{' '}
+              <span className="font-normal text-ink-muted" title="Fewo JoJo - Sankt Englmar - Waldglück">
+                for Waldglück
+              </span>
+            </h2>
+            <span className="text-xs text-ink-muted">(after choosing an apartment)</span>
+          </div>
         </Card>
       </Section>
 
@@ -277,7 +293,7 @@ function StyleGuide() {
               {[
                 'Choose the apartment.',
                 'Add photos or PDFs.',
-                'Review the result and approve it in History or Items.',
+                'Check the result in History or Items. The Report counts every receipt, reviewed or not.',
               ].map((step, index) => (
                 <li key={step} className="flex gap-3">
                   <span
@@ -867,11 +883,11 @@ function StyleGuide() {
                 strokeLinejoin="round"
               />
             </svg>
-            <p className="text-sm font-medium text-ink">Drag a receipt here, or</p>
+            <p className="text-sm font-medium text-ink">Drag receipts here, or</p>
             <Button variant="secondary" size="sm">
               Browse files
             </Button>
-            <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB</p>
+            <p className="text-sm text-ink-muted">JPG, PNG or PDF, up to 10 MB each. Up to {MAX_BATCH} files at once.</p>
           </div>
 
           {dropzoneState === 'file-selected' && (
@@ -902,10 +918,10 @@ function StyleGuide() {
         <Card className="flex flex-col gap-2">
           <Button disabled>Read receipt</Button>
           {uploadHelperState === 'neither' && (
-            <p className="text-sm text-ink-muted">Choose an apartment and add a receipt to continue.</p>
+            <p role="status" className="text-sm text-ink-muted">Choose an apartment and add a receipt to continue.</p>
           )}
           {uploadHelperState === 'file-only' && (
-            <p className="text-sm text-ink-muted">Choose a file to continue.</p>
+            <p role="status" className="text-sm text-ink-muted">Choose a file to continue.</p>
           )}
           {uploadHelperState === 'apartment-only' && (
             <p className="text-sm text-ink-muted">Choose an apartment to continue.</p>
