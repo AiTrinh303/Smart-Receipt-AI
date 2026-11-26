@@ -1,11 +1,12 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import ReceiptFileViewer, { PDF_VIEW_FRAGMENT } from './ReceiptFileViewer'
 
 const RECEIPT_ID = '11111111-1111-1111-1111-111111111111'
 const EXPECTED_URL = `http://localhost:8001/receipts/${RECEIPT_ID}/file`
 const EXPECTED_ARCHIVE_URL = `http://localhost:8001/receipts/${RECEIPT_ID}/archive.pdf`
 
-test('the file name is shown, truncated, with the full name in a title attribute', () => {
+test('the file name is not shown as text, but is the "Open original" title and part of the image alt', () => {
+  // Given a receipt with a long file name
   render(
     <ReceiptFileViewer
       receiptId={RECEIPT_ID}
@@ -14,9 +15,16 @@ test('the file name is shown, truncated, with the full name in a title attribute
     />,
   )
 
-  const name = screen.getByTitle('a-very-long-original-receipt-filename.jpg')
-  expect(name).toHaveTextContent('a-very-long-original-receipt-filename.jpg')
-  expect(name.className).toMatch(/truncate/)
+  // Then no visible text shows it, the "Open original" link carries it as its title, and the alt names it
+  expect(screen.queryByText('a-very-long-original-receipt-filename.jpg')).not.toBeInTheDocument()
+  expect(screen.getByRole('link', { name: /open original/i })).toHaveAttribute(
+    'title',
+    'a-very-long-original-receipt-filename.jpg',
+  )
+  expect(screen.getByRole('img', { hidden: true })).toHaveAttribute(
+    'alt',
+    'Original receipt image (a-very-long-original-receipt-filename.jpg)',
+  )
 })
 
 test('when the file name is unknown, no name element is shown', () => {
@@ -274,16 +282,116 @@ test('rotation resets when another receipt loads into the same viewer, and never
   globalThis.fetch = originalFetch
 })
 
-test('toolbar: the links sit in the first row and the view controls follow as one group', () => {
+test('toolbar: one row -- the view controls first as one group, then the two links together', () => {
   // Given an image receipt
   render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
 
-  // Then "Open original" and "Download PDF" share one group, which comes before the zoom/Fit/Rotate group
-  const download = screen.getByRole('link', { name: /download pdf/i })
-  const openOriginal = screen.getByRole('link', { name: /open original/i })
-  expect(download.parentElement).toBe(openOriginal.parentElement)
+  // Then zoom out ... Rotate share one group, the two links share another, and both groups share one row
   const zoomOut = screen.getByRole('button', { name: 'Zoom out' })
   const rotate = screen.getByRole('button', { name: 'Rotate 90 degrees clockwise' })
+  const openOriginal = screen.getByRole('link', { name: /open original/i })
+  const download = screen.getByRole('link', { name: /download pdf/i })
   expect(zoomOut.parentElement).toBe(rotate.parentElement)
-  expect(download.compareDocumentPosition(zoomOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(openOriginal.parentElement).toBe(download.parentElement)
+  expect(zoomOut.parentElement?.parentElement).toBe(openOriginal.parentElement?.parentElement)
+  expect(zoomOut.compareDocumentPosition(openOriginal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+// --- Zoom actually resizes the image ---------------------------------------
+
+test('zoom never leaves the image capped by the base img max-width (the bug zoom-in hit)', () => {
+  // Given an image receipt (no measured layout in jsdom: the percentage fallback)
+  render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+  const img = screen.getByRole('img', { hidden: true }) as HTMLImageElement
+
+  // When zooming in
+  fireEvent.click(screen.getByRole('button', { name: /zoom in/i }))
+
+  // Then the width grows past 100% AND nothing caps it: Tailwind's base
+  // styles give every <img> max-width: 100%, which used to swallow this
+  expect(img.style.width).toBe('125%')
+  expect(img.style.maxWidth).toBe('none')
+})
+
+/** Gives every element a fixed client size (jsdom has no layout), runs the
+ * test, then restores the real (zero) getters. */
+function withAreaSize(width: number, height: number, run: () => void | Promise<void>) {
+  const widthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+  const heightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight')
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => width })
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => height })
+  const restore = () => {
+    if (widthDescriptor) Object.defineProperty(HTMLElement.prototype, 'clientWidth', widthDescriptor)
+    if (heightDescriptor) Object.defineProperty(HTMLElement.prototype, 'clientHeight', heightDescriptor)
+  }
+  return Promise.resolve(run()).finally(restore)
+}
+
+function setWideScreen(matches: boolean) {
+  window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+    matches,
+    media: query,
+    onchange: null,
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    addListener: jest.fn(),
+    removeListener: jest.fn(),
+    dispatchEvent: jest.fn(),
+  })) as unknown as typeof window.matchMedia
+}
+
+afterEach(() => {
+  // @ts-expect-error removing the per-test matchMedia stub again
+  delete window.matchMedia
+})
+
+test('measured layout below lg: Fit = panel width, each zoom step resizes the image, Fit returns', async () => {
+  await withAreaSize(432, 300, async () => {
+    // Given a loaded 800x1200 portrait photo in a 400px-wide image area (432 minus 2x16 padding)
+    render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+    loadImageWithSize(currentImage(), 800, 1200)
+    await waitFor(() => expect(currentImage().style.width).toBe('400px'))
+
+    // When zooming in, it grows by one step and the label matches
+    fireEvent.click(screen.getByRole('button', { name: /zoom in/i }))
+    expect(currentImage().style.width).toBe('500px')
+    expect(currentImage().style.maxWidth).toBe('none')
+    expect(screen.getByText('125%')).toBeInTheDocument()
+
+    // When zooming out twice, it shrinks below the fitted size
+    fireEvent.click(screen.getByRole('button', { name: /zoom out/i }))
+    fireEvent.click(screen.getByRole('button', { name: /zoom out/i }))
+    expect(currentImage().style.width).toBe('300px')
+    expect(screen.getByText('75%')).toBeInTheDocument()
+
+    // When Fit is clicked, it is back at the panel width
+    fireEvent.click(screen.getByRole('button', { name: /^fit$/i }))
+    expect(currentImage().style.width).toBe('400px')
+  })
+})
+
+test('measured layout from lg up: Fit shows the whole image (width and height), Rotate and zoom work together', async () => {
+  setWideScreen(true)
+  await withAreaSize(432, 332, async () => {
+    // Given a loaded 800x1200 portrait photo in a 400x300 image area
+    render(<ReceiptFileViewer receiptId={RECEIPT_ID} fileName="receipt.jpg" contentType="image/jpeg" />)
+    loadImageWithSize(currentImage(), 800, 1200)
+
+    // Then Fit scales it to fit the height: 200x300
+    await waitFor(() => expect(currentImage().style.height).toBe('300px'))
+    expect(currentImage().style.width).toBe('200px')
+    const box = () => currentImage().parentElement as HTMLElement
+    expect(box().style.width).toBe('200px')
+    expect(box().style.height).toBe('300px')
+
+    // When rotated, the 1200x800 rotated shape fits the width: a 400x266.67 box
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate 90 degrees clockwise' }))
+    expect(box().style.width).toBe('400px')
+    expect(parseFloat(box().style.height)).toBeCloseTo(266.67, 1)
+    expect(currentImage().style.transform).toBe('translate(-50%, -50%) rotate(90deg)')
+
+    // When zooming in while rotated, the rotated box grows by one step
+    fireEvent.click(screen.getByRole('button', { name: /zoom in/i }))
+    expect(box().style.width).toBe('500px')
+  })
 })

@@ -817,17 +817,18 @@ function StyleGuide() {
         </div>
       </Section>
 
-      <Section title="Receipt file viewer (two-row toolbar, capped height, Rotate for images only)">
+      <Section title="Receipt file viewer (one toolbar row, fixed height from lg up, working zoom, Rotate for images only)">
         <p className="text-sm text-ink-muted">
-          Toolbar row 1: file name (truncated) and the two links, styled exactly like secondary buttons;
-          row 2 (images only): zoom out, zoom %, zoom in, Fit, Rotate. In the narrow panel the links drop
-          under the name, left-aligned. Static inline images stand in for saved files. Try Rotate on the sideways sample: after one
-          turn it reads upright and Fit fills the panel width. "Open original" and "Download PDF" point at
-          sample ids and won&apos;t work here.
+          One toolbar row: zoom out, zoom %, zoom in, Fit, Rotate on the left (images only); "Open original"
+          (file name in its tooltip) and "Download PDF" on the right. In the narrow panel the links wrap to a
+          second line, starting at the left. From lg up each viewer is calc(100vh - 6rem) tall and Fit shows
+          the whole image; zoom in/out and scroll the image area both ways. Try Rotate on the sideways
+          sample, then zoom. Static inline images stand in for saved files; the two links point at sample
+          ids and won&apos;t work here.
         </p>
         <div className="flex flex-wrap items-start gap-6">
           <div className="flex w-[22rem] flex-col gap-2">
-            <p className="text-sm font-medium text-ink">Narrow panel, portrait photo (toolbar wraps)</p>
+            <p className="text-sm font-medium text-ink">Narrow panel, portrait photo (links wrap)</p>
             <div>
               <ReceiptFileViewer
                 receiptId="sg-viewer-1"
@@ -838,7 +839,7 @@ function StyleGuide() {
             </div>
           </div>
           <div className="flex w-[28rem] flex-col gap-2">
-            <p className="text-sm font-medium text-ink">Sideways photo (rotate once)</p>
+            <p className="text-sm font-medium text-ink">Sideways photo (rotate once, then zoom)</p>
             <div>
               <ReceiptFileViewer
                 receiptId="sg-viewer-2"

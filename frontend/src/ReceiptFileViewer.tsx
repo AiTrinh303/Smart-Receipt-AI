@@ -1,8 +1,9 @@
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { receiptArchiveUrl } from './api/receiptArchiveUrl'
 import { receiptFileUrl } from './api/receiptFileUrl'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
+import { useMediaQuery } from './hooks/useMediaQuery'
 
 const MIN_ZOOM = 50
 const MAX_ZOOM = 300
@@ -141,34 +142,91 @@ interface NaturalSize {
   height: number
 }
 
-/** How the image is drawn for a given zoom/rotation. 0° and 180° keep the
- * plain `<img style="width: zoom%">` (180° only adds a transform -- the
- * layout box is the same). 90°/270° need the layout to follow the rotation,
- * which a CSS transform alone never does: a wrapper takes the rotated
- * image's place (`width: zoom%` of the panel, `aspect-ratio` = natural
- * height / natural width, i.e. the rotated shape), and the image inside is
- * absolutely centered, sized so that its *height* equals the wrapper's
- * width (`width: (naturalWidth / naturalHeight) * 100%` of the wrapper),
- * then rotated. So "Fit" (100%) fits the rotated image to the panel's
- * width, exactly as it does for an unrotated one. Before the image has
- * loaded its natural size is unknown, so there is no wrapper yet and the
- * transform is applied alone. */
+interface AreaSize {
+  width: number
+  height: number
+}
+
+/** A pixel length rounded to 2 decimals (avoids "399.9999999999999px"). */
+function px(value: number): string {
+  return `${Math.round(value * 100) / 100}px`
+}
+
+/** The image area's inner padding (`p-4`), on each side. */
+const AREA_PADDING_PX = 16
+
+/** How the image is drawn for a given zoom/rotation.
+ *
+ * Measured mode (the image has loaded and the image area has a size): zoom
+ * is relative to a *fitted* size. The fitted scale makes the (rotated)
+ * image fit the area's width -- and, from `lg` up where the viewer has a
+ * fixed height, its height too, so the whole receipt is visible ("contain").
+ * A box of the rotated image's exact pixel size takes its place in the
+ * layout; the `<img>` inside is absolutely centered at its unrotated pixel
+ * size and rotated, since a CSS transform alone never changes layout.
+ *
+ * Fallback mode (no natural size or no measured area yet -- e.g. jsdom, or
+ * the instant before measuring): the earlier percentage layout, `width:
+ * zoom%` of the area, with a wrapper for 90°/270°.
+ *
+ * Both modes set `max-width: none` on the `<img>`: Tailwind's base styles
+ * give every `<img>` `max-width: 100%`, which silently capped any zoom
+ * above 100% at the panel width -- the zoom bug this fixes. */
 function imageLayout(
   zoom: number,
   rotation: Rotation,
   natural: NaturalSize | null,
   isLoaded: boolean,
+  area: AreaSize | null,
+  fitHeightToo: boolean,
 ): { wrapperStyle: CSSProperties | null; imageStyle: CSSProperties } {
   const display = isLoaded ? 'block' : 'none'
   const sideways = rotation === 90 || rotation === 270
+  const hasNatural = natural !== null && natural.width > 0 && natural.height > 0
 
-  if (sideways && natural && natural.width > 0 && natural.height > 0) {
+  const availableWidth = area ? area.width - 2 * AREA_PADDING_PX : 0
+  const availableHeight = area ? area.height - 2 * AREA_PADDING_PX : 0
+  const canMeasure = hasNatural && availableWidth > 0 && (!fitHeightToo || availableHeight > 0)
+
+  if (canMeasure && natural) {
+    // The rotated image's bounding box, at natural size.
+    const boxNaturalWidth = sideways ? natural.height : natural.width
+    const boxNaturalHeight = sideways ? natural.width : natural.height
+    const fitScale = fitHeightToo
+      ? Math.min(availableWidth / boxNaturalWidth, availableHeight / boxNaturalHeight)
+      : availableWidth / boxNaturalWidth
+    const scale = (fitScale * zoom) / 100
+
+    return {
+      wrapperStyle: {
+        position: 'relative',
+        width: px(boxNaturalWidth * scale),
+        height: px(boxNaturalHeight * scale),
+        flexShrink: 0,
+        margin: 'auto',
+        display,
+      },
+      imageStyle: {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        width: px(natural.width * scale),
+        height: px(natural.height * scale),
+        maxWidth: 'none',
+        transform: `translate(-50%, -50%)${rotation === 0 ? '' : ` rotate(${rotation}deg)`}`,
+        display: 'block',
+      },
+    }
+  }
+
+  if (sideways && hasNatural && natural) {
     return {
       wrapperStyle: {
         position: 'relative',
         width: `${zoom}%`,
         aspectRatio: `${natural.height} / ${natural.width}`,
         flexShrink: 0,
+        margin: 'auto',
         display,
       },
       imageStyle: {
@@ -187,10 +245,42 @@ function imageLayout(
     wrapperStyle: null,
     imageStyle: {
       width: `${zoom}%`,
+      maxWidth: 'none',
+      flexShrink: 0,
+      margin: 'auto',
       display,
       ...(rotation === 0 ? {} : { transform: `rotate(${rotation}deg)` }),
     },
   }
+}
+
+/** The image area's inner size, kept up to date with a ResizeObserver
+ * (falling back to window resizes where it doesn't exist, e.g. jsdom). */
+function useElementSize(enabled: boolean) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState<AreaSize | null>(null)
+
+  useEffect(() => {
+    const element = ref.current
+    if (!enabled || !element) {
+      return
+    }
+    const measure = () => setSize({ width: element.clientWidth, height: element.clientHeight })
+    if (typeof ResizeObserver === 'undefined') {
+      const frame = window.requestAnimationFrame(measure)
+      window.addEventListener('resize', measure)
+      return () => {
+        window.cancelAnimationFrame(frame)
+        window.removeEventListener('resize', measure)
+      }
+    }
+    // The observer reports the initial size on its own right after observe().
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [enabled])
+
+  return { ref, size }
 }
 
 function ReceiptFileViewer({ receiptId, fileName, contentType, fileUrl: fileUrlOverride }: ReceiptFileViewerProps) {
@@ -208,10 +298,12 @@ function ReceiptFileViewer({ receiptId, fileName, contentType, fileUrl: fileUrlO
   })
   const rotation: Rotation = rotationState.receiptId === receiptId ? rotationState.rotation : 0
   const [natural, setNatural] = useState<NaturalSize | null>(null)
+  const isWide = useMediaQuery('(min-width: 1024px)')
 
   const fileUrl = fileUrlOverride ?? receiptFileUrl(receiptId)
   const archiveUrl = receiptArchiveUrl(receiptId)
   const kind = decideKind(contentType, fileName)
+  const { ref: areaRef, size: areaSize } = useElementSize(kind === 'image' && !hasError)
 
   const zoomIn = () => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))
   const zoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP))
@@ -220,13 +312,14 @@ function ReceiptFileViewer({ receiptId, fileName, contentType, fileUrl: fileUrlO
     setRotationState({ receiptId, rotation: (((rotation + 90) % 360) as Rotation) })
 
   const imageAlt = fileName ? `Original receipt image (${fileName})` : 'Original receipt image'
-  const layout = imageLayout(zoom, rotation, natural, isLoaded)
+  // From `lg` up the viewer has a fixed height, so "fit" means the whole
+  // image fits (width and height); below `lg` it fits the width, as before.
+  const layout = imageLayout(zoom, rotation, natural, isLoaded, areaSize, isWide)
   const image = (
     <img
       src={fileUrl}
       alt={imageAlt}
       style={layout.imageStyle}
-      className="mx-auto"
       onLoad={(e) => {
         setNatural({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })
         setIsLoaded(true)
@@ -235,78 +328,79 @@ function ReceiptFileViewer({ receiptId, fileName, contentType, fileUrl: fileUrlO
     />
   )
 
+  const showViewControls = kind === 'image' && !hasError
+
   return (
-    <div
-      className={`flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-md ${
-        kind === 'pdf' ? 'lg:h-[calc(100vh-6rem)]' : 'lg:max-h-[calc(100vh-6rem)]'
-      }`}
-    >
-      {/* Two rows. Row 1: the file name (takes the free space, truncated)
-          and the two links. Row 2, images only: the view controls as one
-          group. Every row wraps left-aligned (no justify-end/between), so a
-          narrow panel never shows a leading gap or clips a control: the
-          links drop under the name, and the view controls wrap among
-          themselves. */}
-      <div className="flex flex-col gap-2 border-b border-border px-4 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          {fileName ? (
-            <p className="min-w-0 flex-1 basis-40 truncate text-sm font-medium text-ink" title={fileName}>
-              {fileName}
-            </p>
-          ) : (
-            <span className="flex-1" />
-          )}
-
-          {!hasError && (
-            <div className="flex flex-wrap items-center gap-2">
-              <a href={fileUrl} target="_blank" rel="noopener noreferrer" className={LINK_BUTTON_CLASSES}>
-                <ExternalLinkIcon />
-                Open original
-              </a>
-              {/* A plain <a href> -- the server's Content-Disposition:
-                  attachment header triggers the browser's download directly,
-                  so no fetch (and therefore no CORS) is needed here. */}
-              <a href={archiveUrl} className={LINK_BUTTON_CLASSES}>
-                <DownloadIcon />
-                Download PDF
-              </a>
+    <div className="flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-md lg:h-[calc(100vh-6rem)]">
+      {/* One row: the view controls (images only) on the left, the two links
+          on the right. `justify-between` puts a lone item at the start of
+          its line, so when the row wraps, the links' line starts at the
+          left edge too -- no leading gap. A PDF has no view controls; an
+          empty spacer keeps its links on the right. After a failed load
+          there is nothing to show, so the row is left out. */}
+      {!hasError && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+          {showViewControls ? (
+            <div className="flex flex-wrap items-center gap-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Zoom out"
+                onClick={zoomOut}
+                disabled={zoom <= MIN_ZOOM}
+              >
+                <ZoomOutIcon />
+              </Button>
+              <span className="min-w-[3rem] text-center text-sm tabular-nums text-ink-muted">{zoom}%</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Zoom in"
+                onClick={zoomIn}
+                disabled={zoom >= MAX_ZOOM}
+              >
+                <ZoomInIcon />
+              </Button>
+              <Button variant="secondary" size="sm" aria-label="Fit" onClick={fit}>
+                Fit
+              </Button>
+              <Button variant="secondary" size="sm" aria-label="Rotate 90 degrees clockwise" onClick={rotate}>
+                <RotateIcon />
+                Rotate
+              </Button>
             </div>
+          ) : (
+            <span aria-hidden="true" />
           )}
-        </div>
 
-        {kind === 'image' && !hasError && (
-          <div className="flex flex-wrap items-center gap-1">
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-label="Zoom out"
-              onClick={zoomOut}
-              disabled={zoom <= MIN_ZOOM}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* The file name is no longer shown as text; it stays available
+                as this link's tooltip and in the image's alt text. */}
+            <a
+              href={fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={fileName ?? undefined}
+              className={LINK_BUTTON_CLASSES}
             >
-              <ZoomOutIcon />
-            </Button>
-            <span className="min-w-[3rem] text-center text-sm tabular-nums text-ink-muted">{zoom}%</span>
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-label="Zoom in"
-              onClick={zoomIn}
-              disabled={zoom >= MAX_ZOOM}
-            >
-              <ZoomInIcon />
-            </Button>
-            <Button variant="secondary" size="sm" aria-label="Fit" onClick={fit}>
-              Fit
-            </Button>
-            <Button variant="secondary" size="sm" aria-label="Rotate 90 degrees clockwise" onClick={rotate}>
-              <RotateIcon />
-              Rotate
-            </Button>
+              <ExternalLinkIcon />
+              Open original
+            </a>
+            {/* A plain <a href> -- the server's Content-Disposition:
+                attachment header triggers the browser's download directly,
+                so no fetch (and therefore no CORS) is needed here. */}
+            <a href={archiveUrl} className={LINK_BUTTON_CLASSES}>
+              <DownloadIcon />
+              Download PDF
+            </a>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="min-h-0 flex-1 overflow-auto bg-slate-100">
+      <div
+        ref={areaRef}
+        className={`min-h-0 flex-1 overflow-auto ${kind === 'image' ? 'bg-slate-100 lg:bg-surface-page' : 'bg-slate-100'}`}
+      >
         {hasError ? (
           <div className="p-4">
             <Alert variant="info">{NOT_AVAILABLE_MESSAGE}</Alert>
@@ -318,15 +412,13 @@ function ReceiptFileViewer({ receiptId, fileName, contentType, fileUrl: fileUrlO
             className="h-[600px] w-full lg:h-full"
           />
         ) : (
-          <div className="flex min-h-[200px] items-center justify-center p-4">
-            {!isLoaded && <p className="text-sm text-ink-muted">Loading image...</p>}
-            {layout.wrapperStyle ? (
-              <div style={layout.wrapperStyle} className="mx-auto">
-                {image}
-              </div>
-            ) : (
-              image
-            )}
+          // `m-auto` on the image (not justify/items-center on this flex
+          // box) centers it while it fits, and collapses to 0 once it is
+          // larger than the area -- so a zoomed image can be scrolled to
+          // every edge, left and top included.
+          <div className="flex min-h-[200px] min-w-full p-4 lg:min-h-full">
+            {!isLoaded && <p className="m-auto text-sm text-ink-muted">Loading image...</p>}
+            {layout.wrapperStyle ? <div style={layout.wrapperStyle}>{image}</div> : image}
           </div>
         )}
       </div>

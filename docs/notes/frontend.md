@@ -920,8 +920,8 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   `GET /receipts/{id}/file` URL (no `fetch` — an `<img src>`/`<iframe src>`
   loads it directly, so no CORS is needed). `ReceiptFileViewer` decides
   image vs. PDF from `contentType` first, then the filename extension,
-  else defaults to image. Renders as a framed card: a header row with the
-  (truncated, `title`-attributed) file name, icon zoom/fit controls for
+  else defaults to image. Renders as a framed card: a header row with
+  icon zoom/fit controls for
   images (`aria-label`s "Zoom out"/"Zoom in"/"Fit", 50%–300%) plus a
   "Rotate" button (icon + visible "Rotate", `aria-label` "Rotate 90 degrees
   clockwise"; images only, never shown for a PDF), an
@@ -945,35 +945,53 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   at this iframe's width; any other browser simply ignores an
   unrecognized fragment, and the browser's own PDF toolbar is never
   hidden (only the plugin's optional extras are).
-  **Toolbar, two rows:** row 1 holds the file name (`min-w-0 flex-1
-  basis-40`, truncated, full name in `title`) and the two links; row 2,
-  images only (and not after a failed load), holds zoom out, zoom %, zoom
-  in, Fit and Rotate as one group. Every row is `flex-wrap` and
-  left-aligned (no `justify-end`/`justify-between`), so in a narrow panel
-  the links drop under the name and the view controls wrap among
-  themselves — nothing is clipped and there is no leading gap. The links
+  **Toolbar, one row:** zoom out, zoom % (`tabular-nums`), zoom in, Fit
+  and Rotate as one group on the left (images only); "Open original" and
+  "Download PDF" as a second group on the right. The row is `flex-wrap
+  justify-between`: a lone item on a wrapped line sits at the start, so
+  in a narrow panel the links' line starts at the left edge (no leading
+  gap). A PDF has no view controls; an empty `aria-hidden` spacer keeps
+  its links on the right. After a failed image load the whole row is left
+  out. The file name is not shown as text: it is the "Open original"
+  link's `title` and part of the image's `alt` ("Original receipt image
+  (<name>)") / the PDF iframe's `title`. The links
   (`LINK_BUTTON_CLASSES`) copy `Button`'s `secondary`/`sm` classes: `h-11`
   (44px) below `sm`, `sm:h-10`, `rounded-control`, `font-medium`, `gap-2`.
+  **Zoom (`imageLayout`):** zoom is relative to a *fitted* size, computed
+  from the image's natural size (from `onLoad`) and the image area's
+  measured size (`useElementSize`: a `ResizeObserver`, falling back to
+  `requestAnimationFrame` + window `resize` where it doesn't exist): from
+  `lg` up (`useMediaQuery('(min-width: 1024px)')`) the fitted scale makes
+  the whole (rotated) image fit the area's width *and* height; below `lg`,
+  its width only (as before). A box of the rotated image's pixel size
+  (`margin: auto`, rounded to 2 decimals) takes its place in the layout,
+  and the `<img>` inside is absolutely centered at its unrotated pixel
+  size and rotated. Until both sizes are known (e.g. jsdom) the earlier
+  percentage layout is used (`width: zoom%`, a wrapper for 90°/270°).
+  **The zoom bug (fixed):** Tailwind's base styles set `img { max-width:
+  100% }`, which silently capped the unrotated image's `width: 125%…300%`
+  at the panel width, so zoom-in did nothing; and the image was centered
+  with `justify-center`/`items-center`, which puts any overflow past the
+  left/top edges where it can't be scrolled to. Now every `<img>` style
+  sets `max-width: none`, and centering uses `margin: auto` (which
+  collapses to 0 once the image is larger than the area), so a zoomed
+  image scrolls to every edge. `ReceiptFileViewer.test.tsx` asserts both
+  the `max-width` and the exact pixel sizes per zoom step.
   **Rotate (view only):** 0°/90°/180°/270°, never saved or sent anywhere.
   Stored together with the receipt id it was set for, so it reads as 0°
   the moment another receipt loads into the same mounted viewer (e.g.
   Previous/Next in review mode, which never remounts it) — no effect
-  needed. 0°/180° keep the plain `<img style="width: zoom%">` (180° only
-  adds a transform). For 90°/270° a CSS transform alone wouldn't move the
-  layout box, so a wrapper takes the rotated image's place (`width:
-  zoom%`, `aspect-ratio: naturalHeight / naturalWidth`) and the image is
-  absolutely centered inside it at `width: (naturalWidth /
-  naturalHeight) * 100%` of the wrapper (so its *height* equals the
-  wrapper's width), then rotated — so zoom and "Fit" (100%) size the
-  rotated image to the panel width exactly as they do an unrotated one.
-  The natural size comes from the `<img>`'s `onLoad`; before that, no
-  wrapper. Moving the `<img>` into/out of the wrapper re-creates the
-  element (tests re-query it). An optional `fileUrl` prop exists only for
-  `?view=styleguide`'s static samples; the app never passes it.
-  **Height:** from `lg` up the viewer card is capped at
-  `lg:max-h-[calc(100vh-6rem)]` (a PDF gets exactly that height, since an
-  iframe has no intrinsic height), its body `min-h-0 flex-1 overflow-auto`
-  so the image scrolls inside it; below `lg` unchanged.
+  needed. Rotation swaps the box's width/height, so Fit and every zoom
+  step apply to the rotated shape. Moving the `<img>` into/out of the
+  wrapper re-creates the element (tests re-query it). An optional
+  `fileUrl` prop exists only for `?view=styleguide`'s static samples; the
+  app never passes it.
+  **Height:** from `lg` up the viewer card is exactly
+  `lg:h-[calc(100vh-6rem)]` (images and PDFs alike), its body `min-h-0
+  flex-1 overflow-auto` so a zoomed image scrolls inside it; the image
+  area is `lg:bg-surface-page` (`slate-100` below `lg`, unchanged). Below
+  `lg` the height is unchanged (natural height for an image, 600px for a
+  PDF).
   `ReceiptDetailLayout` wraps the saved-receipt view (`ReceiptResult`) and
   the edit view (`ReceiptEditForm`) in a shared two-column layout
   (`lg:grid-cols-[5fr_6fr]`, file left/data right, file panel

@@ -2039,6 +2039,40 @@ height while every other control was a `Button` (`font-medium`).
   inline layout; the meta-line/Discounts sample adds the one-line empty
   Discounts, the new Total row and the text-style "Upload another receipt".
 
+## File viewer: working zoom, one toolbar row, taller view
+
+- **Cause of "zoom does nothing":** Tailwind's preflight (base styles)
+  sets `img { max-width: 100% }` -- confirmed in the built CSS
+  (`img,video{max-width:100%;height:auto}`). The unrotated `<img>` got
+  `width: 125%` etc., which that rule capped at the panel width, so every
+  zoom-in step looked identical. (A rotated image wasn't affected: its
+  `<img>` already had `max-width: none`.) Separately, the image was
+  centered with `justify-center`/`items-center`, so any part of a zoomed
+  image past the left/top edges couldn't be scrolled to.
+- **Fix:** `max-width: none` on the `<img>` in every layout; centering via
+  `margin: auto`, which drops to 0 when the image is bigger than the
+  area, so it scrolls both ways. Zoom is now relative to a measured
+  *fitted* size: from `lg` up the whole image fits the area (width and
+  height); below `lg`, the width (as before). Rotation swaps the fitted
+  box, so Fit and zoom work on the rotated shape. A test asserts what
+  each step sets on the `<img>` (`max-width: none`, exact pixel sizes,
+  the % label).
+- **Filename:** no longer shown as text. It's the "Open original" link's
+  `title`, and still in the image's `alt` and the PDF iframe's `title`.
+  Changed test: "the file name is shown, truncated, with the full name in
+  a title attribute" became "the file name is not shown as text, but is
+  the "Open original" title and part of the image alt". No other test
+  read the visible name.
+- **One toolbar row:** view controls left (images only), links right;
+  `flex-wrap justify-between`, so a wrapped line starts at the left. A
+  PDF gets an empty spacer so its links stay right. Changed test: the
+  AV ordering test ("the links sit in the first row and the view controls
+  follow as one group") became "one row -- the view controls first as one
+  group, then the two links together".
+- **Height from `lg` up:** the viewer is exactly `calc(100vh - 6rem)`
+  (still `sticky top-20` via `ReceiptDetailLayout`), image centered on a
+  `bg-surface-page` area. Below `lg` and for PDFs: unchanged.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
