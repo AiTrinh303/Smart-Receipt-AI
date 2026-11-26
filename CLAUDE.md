@@ -2186,13 +2186,9 @@ cd frontend && npm run check:deps
   abstractions beyond the current task.
 - `frontend/` and `backend/` changes should stay separate; only touch both
   when a task explicitly requires it.
-- Do not commit automatically — only commit when explicitly told to.
-- Before every commit: run `pytest`, `lint-imports` (backend, venv active),
-  `npm test` and `npm run check:deps` (frontend).
-- Never delete files you did not create.
-- Never overwrite `backend/.env` — use `cp -n` (not `cp`) when seeding it
-  from `.env.example`, and never print, copy, or commit its contents or
-  any API key.
+- Do not commit automatically — only commit when explicitly told to (see
+  "Standing rules for tickets" below for everything else that applies once
+  a ticket does ask for a commit).
 - Current phase: early MVP build. Features are being added incrementally
   per ticket — see GitHub Issues for the backlog.
 - **Color or style changes must be verified against the built CSS, not
@@ -2208,3 +2204,49 @@ cd frontend && npm run check:deps
   version of this same check (resolves the real Tailwind theme and
   verifies every token/contrast pair), and open `?view=styleguide` (dev
   only) to look at every component state directly.
+
+## Standing rules for tickets
+
+These apply to every ticket, on top of (never in place of) the
+per-feature detail documented elsewhere in this file.
+
+- **Scope, dependencies, push.** Work only in the folder(s) the ticket
+  names (`frontend/`, `backend/`, or both only when it explicitly says
+  so). No new dependencies unless the ticket says otherwise. Never push —
+  commit locally only, even when a ticket gives an exact commit message
+  and says to commit.
+- **Staging and file safety.** Stage specific files only — never
+  `git add .` or `git add -A`. Never commit `.env`, uploaded files, a
+  `.db` file, `backups/`, or any build output (`dist/`, etc.). Never
+  print, copy, or overwrite `backend/.env` — use `cp -n` (never `cp`)
+  when seeding it from `.env.example`. Never delete a file you did not
+  create.
+- **Before any commit.** Prerequisite: `git status` is clean and every
+  check below passes — if not, stop and resolve that first rather than
+  working around it. The checks themselves: backend `pytest` and
+  `lint-imports` (venv active); frontend `npm test`, `npm run
+  check:deps`, and `npm run build` (delete the resulting `dist/`
+  afterward — see the color/style rule above for why the build itself
+  matters, not just the tests).
+- **Tests.** Given/When/Then comments. Backend tests use a temporary
+  database and `FakeExtractor` only — never the real database and never
+  a real OpenAI call. Frontend tests mock `fetch` and reset the URL in
+  `beforeEach`/`afterEach`. When a ticket's change touches an existing
+  test, list every one changed and why.
+- **Frontend UI.** Use the design-system tokens and the shared
+  `src/components/ui/` components — never a hardcoded color or ad hoc
+  markup. Every Tailwind class name is a complete static string, never
+  built by concatenating a variable into one. A minimum 44px touch
+  target below `sm`. A visible `focus-visible` ring on every interactive
+  element. Never convey state by color alone. Keep every user-visible
+  string an existing test relies on unless the ticket explicitly asks to
+  change it. No arithmetic on money in the frontend.
+- **Backend.** `domain/` never imports `adapters`, `api`, `fastapi`,
+  `openai`, `sqlite3`, or `PIL` (enforced by `lint-imports`). Money is
+  always `Decimal(str(value))`, never a raw float.
+- **No browser tool.** Give manual browser steps for whatever only a
+  real browser can confirm (color/contrast, layout at specific widths, a
+  real file download, `crypto.subtle` hashing, a new-tab link) and say so
+  explicitly, rather than claiming it was verified.
+- **End of response.** Finish with `git log --oneline`, `git log --stat`
+  for the new commit(s), and `git status`.
