@@ -163,8 +163,8 @@ the purchase info, and the result is displayed for review.
   `uploadReceipt(file, apartmentId, allowDuplicate?)` sends `apartment_id`
   as a second `FormData` field, and `allow_duplicate=true` as a third only
   when `allowDuplicate` is truthy (see "Duplicate warnings" below).
-  **Upload page layout (`SectionHeading`, `HelpPanel`, `TipsDetails`, all
-  local to `ReceiptUpload.tsx`):** the form `Card` is split into two
+  **Upload page layout (`SectionHeading`, `TipsDetails`, local to
+  `ReceiptUpload.tsx`; `UploadSidePanel.tsx` for the second column):** the form `Card` is split into two
   `SectionHeading`s — a small circular number badge (`aria-hidden="true"`)
   next to an `<h2>` reading just the word ("Apartment", "Receipts"; the
   number is never part of the heading's accessible name) — section 1
@@ -177,15 +177,17 @@ the purchase info, and the result is displayed for review.
   lg:grid-cols-12 lg:items-start` with the form `lg:col-span-7` and a
   help-panel column `lg:col-span-5` — plain CSS, collapsing to one
   stacked column below `lg`. Whether that second column actually renders
-  `HelpPanel` is decided in JS, not CSS: `isWideScreen =
-  useMediaQuery('(min-width: 1024px)')` — `true` renders the static,
-  no-fetch `HelpPanel` ("How it works": choose the apartment / add photos
+  anything is decided in JS, not CSS: `isWideScreen =
+  useMediaQuery('(min-width: 1024px)')` — `true` renders
+  `UploadSidePanel` (see "Side panel for returning users" below), whose
+  help variant is `HelpPanel` ("How it works": choose the apartment / add photos
   or PDFs / "Check the result in History or Items. The Report counts
   every receipt, reviewed or not." — approval is optional, so nothing on
   the upload screen implies it's required — each with its own number badge, plus the
   same tips list already expanded) and skips `TipsDetails` entirely;
   `false` (including whenever `matchMedia` doesn't exist, jsdom's
-  default) renders `TipsDetails` and skips `HelpPanel` — **never both**,
+  default) renders `TipsDetails` and skips `UploadSidePanel` entirely
+  (no fetch either) — **never both**,
   since both show the identical tips text and a CSS-only
   show/hide-one-of-two approach would leave that text in the DOM twice at
   once. `HelpPanel` uses the plain `Card` elevation (`shadow-card`, no
@@ -193,7 +195,35 @@ the purchase info, and the result is displayed for review.
   a floating popup rather than a panel beside the form) and, from `lg`
   up, `lg:sticky lg:top-20 lg:self-start` (80px clears the shell's `h-16`
   header with 16px to spare), so it stays in view while the (usually
-  taller) form scrolls. The dropzone (both the full and the compact "Add
+  taller) form scrolls.
+  **Side panel for returning users (`UploadSidePanel.tsx`):** on mount it
+  fetches `getReceiptFacets()` (unscoped) and `listReceipts({limit: 5})`
+  once, in parallel, showing `UploadSidePanelSkeleton` (a `Card` with a
+  `role="status" aria-busy="true"` region, "Loading your receipts..."
+  `sr-only`, same outer `PANEL_CLASSES` as every other variant so nothing
+  jumps). `facets.total === 0` → `HelpPanel` (the help above, expanded);
+  any failure of either request → the same `HelpPanel`, silently (no
+  `Alert`); otherwise `ReceiptsOverview` (exported, presentational): an
+  `<h2>` "Your receipts", "N receipts saved" ("1 receipt saved"), one
+  link per facet apartment "`<short>`: `<count>`" (full name in `title`)
+  to `?view=history&apartment=<id>`, an `<h3>` "Latest uploads" with one
+  link per receipt to `?receipt=<id>` (store via `ClampedText` 1 line or
+  `MissingValue`; `DateCell` from `ReceiptItems.tsx` for the date and its
+  "Date not recognized" marker; `formatMoney(total, currency)` or
+  `MissingValue`; apartment short name or `MissingValue`), links "See
+  all in History" (`?view=history`) and "Open the yearly report"
+  (`?view=report`), and a closed `<details>` "How it works and tips"
+  holding `HowItWorksContent` (the same steps/tips `HelpPanel` shows —
+  `TIPS_ITEMS`/`HOW_IT_WORKS_STEPS` now live in this file, and
+  `ReceiptUpload.tsx`'s `TipsDetails` imports `TIPS_ITEMS` from it). Every
+  link is a real `href` whose plain click goes through `navigateTo`. A
+  `refreshKey` prop refetches once whenever it changes, keeping the
+  current content on screen (no skeleton) until the answer arrives — a
+  failed refresh also falls back to `HelpPanel`. `ReceiptUpload.tsx`
+  bumps its `sidePanelRefreshKey` once after a single upload's
+  extraction succeeds (the panel is unmounted while the result shows, so
+  in practice the remount on "Upload another receipt" is that one
+  fetch) and once each time `isBatchFinished` turns `true`. The dropzone (both the full and the compact "Add
   more files"
   variants) has `rounded-control` (was `rounded-lg`) and
   `transition-colors duration-150 motion-reduce:transition-none` for the
@@ -1235,9 +1265,10 @@ the purchase info, and the result is displayed for review.
   an `actions` button, demonstrating the one-`<h1>`-per-view component),
   a "Numbered section headings" section showing the `SectionHeading`
   number-badge pattern standalone (including the "Required" tag on
-  section 1), an "Upload help panel" section showing
-  the static `HelpPanel` content (three "How it works" steps plus the
-  expanded tips) exactly as it renders at `lg` and up, an "Upload form
+  section 1, plus the "Receipts for `<short name>`" variant), an "Upload
+  side panel" section rendering the real `UploadSidePanelSkeleton`/
+  `HelpPanel`/`ReceiptsOverview` (sample data with a long store name,
+  missing values and an unrecognized date), an "Upload form
   status line" section toggling between the three mutually exclusive
   helper texts (neither chosen / file-only / apartment-only) above a
   disabled "Read receipt" sample, the dropzone's

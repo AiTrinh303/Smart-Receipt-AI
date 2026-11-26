@@ -111,15 +111,15 @@ test.each([
   }
   const { container } = render(<ReceiptUpload />)
   await screen.findByRole('radio', { name: LONG_APARTMENTS[0].name })
-
-  // Then nothing on the screen mentions approving, and the help says the
-  // Report counts every receipt
-  expect(container.textContent ?? '').not.toMatch(/approv/i)
   if (wide) {
+    // (the side panel's fetches are rejected here, so it shows the help)
     expect(
       await screen.findByText('Check the result in History or Items. The Report counts every receipt, reviewed or not.'),
     ).toBeInTheDocument()
   }
+
+  // Then nothing on the screen mentions approving
+  expect(container.textContent ?? '').not.toMatch(/approv/i)
   // @ts-expect-error cleaning up the test-only global matchMedia stub
   delete window.matchMedia
 })

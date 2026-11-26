@@ -29,6 +29,7 @@ import ReceiptDetailLayout from './ReceiptDetailLayout'
 import ReceiptEditForm from './ReceiptEditForm'
 import ReceiptResult from './ReceiptResult'
 import ReviewBar from './ReviewBar'
+import UploadSidePanel, { TIPS_ITEMS } from './UploadSidePanel'
 import type { ReviewNavigation } from './ReviewBar'
 import { effectiveStatus, effectiveYear } from './ReceiptFilters'
 import { useBottomBarVariant } from './hooks/useBottomBarVariant'
@@ -163,19 +164,6 @@ function TrashIcon() {
   )
 }
 
-const TIPS_ITEMS = [
-  'Lay the receipt flat.',
-  'Use good light.',
-  'Keep the whole receipt in frame, including the total.',
-  'One receipt per photo.',
-]
-
-const HOW_IT_WORKS_STEPS = [
-  'Choose the apartment.',
-  'Add photos or PDFs.',
-  'Check the result in History or Items. The Report counts every receipt, reviewed or not.',
-]
-
 /** A numbered section heading inside the upload form card -- the number is
  * a decorative badge (`aria-hidden`), so the heading's own accessible name
  * is just the word (e.g. "Apartment"), never "1 Apartment". `required`
@@ -216,7 +204,7 @@ function ChevronIcon({ className = '' }: { className?: string }) {
   )
 }
 
-/** Collapsible reading tips, shown below `lg` (where the static HelpPanel
+/** Collapsible reading tips, shown below `lg` (where UploadSidePanel
  * isn't rendered) -- a plain <details>/<summary> styled as a text-style
  * control rather than a bordered box, with a chevron that rotates open. */
 function TipsDetails() {
@@ -232,43 +220,6 @@ function TipsDetails() {
         ))}
       </ul>
     </details>
-  )
-}
-
-/** Static "How it works" + reading tips, shown instead of the collapsible
- * tips from `lg` up -- no fetch, no state, just reference content next to
- * the form. Uses the standard `Card` elevation (never a stronger one --
- * a panel sitting flush next to the form card should read as its equal,
- * not as a popup floating above it) and, from `lg` up, stays in view via
- * `sticky` while the (usually taller) form scrolls past it; `top-20`
- * (80px) clears the shell's `h-16` (64px) header with 16px to spare. */
-function HelpPanel() {
-  return (
-    <Card className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
-      <h2 className="text-base font-semibold text-ink">How it works</h2>
-      <ol className="flex flex-col gap-3">
-        {HOW_IT_WORKS_STEPS.map((step, index) => (
-          <li key={step} className="flex gap-3">
-            <span
-              aria-hidden="true"
-              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-subtle text-xs font-semibold text-brand"
-            >
-              {index + 1}
-            </span>
-            <p className="text-sm text-ink-muted">{step}</p>
-          </li>
-        ))}
-      </ol>
-
-      <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
-        <h3 className="text-sm font-semibold text-ink">Tips for better reading</h3>
-        <ul className="flex flex-col gap-1 pl-5 list-disc text-sm text-ink-muted">
-          {TIPS_ITEMS.map((tip) => (
-            <li key={tip}>{tip}</li>
-          ))}
-        </ul>
-      </div>
-    </Card>
   )
 }
 
@@ -353,13 +304,19 @@ function ReceiptUpload() {
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
-  // The static help panel (from `lg` up) and the collapsible tips (below
-  // `lg`) show the same tips content -- only one is ever rendered, decided
+  // The side panel (from `lg` up -- it also carries the tips) and the
+  // collapsible tips (below `lg`) show the same tips content -- only one is
+  // ever rendered (and only the side panel ever fetches), decided
   // here, never by CSS alone, so the text can never appear twice in the
   // DOM. `useMediaQuery` defaults to `false` when `matchMedia` doesn't
   // exist (jsdom's default), which is exactly the below-`lg` variant.
   const isWideScreen = useMediaQuery('(min-width: 1024px)')
   const useBottomReviewBar = useBottomBarVariant()
+
+  // Bumped once after a single upload's extraction succeeds and once each
+  // time a batch finishes, so the side panel's "Your receipts" overview
+  // refetches exactly then (never on every state change).
+  const [sidePanelRefreshKey, setSidePanelRefreshKey] = useState(0)
 
   const batch = useBatchUpload()
   const isBatchActive = batch.items.length > 0
@@ -372,6 +329,12 @@ function ReceiptUpload() {
   // ever clicked), an all-skipped queue could otherwise look "finished"
   // pre-start -- that case is "All files are already saved.", not Done.
   const isBatchFinished = batch.running && isBatchActive && !batchWaitingOrInFlight
+  useEffect(() => {
+    if (isBatchFinished) {
+      setSidePanelRefreshKey((key) => key + 1)
+    }
+  }, [isBatchFinished])
+
   const batchDoneCount = batch.items.filter((item) => item.status === 'done').length
   const batchFailedCount = batch.items.filter((item) => item.status === 'failed').length
   const batchSkippedCount = batch.items.filter((item) => item.status === 'skipped').length
@@ -504,6 +467,7 @@ function ReceiptUpload() {
       const data = await extractReceipt(id)
       setResult(data)
       setReceiptIdInUrl(id)
+      setSidePanelRefreshKey((key) => key + 1)
     } catch (err) {
       if (err instanceof ApiError && err.status === 503) {
         setExtractionError(EXTRACTION_NOT_CONFIGURED_MESSAGE)
@@ -1409,7 +1373,7 @@ function ReceiptUpload() {
 
         {isWideScreen && (
           <div className="lg:col-span-5">
-            <HelpPanel />
+            <UploadSidePanel refreshKey={sidePanelRefreshKey} />
           </div>
         )}
       </div>

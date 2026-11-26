@@ -1807,6 +1807,33 @@ useful on the hundredth visit too.
   `role="status"`, so the change from one hint to the other is
   announced; the texts and the button's `aria-describedby` are
   unchanged.
+- **A side panel for returning users (`UploadSidePanel.tsx`).** The
+  static help card answered "how does this work?" -- a question the owner
+  stops asking after the first visit. From `lg` up only (the same
+  `useMediaQuery` presence decision as before -- below `lg`, or without
+  `matchMedia`, nothing renders and nothing is fetched), the second
+  column now loads `GET /receipts/facets` and `GET /receipts?limit=5`
+  once on mount and shows:
+  - **Loading:** a skeleton `Card` (`role="status"`, `aria-busy="true"`,
+    "Loading your receipts..." `sr-only`). Every variant shares the same
+    outer `Card` classes (`lg:sticky lg:top-20 lg:self-start`), so the
+    column never moves when the content swaps in.
+  - **0 receipts, or any failure:** the help card exactly as before,
+    expanded. A failure is silent -- this panel is a convenience next to
+    the form, never a reason to show an error there.
+  - **Otherwise, "Your receipts":** the total; one link per apartment
+    ("Waldglück: 24", full name in `title`) to that History tab; "Latest
+    uploads", five rows linking to the receipt (store clamped to one
+    line with the full name in `title`, the date through `DateCell` --
+    `DD.MM.YYYY`, or the raw text with the warning icon and hidden "Date
+    not recognized" -- the amount through `formatMoney`, the apartment
+    short name; `MissingValue` for anything missing); "See all in
+    History" and "Open the yearly report"; and the help collapsed in a
+    `<details>` "How it works and tips", so the tips text is still in
+    the DOM exactly once.
+  - **Refresh:** once after a single upload's extraction, once when a
+    batch finishes -- the current content stays visible while it
+    reloads (the skeleton is first-load only).
 
 ## Changelog
 

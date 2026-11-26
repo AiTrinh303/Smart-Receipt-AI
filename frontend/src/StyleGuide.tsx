@@ -23,7 +23,8 @@ import {
 } from './ReceiptItems'
 import { HistoryRow } from './ReceiptHistory'
 import { ExportCard } from './ReceiptReport'
-import type { ReceiptSummary } from './api/types'
+import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
+import type { ReceiptFacets, ReceiptSummary } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
@@ -90,6 +91,45 @@ const SAMPLE_EXISTING_RECEIPT: ReceiptSummary = {
   apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
   status: 'needs_review',
 }
+
+const SAMPLE_SIDE_PANEL_FACETS: ReceiptFacets = {
+  apartments: [
+    { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick', count: 18 },
+    { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück', count: 24 },
+  ],
+  total: 42,
+  years: [2026, 2025],
+  has_undated: true,
+}
+
+function sampleLatest(id: string, overrides: Partial<ReceiptSummary>): ReceiptSummary {
+  return {
+    receipt_id: id,
+    original_filename: 'receipt.jpg',
+    store_name: 'Edeka Center Sankt Englmar',
+    purchase_date: '2026-11-20',
+    currency: 'EUR',
+    total: 23.5,
+    created_at: '2026-11-25T10:00:00Z',
+    apartment_id: 'sankt-englmar-waldglueck',
+    apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück',
+    status: 'needs_review',
+    ...overrides,
+  }
+}
+
+const SAMPLE_SIDE_PANEL_LATEST: ReceiptSummary[] = [
+  sampleLatest('sample-latest-1', {}),
+  sampleLatest('sample-latest-2', {
+    store_name: 'Bauhaus Fachcentrum für Werkstatt, Haus und Garten Rosenheim',
+    total: 1249.9,
+    apartment_id: 'oberaudorf-bergblick',
+    apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
+  }),
+  sampleLatest('sample-latest-3', { store_name: null, purchase_date: '26/06/2025', total: null }),
+  sampleLatest('sample-latest-4', { store_name: 'dm', purchase_date: null, apartment_id: null, apartment_name: null }),
+  sampleLatest('sample-latest-5', { store_name: 'Rewe', total: 7.89 }),
+]
 
 const SAMPLE_BATCH_ITEMS: BatchItem[] = [
   { id: 'batch-sample-1', file: new File([], 'receipt-1.jpg'), status: 'waiting' },
@@ -285,37 +325,20 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Upload help panel (static, from lg up -- replaces the collapsible tips; standard Card elevation, sticky on scroll)">
-        <div className="max-w-sm">
-          <Card className="flex flex-col gap-4">
-            <h2 className="text-base font-semibold text-ink">How it works</h2>
-            <ol className="flex flex-col gap-3">
-              {[
-                'Choose the apartment.',
-                'Add photos or PDFs.',
-                'Check the result in History or Items. The Report counts every receipt, reviewed or not.',
-              ].map((step, index) => (
-                <li key={step} className="flex gap-3">
-                  <span
-                    aria-hidden="true"
-                    className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-subtle text-xs font-semibold text-brand"
-                  >
-                    {index + 1}
-                  </span>
-                  <p className="text-sm text-ink-muted">{step}</p>
-                </li>
-              ))}
-            </ol>
-            <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
-              <h3 className="text-sm font-semibold text-ink">Tips for better reading</h3>
-              <ul className="flex flex-col gap-1 pl-5 list-disc text-sm text-ink-muted">
-                <li>Lay the receipt flat.</li>
-                <li>Use good light.</li>
-                <li>Keep the whole receipt in frame, including the total.</li>
-                <li>One receipt per photo.</li>
-              </ul>
-            </div>
-          </Card>
+      <Section title="Upload side panel (from lg up only -- loading / help, shown for 0 receipts or any load failure / overview for returning users)">
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold text-ink">Loading</h3>
+            <UploadSidePanelSkeleton />
+          </div>
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold text-ink">No receipts yet, or loading failed</h3>
+            <HelpPanel />
+          </div>
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold text-ink">Your receipts (missing values, unrecognized date)</h3>
+            <ReceiptsOverview facets={SAMPLE_SIDE_PANEL_FACETS} latest={SAMPLE_SIDE_PANEL_LATEST} />
+          </div>
         </div>
       </Section>
 

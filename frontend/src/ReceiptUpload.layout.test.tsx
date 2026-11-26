@@ -67,7 +67,9 @@ test('the help panel uses the standard Card elevation (never a stronger one) and
   render(<ReceiptUpload />)
   await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
 
-  const panelHeading = screen.getByRole('heading', { level: 2, name: 'How it works' })
+  // The side panel's own fetches are rejected by this file's fetch stub,
+  // so it falls back to the help card -- asynchronously.
+  const panelHeading = await screen.findByRole('heading', { level: 2, name: 'How it works' })
   const panelCard = panelHeading.closest('div') as HTMLElement
   expect(panelCard.className).not.toContain('shadow-popover')
   expect(panelCard.className).toContain('shadow-card')
@@ -79,7 +81,7 @@ test('at a wide (lg) screen, the static help panel is shown and the collapsible 
   render(<ReceiptUpload />)
   await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
 
-  expect(screen.getByRole('heading', { level: 2, name: 'How it works' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 2, name: 'How it works' })).toBeInTheDocument()
   expect(screen.getByText('Choose the apartment.')).toBeInTheDocument()
   expect(screen.getByText('Add photos or PDFs.')).toBeInTheDocument()
   expect(screen.getByText('Check the result in History or Items. The Report counts every receipt, reviewed or not.')).toBeInTheDocument()
