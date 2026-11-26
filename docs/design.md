@@ -909,13 +909,11 @@ fixes; the display helpers it leans on (`formatDisplayDate`,
   optional `extraFilter` slot (a `ReactNode`, rendered after Year/Status
   in the same flex row) specifically so Items' search box could join
   Year and Status on one line instead of sitting in its own row below
-  them. The row's own responsive class only switches to `md:flex-row`
-  (and the two selects only get a fixed `md:w-48`) **when `extraFilter`
-  is provided** -- `ReceiptHistory` never passes it, so its markup/classes
-  are byte-for-byte identical to before (`sm:flex-row`, `flex-1` selects),
-  confirmed by every existing `ReceiptHistory` test passing unchanged
-  after this change. Below `md`, both pages still stack their controls
-  exactly as before.
+  them. The two selects only get a fixed `md:w-48` **when `extraFilter`
+  is provided** -- `ReceiptHistory` never passes it, so its selects stay
+  `flex-1`. (The row itself was later moved to `md:flex-row` for both
+  pages -- see "Tidying History filters".) Below `md`, both pages still
+  stack their controls exactly as before.
 - **Cards (below `sm`)** show the same name link (2 lines), a muted
   "`date` · `store`" line (each side using the same `DateCell`/missing
   handling as the table), an amount line that keeps the words "Qty",
@@ -1178,8 +1176,9 @@ newest-first), which read as random next to a camera's sequential names.
   markup pattern over a short, scrollable sample list for a quick visual
   check.)
 - **Compact "Add more files" bar once files are queued.** The full
-  dropzone (icon, "Drag a receipt here, or choose a file",
-  "JPG, PNG or PDF, up to 10 MB") is only shown with 0 or 1 file selected.
+  dropzone (icon, "Drag receipts here, or" + a "Browse files" button,
+  "JPG, PNG or PDF, up to 10 MB each. Up to `MAX_BATCH` (20) files at
+  once.") is only shown with 0 or 1 file selected.
   The moment `isBatchActive` (2+ files queued), it's replaced by a
   shorter, single-line bar ("Add more files") using the exact same
   `role="button"`/keyboard/drag-and-drop handlers and the same hidden

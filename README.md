@@ -116,4 +116,4 @@ Dependencies point inward: `api` → `adapters` → `domain`. The domain never i
 ## Background
 **User problem.** Users currently have to manually enter receipt details (store, date, items, prices, tax, total) after every purchase, which is time-consuming and error-prone.
 
-**MVP.** A user can upload one shopping receipt (image or PDF), the system uses AI to extract the important purchase information, and displays the result clearly for review.
+**Scope.** A single-user, local-only app for the owner of two holiday apartments rented out via Booking: upload receipt photos or PDFs, let AI read them, check the result, and get a yearly report and export for the tax advisor.

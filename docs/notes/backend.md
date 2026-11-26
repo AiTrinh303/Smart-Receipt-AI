@@ -10,8 +10,9 @@ Per-feature detail for `backend/`, moved verbatim from CLAUDE.md's former "Proje
     `ReceiptData` (`edited` is just `edited_at is not None`, computed in the
     repository, not stored as its own column) — and `ReceiptSummary` — the
     last a small list-row model: receipt_id, original_filename, store_name,
-    purchase_date, currency, total, created_at — for persisted data (no
-    `edited`/`warnings` here; the list endpoint is intentionally unchanged);
+    purchase_date, currency, total, created_at, plus apartment_id/
+    apartment_name/status (below) — for persisted data (no
+    `edited`/`warnings` here);
     `ReceiptWarning` — code/field/
     message/`details` (decimal strings, never floats), computed fresh on
     every response and never stored); `Apartment` (id/name/sort_order/

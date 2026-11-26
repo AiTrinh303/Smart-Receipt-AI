@@ -451,10 +451,10 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   `flex-1`, sort `md:w-48`, row switches to `md:flex-row` from `md` up)
   passed to `ReceiptFilters` as its `extraFilter` prop, so from `md` up
   they sit on the same row as Year/Status (which then get a fixed
-  `md:w-48`); `ReceiptHistory` never passes `extraFilter`, so its own
-  layout (`sm:flex-row`, `flex-1` selects) is completely unchanged —
-  confirmed by every `ReceiptHistory` test passing unchanged after this
-  was added. Changing the sort, like every other filter/search change
+  `md:w-48`); `ReceiptHistory` never passes `extraFilter`, so its two
+  selects stay `flex-1` (the row itself is `md:flex-row` for both pages —
+  see "Tidying History filters" in docs/design.md). Changing the sort,
+  like every other filter/search change
   here, fully remounts the page via `navigateTo()`, so paging resets to
   `offset=0` for free — no separate "reset paging" state exists.
   "Clear filters" leaves the chosen sort untouched (sort is an ordering
@@ -545,10 +545,10 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   object ever constructed), `{kind: "raw", text}` for any other non-blank
   value (trimmed, shown as-is — a date the AI read wrong stays visible,
   never hidden), or `{kind: "missing"}` for `null`/blank.
-  `ReceiptHistory.tsx` and `ReceiptResult.tsx` still show `purchase_date`
-  via the older, plain `displayText()` (raw string or "Not detected") —
-  deliberately untouched by this rule's introduction; only new/redesigned
-  display code is expected to adopt `formatDisplayDate()`.
+  `ReceiptHistory.tsx` (via `DateCell`) and `ReceiptResult.tsx` (via
+  `PurchaseDateMeta`) both show `purchase_date` through
+  `formatDisplayDate()` now; `ReceiptResult.tsx` still uses the plain
+  `displayText()` for its other text fields (store, currency, item names).
   `apartmentShortName(name)` returns the apartment's full name's last
   `" - "`-separated segment (e.g. `"Fewo JoJo - Sankt Englmar -
   Waldglück"` -> `"Waldglück"`), falling back to the whole trimmed name
@@ -967,7 +967,7 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   single-file flow's inline constants) moved to `errorMessages.ts`, so
   both flows show the user the exact same wording for the same failure.
   **Batch upload queue engine (`src/batch/batchReducer.ts`,
-  `src/batch/useBatchUpload.ts`) — logic only, no UI yet:**
+  `src/batch/useBatchUpload.ts`) — the logic behind the batch UI below:**
   `batchReducer` is a pure `(state, action) => state` reducer (no API
   calls, no side effects) with two exported constants, `MAX_BATCH = 20`
   and `CONCURRENCY = 2`. A `BatchItem` has a local `id`, the `File`, a
@@ -1046,7 +1046,7 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   a single file while a finished/failed batch is still shown calls
   `batch.reset()` first, so the two panels never coexist.
   **The dropzone shrinks once `isBatchActive`:** the full dropzone (icon +
-  "Drag a receipt here, or choose a file" + the JPG/PNG/PDF subtitle) only
+  "Drag receipts here, or" + "Browse files" + the JPG/PNG/PDF subtitle) only
   renders with 0 or 1 file; the moment 2+ files are queued, a separate,
   shorter `role="button"` bar ("Add more files") renders instead, reusing
   the exact same `openFilePicker`/`handleZoneKeyDown`/drag handlers and

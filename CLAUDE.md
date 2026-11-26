@@ -7,7 +7,7 @@ read more" at the end.
 ## Standing rules for tickets
 
 These apply to every ticket, on top of (never in place of) the
-per-feature detail documented elsewhere in this file.
+per-feature detail documented in `docs/notes/`.
 
 - **Scope, dependencies, push.** Work only in the folder(s) the ticket
   names (`frontend/`, `backend/`, or both only when it explicitly says
@@ -25,8 +25,8 @@ per-feature detail documented elsewhere in this file.
   working around it. The checks themselves: backend `pytest` and
   `lint-imports` (venv active); frontend `npm test`, `npm run
   check:deps`, and `npm run build` (delete the resulting `dist/`
-  afterward — see the color/style rule above for why the build itself
-  matters, not just the tests).
+  afterward — see the color/style rule below (in Conventions) for why
+  the build itself matters, not just the tests).
 - **Tests.** Given/When/Then comments. Backend tests use a temporary
   database and `FakeExtractor` only — never the real database and never
   a real OpenAI call. Frontend tests mock `fetch` and reset the URL in
@@ -125,8 +125,6 @@ cd frontend && npm run check:deps
 - Do not commit automatically — only commit when explicitly told to (see
   "Standing rules for tickets" above for everything else that applies once
   a ticket does ask for a commit).
-- Current phase: early MVP build. Features are being added incrementally
-  per ticket — see GitHub Issues for the backlog.
 - **Color or style changes must be verified against the built CSS, not
   just the Tailwind config or component source.** jsdom cannot see
   colors, layout, or contrast — all 100+ frontend tests can pass while a
