@@ -413,9 +413,26 @@ Per-feature detail for `backend/`, moved verbatim from CLAUDE.md's former "Proje
     identical file is ever caught; a re-compressed or re-photographed
     copy of the same receipt is not.
     `POST /receipts/{receipt_id}/extract`, `GET /receipts/{receipt_id}`,
-    `GET /receipts?limit=N&offset=M` — list, newest first, `limit`
+    `GET /receipts?limit=N&offset=M&sort=S` — list, `limit`
     default 50 (1–200, else `422`), `offset` default 0 (`>= 0`, else
-    `422`),
+    `422`), **`sort`** (`ALLOWED_RECEIPT_SORT_VALUES`, default
+    `DEFAULT_RECEIPT_SORT = "date_desc"`; anything else `422` "sort must
+    be one of: …", same style as `GET /items`): `date_desc`/`date_asc` by
+    `normalize_purchase_date`, `amount_desc`/`amount_asc` by total as
+    `Decimal(str(value))`, `uploaded_desc` = the former fixed order
+    (`created_at` DESC). A receipt with no valid date (date sorts) or no
+    total (amount sorts) always comes **last, in either direction**.
+    `domain.rules.sort_receipts(rows, sort, purchase_date=…, total=…)` is
+    pure and takes key functions (no adapter types); the repository's
+    `list_receipts(…, sort=…)` applies it to the rows
+    `_filtered_receipt_rows` already returns in the tie-break order
+    (`created_at` DESC, `receipt_id` ASC) — Python's sort is stable, so
+    equal keys keep that order — and only *then* slices `limit`/`offset`,
+    so "Show more" pages continue the same order and `total` is
+    unchanged. (Before this, the list was always newest-upload-first; the
+    existing order tests still pass unchanged because their receipts all
+    share one purchase date, so the date sort ties and keeps upload
+    order.)
     `{"items": [...], "count": N, "total": T}`, empty DB ->
     `{"items": [], "count": 0, "total": 0}` never `404`. `total` is the
     count of every receipt matching the given filters, ignoring

@@ -17,6 +17,7 @@ import StatusBadge from './components/ui/StatusBadge'
 import { formatMoney } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo, isPlainLeftClick } from './navigation'
+import { DEFAULT_RECEIPT_SORT, RECEIPT_SORT_OPTIONS, effectiveReceiptSort } from './historySort'
 
 const LOADING_ROW_COUNT = 4
 const PAGE_SIZE = 50
@@ -207,6 +208,7 @@ interface HistoryUrlParams {
   apartment: string | null
   year: string | null
   status: string | null
+  sort: string | null
 }
 
 function readUrlParams(): HistoryUrlParams {
@@ -215,6 +217,7 @@ function readUrlParams(): HistoryUrlParams {
     apartment: params.get('apartment'),
     year: params.get('year'),
     status: params.get('status'),
+    sort: params.get('sort'),
   }
 }
 
@@ -224,6 +227,10 @@ function buildHistorySearch(params: HistoryUrlParams): string {
   if (params.apartment) usp.set('apartment', params.apartment)
   if (params.year) usp.set('year', params.year)
   if (params.status) usp.set('status', params.status)
+  // The default sort is never written (same "unset means default" rule as
+  // the Items view); an unknown value is dropped the same way.
+  const sort = effectiveReceiptSort(params.sort)
+  if (sort !== DEFAULT_RECEIPT_SORT) usp.set('sort', sort)
   return `?${usp.toString()}`
 }
 
@@ -251,6 +258,7 @@ function ReceiptHistory() {
 
   const year = effectiveYear(urlParams.year)
   const status = effectiveStatus(urlParams.status)
+  const sort = effectiveReceiptSort(urlParams.sort)
 
   useEffect(() => {
     let cancelled = false
@@ -300,6 +308,7 @@ function ReceiptHistory() {
           apartmentId: apartmentId ?? undefined,
           year: year ?? undefined,
           status: status ?? undefined,
+          sort,
           limit: PAGE_SIZE,
           offset: 0,
         })
@@ -338,6 +347,7 @@ function ReceiptHistory() {
         apartmentId: effectiveApartmentId ?? undefined,
         year: year ?? undefined,
         status: status ?? undefined,
+        sort,
         limit: PAGE_SIZE,
         offset: listCount,
       })
@@ -353,11 +363,14 @@ function ReceiptHistory() {
     }
   }
 
-  // Only carry a `from` param when a tab or filter is actually active --
-  // the plain, unfiltered history view needs no round trip, and this
-  // keeps `?receipt=<id>` exactly as it was for that common case.
+  // Only carry a `from` param when a tab, filter or non-default sort is
+  // active -- the plain, unfiltered, default-sorted history view needs no
+  // round trip, and this keeps `?receipt=<id>` exactly as it was for that
+  // common case. With `from`, "Back to history" returns to the same view,
+  // and review mode's Previous/Next follow its order.
   const receiptHref = (receiptId: string): string => {
-    const hasActiveFilterOrTab = effectiveApartmentId !== null || anyFilterActive
+    const hasActiveFilterOrTab =
+      effectiveApartmentId !== null || anyFilterActive || sort !== DEFAULT_RECEIPT_SORT
     const from = hasActiveFilterOrTab ? `&from=${encodeURIComponent(window.location.search)}` : ''
     return `/?receipt=${receiptId}${from}`
   }
@@ -386,8 +399,14 @@ function ReceiptHistory() {
     navigateTo(buildHistorySearch({ ...urlParams, status: value || null }))
   }
 
+  const handleSortChange = (value: string) => {
+    navigateTo(buildHistorySearch({ ...urlParams, sort: value }))
+  }
+
+  // Clears Year/Status only: the apartment tab and the sort (an ordering
+  // preference, not a filter) stay.
   const handleClearFilters = () => {
-    navigateTo(buildHistorySearch({ apartment: urlParams.apartment, year: null, status: null }))
+    navigateTo(buildHistorySearch({ apartment: urlParams.apartment, year: null, status: null, sort: urlParams.sort }))
   }
 
   const tabs: { id: string | null; label: string; accessibleName?: string }[] = [
@@ -461,6 +480,25 @@ function ReceiptHistory() {
         statusValue={statusValue}
         onStatusChange={handleStatusChange}
         statusSelectId="history-status-select"
+        extraFilter={
+          <div className="flex flex-col gap-1 md:w-48">
+            <label htmlFor="history-sort-select" className="text-sm font-medium text-ink">
+              Sort by
+            </label>
+            <select
+              id="history-sort-select"
+              value={sort}
+              onChange={(e) => handleSortChange(e.target.value)}
+              className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            >
+              {RECEIPT_SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
       />
 
       <div className="flex items-center justify-between gap-2">

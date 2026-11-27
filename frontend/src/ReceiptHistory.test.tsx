@@ -1071,6 +1071,126 @@ describe('ReceiptHistory', () => {
     expect(yearRow?.className).toContain('md:flex-row')
   })
 
+  // --- Sort by ------------------------------------------------------------
+
+  function sortParam(url: string): string | null {
+    return new URL(url, 'http://x').searchParams.get('sort')
+  }
+
+  test('"Sort by" defaults to "Date (newest first)", sends date_desc, and leaves sort out of the URL', async () => {
+    // Given the plain history view
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 }))
+        },
+      }),
+    )
+    render(<ReceiptHistory />)
+    await screen.findByText('Store A')
+
+    // Then the select shows the default and its five options, in order
+    const select = screen.getByLabelText('Sort by') as HTMLSelectElement
+    expect(select).toHaveValue('date_desc')
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+      'Date (newest first)',
+      'Date (oldest first)',
+      'Total (high to low)',
+      'Total (low to high)',
+      'Recently uploaded',
+    ])
+    // And the request still sends the sort explicitly, while the URL has none
+    expect(sortParam(calls[0])).toBe('date_desc')
+    expect(window.location.search).not.toContain('sort=')
+  })
+
+  test('choosing a sort writes &sort= to the URL, remounts, and sends it (also for "Show more"); back to the default drops it', async () => {
+    const user = userEvent.setup()
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 2 }))
+        },
+      }),
+    )
+    render(<HistoryHarness />)
+    await screen.findByLabelText('Sort by')
+
+    // When "Total (high to low)" is chosen
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'Total (high to low)')
+
+    // Then the URL carries it and the new list request sends it
+    await waitFor(() => expect(window.location.search).toContain('sort=amount_desc'))
+    await waitFor(() => expect(sortParam(calls[calls.length - 1])).toBe('amount_desc'))
+    expect(screen.getByLabelText('Sort by')).toHaveValue('amount_desc')
+
+    // And "Show more" continues with the same sort
+    await user.click(await screen.findByRole('button', { name: 'Show more' }))
+    await waitFor(() => expect(calls[calls.length - 1]).toContain('offset=1'))
+    expect(sortParam(calls[calls.length - 1])).toBe('amount_desc')
+
+    // When the default is chosen again, sort leaves the URL
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'Date (newest first)')
+    await waitFor(() => expect(window.location.search).not.toContain('sort='))
+  })
+
+  test('an unknown sort in the URL falls back to the default', async () => {
+    // Given a hand-edited URL
+    window.history.replaceState({}, '', '/?view=history&sort=nonsense')
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 }))
+        },
+      }),
+    )
+    render(<ReceiptHistory />)
+    await screen.findByText('Store A')
+
+    // Then the select and the request both use the default
+    expect(screen.getByLabelText('Sort by')).toHaveValue('date_desc')
+    expect(sortParam(calls[0])).toBe('date_desc')
+  })
+
+  test('"Clear filters" clears Year/Status but keeps the sort', async () => {
+    const user = userEvent.setup()
+    // Given a year filter and a non-default sort
+    window.history.replaceState({}, '', '/?view=history&year=2026&sort=date_asc')
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
+    )
+    render(<HistoryHarness />)
+
+    // When "Clear filters" is clicked
+    await user.click(await screen.findByRole('button', { name: 'Clear filters' }))
+
+    // Then the year is gone and the sort stays
+    await waitFor(() => expect(window.location.search).not.toContain('year='))
+    expect(window.location.search).toContain('sort=date_asc')
+  })
+
+  test('a non-default sort alone attaches `from`, so the receipt can come back to (and step through) the sorted list', async () => {
+    // Given no tab or filter, only a sort
+    window.history.replaceState({}, '', '/?view=history&sort=amount_desc')
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptHistory />)
+
+    // Then the row link carries the sorted list as `from`
+    const link = await screen.findByRole('link', { name: /store a/i })
+    expect(link).toHaveAttribute(
+      'href',
+      `/?receipt=11111111-1111-1111-1111-111111111111&from=${encodeURIComponent('?view=history&sort=amount_desc')}`,
+    )
+  })
+
   // --- "Show more" paging (Commit 2) --------------------------------------
 
   test('the summary shows "N receipts" when everything is loaded', async () => {

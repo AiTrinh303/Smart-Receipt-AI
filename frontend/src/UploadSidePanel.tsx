@@ -250,7 +250,9 @@ function UploadSidePanel({ refreshKey = 0 }: { refreshKey?: number }) {
       try {
         const [facets, latest] = await Promise.all([
           getReceiptFacets(),
-          listReceipts({ limit: LATEST_UPLOADS_LIMIT }),
+          // "Latest uploads" means upload order, not the list's default
+          // (purchase date) -- so this asks for it explicitly.
+          listReceipts({ limit: LATEST_UPLOADS_LIMIT, sort: 'uploaded_desc' }),
         ])
         if (cancelled) {
           return

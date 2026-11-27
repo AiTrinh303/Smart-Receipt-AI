@@ -65,6 +65,7 @@ class ReceiptRepository(Protocol):
         year: int | None = None,
         undated: bool = False,
         status: str | None = None,
+        sort: str = "date_desc",
     ) -> tuple[list[ReceiptSummary], int]: ...
 
     def update_receipt(self, receipt_id: str, update: ReceiptUpdate) -> SavedReceipt | None: ...

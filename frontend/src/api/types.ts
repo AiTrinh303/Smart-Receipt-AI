@@ -24,6 +24,9 @@ export interface ReceiptWarning {
 
 export type ReceiptStatus = 'needs_review' | 'approved'
 
+/** GET /receipts' `sort` values (the backend's ALLOWED_RECEIPT_SORT_VALUES). */
+export type ReceiptSort = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'uploaded_desc'
+
 export interface ReceiptExtraction {
   receipt_id: string
   store_name: string | null

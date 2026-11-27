@@ -248,6 +248,40 @@ test('review-mode Next leaves ctrl/cmd-click to the browser; a plain click still
   expectBrowserHandlesModifiedClicks(next, `?receipt=${ID_C}&from=${encodeURIComponent(FROM_HISTORY)}`)
 })
 
+test('the snapshot uses the sort of the list the receipt came from, so "N of M" and Previous/Next follow that order', async () => {
+  // Given a receipt opened from History sorted by total (high to low); the
+  // backend returns that order: C, A, B
+  const fromSorted = `?view=history&apartment=${APARTMENT_ID}&sort=amount_desc`
+  await open(ID_A, fromSorted, {
+    get: (id) => jsonResponse(200, savedReceipt(id)),
+    list: () => listOf([ID_C, ID_A, ID_B]),
+  })
+
+  // Then the snapshot request asked for that sort
+  await screen.findByText('2 of 3')
+  const listCall = fetchSpy.mock.calls.map(([url]) => String(url)).find((url) => url.includes('/receipts?'))
+  expect(new URL(listCall as string, 'http://x').searchParams.get('sort')).toBe('amount_desc')
+  // And A is 2nd of 3, with C before it and B after it -- the sorted order, not upload order
+  expect(screen.getByRole('link', { name: 'Previous' })).toHaveAttribute(
+    'href',
+    `/?receipt=${ID_C}&from=${encodeURIComponent(fromSorted)}`,
+  )
+  expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute(
+    'href',
+    `/?receipt=${ID_B}&from=${encodeURIComponent(fromSorted)}`,
+  )
+})
+
+test('opened from an unsorted (default) list, the snapshot sends the default date_desc', async () => {
+  await open(ID_B, FROM_HISTORY, {
+    get: (id) => jsonResponse(200, savedReceipt(id)),
+    list: () => listOf([ID_A, ID_B, ID_C]),
+  })
+  await screen.findByText('2 of 3')
+  const listCall = fetchSpy.mock.calls.map(([url]) => String(url)).find((url) => url.includes('/receipts?'))
+  expect(new URL(listCall as string, 'http://x').searchParams.get('sort')).toBe('date_desc')
+})
+
 test('"Approve and next" sends exactly one PUT .../status and navigates to the next receipt still needing review, skipping an already-approved one', async () => {
   await open(ID_A, FROM_HISTORY, {
     get: (id) => jsonResponse(200, savedReceipt(id)),

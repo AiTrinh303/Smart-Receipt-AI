@@ -114,6 +114,8 @@ test('on mount it fetches the unscoped facets and the 5 latest receipts, once ea
   const listCalls = callsTo('/receipts?')
   expect(listCalls).toHaveLength(1)
   expect(new URL(listCalls[0], 'http://x').searchParams.get('limit')).toBe('5')
+  // And "Latest uploads" asks for upload order explicitly, not the list's date default
+  expect(new URL(listCalls[0], 'http://x').searchParams.get('sort')).toBe('uploaded_desc')
 })
 
 test('with a total of 0, the help content is shown expanded (no <details>) and no overview', async () => {

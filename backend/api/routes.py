@@ -39,8 +39,10 @@ from domain.report_export import (
 )
 from domain.rules import (
     ALLOWED_ITEM_SORT_VALUES,
+    ALLOWED_RECEIPT_SORT_VALUES,
     ALLOWED_REPORT_BASIS,
     DEFAULT_ITEM_SORT,
+    DEFAULT_RECEIPT_SORT,
     DEFAULT_REPORT_BASIS,
     EmptyFileError,
     FileTooLargeError,
@@ -260,10 +262,16 @@ def list_receipts(
     apartment_id: str | None = Query(default=None),
     year: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    sort: str = Query(default=DEFAULT_RECEIPT_SORT),
     repository: ReceiptRepository = Depends(get_repository),
 ):
     filters = _validate_receipt_filters(repository, apartment_id, year, status)
-    items, total = repository.list_receipts(limit, offset, **filters)
+    if sort not in ALLOWED_RECEIPT_SORT_VALUES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"sort must be one of: {', '.join(ALLOWED_RECEIPT_SORT_VALUES)}.",
+        )
+    items, total = repository.list_receipts(limit, offset, sort=sort, **filters)
     return {"items": [item.model_dump() for item in items], "count": len(items), "total": total}
 
 

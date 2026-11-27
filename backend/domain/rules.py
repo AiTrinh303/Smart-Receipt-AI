@@ -1,8 +1,10 @@
 import hashlib
 import re
 import unicodedata
+from collections.abc import Callable
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from typing import TypeVar
 
 from domain.models import (
     Apartment,
@@ -532,6 +534,52 @@ def sort_line_items(rows: list[LineItemRow], sort: str) -> list[LineItemRow]:
     dated = [row for row in rows if normalize_purchase_date(row.purchase_date) is not None]
     undated = [row for row in rows if normalize_purchase_date(row.purchase_date) is None]
     dated.sort(key=lambda row: normalize_purchase_date(row.purchase_date), reverse=(sort == "date_desc"))
+    return dated + undated
+
+
+# --- GET /receipts sort -------------------------------------------------------
+
+DEFAULT_RECEIPT_SORT = "date_desc"
+ALLOWED_RECEIPT_SORT_VALUES = ("date_desc", "date_asc", "amount_desc", "amount_asc", "uploaded_desc")
+
+_Row = TypeVar("_Row")
+
+
+def sort_receipts(
+    rows: list[_Row],
+    sort: str,
+    purchase_date: Callable[[_Row], str | None],
+    total: Callable[[_Row], float | None],
+) -> list[_Row]:
+    """Sorts GET /receipts rows (of any shape -- the caller says how to read
+    each row's raw purchase date and total, so this stays free of adapter
+    types). `rows` is expected already in the tie-break order (created_at
+    DESC, receipt_id ASC -- what the repository's filtered query produces);
+    Python's sort is stable, so sorting by just the primary key keeps that
+    order among equal keys, same approach as `sort_line_items`.
+
+    - "uploaded_desc": the incoming order, unchanged (newest upload first).
+    - "date_desc"/"date_asc": by `normalize_purchase_date` -- the same
+      shared rule as everywhere else; a receipt with no valid date always
+      sorts LAST, in both directions.
+    - "amount_desc"/"amount_asc": by total as `Decimal(str(value))` --
+      never a raw float; a receipt with no total always sorts last, in
+      both directions. Mixed currencies are compared by number only (no
+      conversion), same simplification as GET /items.
+    """
+    if sort == "uploaded_desc":
+        return list(rows)
+
+    if sort in ("amount_desc", "amount_asc"):
+        with_total = [row for row in rows if total(row) is not None]
+        without_total = [row for row in rows if total(row) is None]
+        with_total.sort(key=lambda row: Decimal(str(total(row))), reverse=(sort == "amount_desc"))
+        return with_total + without_total
+
+    # "date_desc" (default) / "date_asc"
+    dated = [row for row in rows if normalize_purchase_date(purchase_date(row)) is not None]
+    undated = [row for row in rows if normalize_purchase_date(purchase_date(row)) is None]
+    dated.sort(key=lambda row: normalize_purchase_date(purchase_date(row)), reverse=(sort == "date_desc"))
     return dated + undated
 
 

@@ -2427,6 +2427,34 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   checks replaced by white and white/90 on the three solid backgrounds)
   -- each because the colours it asserted changed.
 
+## Sorting the History list
+
+- **Backend:** `GET /receipts?sort=` -- `date_desc` (default),
+  `date_asc`, `amount_desc`, `amount_asc`, `uploaded_desc` (the old fixed
+  order); anything else 422. Dates via `normalize_purchase_date`, totals
+  as `Decimal`; no valid date / no total always last, either direction;
+  ties keep `created_at` DESC then `receipt_id`; sorted before
+  `limit`/`offset`, `total` unchanged.
+- **Frontend:** a "Sort by" select next to Year/Status (same look as
+  Items), `&sort=` in the URL (omitted for the default, unknown -> default),
+  remounts on change, kept by "Clear filters", sent by both History
+  requests and by the review-mode snapshot (read from `from`); a
+  non-default sort alone attaches `from`. `listReceipts` always sends
+  `sort`. The upload side panel keeps "recently uploaded" by asking for
+  `uploaded_desc` explicitly.
+- **Visible change:** History's default order is now **purchase date,
+  newest first** (it was newest upload first); "Recently uploaded" gives
+  the old order back.
+- **Tests:** no existing test changed. The backend order tests
+  ("…returned newest first", the offset tests) still pass under the new
+  date default because their receipts share one purchase date, so the
+  sort ties and keeps upload order. New: `backend/tests/test_receipt_sort.py`
+  (every sort, dateless/total-less last both ways, the tie-break, paging
+  across offsets, a year filter + sort, 422s, Decimal comparison);
+  frontend `listReceipts.test.ts`, History "Sort by" tests (select <-> URL,
+  request params incl. "Show more", fallback, Clear filters, `from`), two
+  review-mode snapshot tests, and the side panel's `uploaded_desc`.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

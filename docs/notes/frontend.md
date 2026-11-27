@@ -37,7 +37,9 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   are unless a task explicitly asks to change them.
   `src/api/` holds API call modules (`uploadReceipt.ts`, `extractReceipt.ts`,
   `getReceipt.ts`, `listReceipts.ts` (accepts `{limit?, offset?,
-  apartmentId?, year?, status?}`, building the query string itself; its
+  apartmentId?, year?, status?, sort?}`, building the query string itself
+  and **always sending `sort`** — `DEFAULT_RECEIPT_SORT` (`date_desc`,
+  exported there) when none is given; its
   response type carries `total` alongside `items`/`count`, matching `GET
   /receipts`),
   `getApartments.ts`,
@@ -368,8 +370,22 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   before; `ReceiptUpload.tsx` adds a "Back to history" link when showing
   a result. `?view=styleguide`'s "History rows" section renders the real
   `HistoryRowList`/`HistoryHeaderRow`/`HistoryRow` for both layouts.
+  **Sort by (`src/historySort.ts`):** a "Sort by" select (`extraFilter`
+  of `ReceiptFilters`, same look as Items' — which also gives Year/Status
+  their fixed `md:w-48`) with `RECEIPT_SORT_OPTIONS`: "Date (newest
+  first)" `date_desc` (default), "Date (oldest first)" `date_asc`, "Total
+  (high to low)" `amount_desc`, "Total (low to high)" `amount_asc`,
+  "Recently uploaded" `uploaded_desc`. In the URL as `&sort=`, omitted
+  for the default; `effectiveReceiptSort()` maps an unknown value to the
+  default. A change remounts like every other filter; both list requests
+  (first page and "Show more") send it; "Clear filters" keeps it (an
+  ordering preference, not a filter — not part of `anyFilterActive`).
+  A non-default sort alone also attaches `&from=` to a row's link, so
+  "Back to history" and review mode come back to the sorted list. The
+  upload side panel asks for `sort: 'uploaded_desc'` explicitly ("Latest
+  uploads" means upload order). Items has its own sort, unchanged.
   **Splitting the history by apartment, with filters:** all state lives in
-  the URL (`?view=history&apartment=<id>&year=<v>&status=<v>`), never
+  the URL (`?view=history&apartment=<id>&year=<v>&status=<v>&sort=<v>`), never
   component state — a tab/select change calls the existing
   `navigateTo()`, which (via `App.tsx`'s `key={locationKey}`) fully
   remounts `ReceiptHistory`, the same mechanism `ReceiptUpload` already
@@ -854,9 +870,10 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   with `?view=history` — read once at mount via `getHistoryFromParam()`;
   `?view=items` or a missing `from` both mean no review mode at all) does
   `ReceiptUpload.tsx` fetch one snapshot —
-  `listReceipts({apartmentId, year, status, limit: 200})` using that same
-  `from` value's own filters, parsed with the exact `effectiveYear`/
-  `effectiveStatus` helpers `ReceiptFilters.tsx` already validates its own
+  `listReceipts({apartmentId, year, status, sort, limit: 200})` using that same
+  `from` value's own filters **and sort** (so "N of M" and Previous/Next
+  follow the order the owner saw), parsed with the exact `effectiveYear`/
+  `effectiveStatus`/`effectiveReceiptSort` helpers `ReceiptFilters.tsx` already validates its own
   URL params with (`parseHistoryFilters()`) — kept in `reviewSnapshot`
   state. A failed request, or this receipt not being among the (up to)
   200 returned, leaves `reviewSnapshot` without this receipt and

@@ -20,7 +20,7 @@ from domain.models import (
     SavedUpload,
     Tax,
 )
-from domain.rules import normalize_purchase_date
+from domain.rules import DEFAULT_RECEIPT_SORT, normalize_purchase_date, sort_receipts
 
 logger = logging.getLogger(__name__)
 
@@ -611,17 +611,29 @@ class SqliteReceiptRepository:
         year: int | None = None,
         undated: bool = False,
         status: str | None = None,
+        sort: str = DEFAULT_RECEIPT_SORT,
     ) -> tuple[list[ReceiptSummary], int]:
         """Returns (summaries, total): `total` is the count of every
         receipt matching the given filters -- ignoring `limit`/`offset`
-        entirely -- in the same stable order (`created_at` DESC,
-        `receipt_id` ASC) `_filtered_receipt_rows` already applies, sliced
-        *before* `limit`/`offset` are. A row skipped there for unparseable
+        entirely. The rows arrive in the stable tie-break order
+        (`created_at` DESC, `receipt_id` ASC) `_filtered_receipt_rows`
+        applies, are then sorted by `sort` (`domain.rules.sort_receipts`,
+        a stable sort, so ties keep that order), and only *then* sliced by
+        `limit`/`offset` -- so "Show more" pages continue the same order. A row skipped there for unparseable
         `extracted_json` was never part of `rows` to begin with, so it is
         excluded from `total` the same way it has always been excluded
         from `count` -- consistent, not a new special case."""
         with self._connect() as conn:
             rows = self._filtered_receipt_rows(conn, apartment_id, year, undated, status)
+
+        # Each row is (receipt_id, extracted, created_at, ...): the raw date
+        # and total come from the parsed extracted_json (`extracted`).
+        rows = sort_receipts(
+            rows,
+            sort,
+            purchase_date=lambda row: row[1].purchase_date,
+            total=lambda row: row[1].total,
+        )
 
         total = len(rows)
         page = rows[offset : offset + limit]

@@ -8,7 +8,7 @@ import type { SavedReceipt } from './api/getReceipt'
 import { listReceipts } from './api/listReceipts'
 import { resetReceipt } from './api/resetReceipt'
 import { uploadReceipt } from './api/uploadReceipt'
-import type { ReceiptExtraction, ReceiptStatus, ReceiptSummary } from './api/types'
+import type { ReceiptExtraction, ReceiptStatus, ReceiptSummary, ReceiptSort } from './api/types'
 import {
   EXTRACTION_FAILED_MESSAGE,
   EXTRACTION_NOT_CONFIGURED_MESSAGE,
@@ -16,6 +16,7 @@ import {
 } from './errorMessages'
 import { IMAGE_EXTENSIONS, getExtension, isLikelyValidPdf, isValidFile } from './fileValidation'
 import { navigateTo, isPlainLeftClick } from './navigation'
+import { effectiveReceiptSort } from './historySort'
 import { apartmentPlace } from './format/apartmentPlace'
 import { apartmentShortName } from './format/apartmentShortName'
 import { formatDisplayDate } from './format/formatDisplayDate'
@@ -124,12 +125,20 @@ function getHistoryFromParam(): string | null {
  * review"), using the exact same effectiveYear/effectiveStatus rules that
  * page already validates its own URL params with, so a malformed value
  * here is dropped exactly as it would be there -- never sent as-is. */
-function parseHistoryFilters(fromSearch: string): { apartmentId?: string; year?: string; status?: ReceiptStatus } {
+function parseHistoryFilters(fromSearch: string): {
+  apartmentId?: string
+  year?: string
+  status?: ReceiptStatus
+  sort: ReceiptSort
+} {
   const params = new URLSearchParams(fromSearch.slice(fromSearch.indexOf('?') + 1))
   const apartmentId = params.get('apartment') ?? undefined
   const year = effectiveYear(params.get('year')) ?? undefined
   const status = effectiveStatus(params.get('status')) ?? undefined
-  return { apartmentId, year, status }
+  // The same sort as the list this receipt was opened from, so the
+  // snapshot's order (N of M, Previous/Next) is the order the owner saw.
+  const sort = effectiveReceiptSort(params.get('sort'))
+  return { apartmentId, year, status, sort }
 }
 
 const REVIEW_SNAPSHOT_LIMIT = 200
@@ -273,8 +282,8 @@ function ReceiptUpload() {
 
     async function loadSnapshot() {
       try {
-        const { apartmentId, year, status } = parseHistoryFilters(reviewFromSearch as string)
-        const response = await listReceipts({ apartmentId, year, status, limit: REVIEW_SNAPSHOT_LIMIT })
+        const { apartmentId, year, status, sort } = parseHistoryFilters(reviewFromSearch as string)
+        const response = await listReceipts({ apartmentId, year, status, sort, limit: REVIEW_SNAPSHOT_LIMIT })
         if (!cancelled) {
           setReviewSnapshot(response.items)
         }
