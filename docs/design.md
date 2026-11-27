@@ -1877,7 +1877,9 @@ rows that actually need attention.
   plus its warning icon; a longer raw value can overflow it.
 - **Status only where it matters:** under Status "All", only a
   `needs_review` row shows a `StatusBadge`; an approved row shows nothing.
-  Under a specific Status filter, no row shows one (unchanged).
+  Under a specific Status filter, no row shows one (unchanged). (Reverted
+  -- approved rows show their badge again; see "History list: column
+  header row and the Approved badge back".)
 - **Apartment as muted icon + text** (`text-xs text-ink-muted`, was a
   `bg-brand-soft` pill), short name visible and truncated, full name in
   `title` and an `sr-only` span (unchanged accessibility).
@@ -2072,6 +2074,34 @@ height while every other control was a `Button` (`font-medium`).
 - **Height from `lg` up:** the viewer is exactly `calc(100vh - 6rem)`
   (still `sticky top-20` via `ReceiptDetailLayout`), image centered on a
   `bg-surface-page` area. Below `lg` and for PDFs: unchanged.
+
+## History list: column header row and the Approved badge back
+
+- **Approved badge back.** Under Status "All", every row shows its
+  `StatusBadge` again -- "Approved" as well as "Needs review" (reverts
+  the approved-hidden rule from "Calmer, aligned History rows"). Under a
+  specific Status filter: no badge, no Status column (unchanged).
+- **Column header row** (`HistoryHeaderRow`, exported from
+  `ReceiptHistory.tsx`), from `sm` up only, inside the same `Card` above
+  the rows (`HistoryRowList` gained a `header` slot): "Store" (`flex-1`),
+  "Date" (`w-28`), "Total" (`w-28`, right-aligned like the amounts),
+  "Apartment" (`w-24`, only in "All apartments"), "Status" (`w-28`, only
+  under Status "All") -- the same padding, gap and widths as a row, so
+  each label sits over its column. Muted `text-xs font-medium`, a
+  `border-border-subtle` bottom divider, `aria-hidden="true"` (each row
+  link already reads its own values; a non-table header would only be
+  read as stray words). Rows themselves are unchanged whole-row links.
+- **Tests changed** (`ReceiptHistory.test.tsx`): 'under the "All" status
+  filter, only a needs_review row shows a status badge' became 'under the
+  "All" status filter, both approved and needs_review rows show their
+  status badge' (the rule it checked was reverted; it now finds each
+  badge inside its own row link). 'the status badge is shown only when the
+  Status filter is "All"' is unchanged (still true with a needs_review
+  row). New: the header's labels and order in "All apartments" + "All",
+  no Apartment label in an apartment tab, no Status label (and no badge)
+  under Status "Approved", no header below `sm`.
+- **`?view=styleguide`:** the "History rows" sample shows the header row
+  above the wide layout.
 
 ## Changelog
 

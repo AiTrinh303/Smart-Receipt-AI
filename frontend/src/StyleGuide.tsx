@@ -21,7 +21,7 @@ import {
   StatusCell,
   StoreCell,
 } from './ReceiptItems'
-import { HistoryRow, HistoryRowList } from './ReceiptHistory'
+import { HistoryHeaderRow, HistoryRow, HistoryRowList } from './ReceiptHistory'
 import ReceiptFileViewer from './ReceiptFileViewer'
 import { ExportCard } from './ReceiptReport'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
@@ -861,11 +861,11 @@ function StyleGuide() {
         </div>
       </Section>
 
-      <Section title="History rows (HistoryRowList + HistoryRow -- one Card with dividers; approved vs. needs review, unrecognized/missing date, long store name, All tab vs. a filtered tab, wide vs. small screen)">
+      <Section title="History rows (HistoryRowList + HistoryHeaderRow + HistoryRow -- one Card with dividers and a column header row from sm up; approved vs. needs review, unrecognized/missing date, long store name, All tab vs. a filtered tab, wide vs. small screen)">
         {[false, true].map((small) => (
           <div key={String(small)} className="flex flex-col gap-2">
             <p className="text-sm font-medium text-ink">{small ? 'Below sm (two lines)' : 'From sm up (fixed columns)'}</p>
-            <HistoryRowList>
+            <HistoryRowList header={small ? undefined : <HistoryHeaderRow showApartment showStatus />}>
               {HISTORY_SAMPLE_ROWS.map(({ item, showApartmentBadge, showStatusBadge }) => (
                 <li key={item.receipt_id}>
                   <HistoryRow
@@ -882,9 +882,10 @@ function StyleGuide() {
           </div>
         ))}
         <p className="text-sm text-ink-muted">
-          Rows 1-3 are as in the "All apartments" tab with Status "All": the muted apartment (short name,
-          full name in the tooltip), and a status badge only for a receipt that still needs review -- an
-          approved one shows nothing, but its column stays reserved so amounts line up. Row 2 shows an
+          From sm up, a muted column header row (Store, Date, Total, Apartment, Status -- hidden from
+          assistive tech) sits above the rows with the same widths; below sm there is none. Rows 1-3 are as
+          in the "All apartments" tab with Status "All": the muted apartment (short name, full name in the
+          tooltip) and a status badge for every receipt, approved or not. Row 2 shows an
           unrecognized date with the same warning marker the Items view uses, row 3 a missing date and a
           missing apartment. Row 4 is a clamped long store name inside a specific apartment tab with a
           Status filter active (no apartment, no status).

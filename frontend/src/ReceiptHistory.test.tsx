@@ -378,7 +378,7 @@ describe('ReceiptHistory', () => {
     })
   })
 
-  test('under the "All" status filter, only a needs_review row shows a status badge', async () => {
+  test('under the "All" status filter, both approved and needs_review rows show their status badge', async () => {
     // Given one approved and one needs_review receipt
     fetchSpy.mockImplementation(
       routeFetch({
@@ -417,12 +417,11 @@ describe('ReceiptHistory', () => {
     // When the history renders with no status filter
     render(<ReceiptHistory />)
 
-    // Then the needs_review row shows its badge, and the approved row shows none
+    // Then each row shows its own badge
     await waitFor(() => {
-      expect(within(screen.getByRole('list')).getByText('Needs review')).toBeInTheDocument()
+      expect(within(screen.getByRole('link', { name: /store b/i })).getByText('Needs review')).toBeInTheDocument()
     })
-    expect(within(screen.getByRole('list')).queryByText('Approved')).not.toBeInTheDocument()
-    expect(within(screen.getByRole('link', { name: /store a/i })).queryByText('Needs review')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('link', { name: /store a/i })).getByText('Approved')).toBeInTheDocument()
   })
 
   // --- Tabs ----------------------------------------------------------------
@@ -770,6 +769,98 @@ describe('ReceiptHistory', () => {
       ...overrides,
     }
   }
+
+  // --- Column header row (from sm up) ------------------------------------
+
+  function headerRow(): HTMLElement | null {
+    return document.querySelector('[aria-hidden="true"].border-b')
+  }
+
+  test('from sm up, "All apartments" + Status "All" shows a hidden-from-AT header row with every column', async () => {
+    // Given the unfiltered history with one receipt
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
+    )
+
+    // When it renders (jsdom has no matchMedia: the wide layout)
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('Store A')).toBeInTheDocument()
+    })
+
+    // Then the header row labels every column, inside the same card as the rows, and is hidden from assistive tech
+    const header = headerRow()
+    expect(header).not.toBeNull()
+    expect(Array.from(header!.children).map((c) => c.textContent)).toEqual([
+      'Store',
+      'Date',
+      'Total',
+      'Apartment',
+      'Status',
+    ])
+    expect(header!.children[2]).toHaveClass('text-right')
+    expect(header!.parentElement).toBe(screen.getByRole('list').parentElement)
+  })
+
+  test('the Apartment column header is left out inside one apartment tab', async () => {
+    // Given an apartment tab
+    window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}`)
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('Store A')).toBeInTheDocument()
+    })
+
+    // Then the header has no Apartment label, but still a Status one
+    expect(Array.from(headerRow()!.children).map((c) => c.textContent)).toEqual(['Store', 'Date', 'Total', 'Status'])
+  })
+
+  test('under a specific Status filter there is no Status column header and no badge', async () => {
+    // Given Status "Approved"
+    window.history.replaceState({}, '', '/?view=history&status=approved')
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () => Promise.resolve(jsonResponse(200, { items: [oneItem({ status: 'approved' })], count: 1, total: 1 })),
+      }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('Store A')).toBeInTheDocument()
+    })
+
+    // Then the header has no Status label, and the row no "Approved" badge
+    expect(Array.from(headerRow()!.children).map((c) => c.textContent)).toEqual([
+      'Store',
+      'Date',
+      'Total',
+      'Apartment',
+    ])
+    expect(within(screen.getByRole('list')).queryByText('Approved')).not.toBeInTheDocument()
+  })
+
+  test('below sm there is no header row', async () => {
+    // Given a small screen
+    window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 639px)',
+      media: query,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    })) as unknown as typeof window.matchMedia
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('Store A')).toBeInTheDocument()
+    })
+
+    // Then only the rows are shown
+    expect(headerRow()).toBeNull()
+    // @ts-expect-error removing the test-only matchMedia stub
+    delete window.matchMedia
+  })
 
   test('a valid ISO purchase_date renders as DD.MM.YYYY via formatDisplayDate', async () => {
     fetchSpy.mockImplementation(

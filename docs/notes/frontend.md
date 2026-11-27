@@ -325,7 +325,13 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   else, `MissingValue` when missing), amount (`w-28`, right-aligned,
   `tabular-nums`, `whitespace-nowrap`, via `formatMoney`), then the
   apartment (`w-24`) and status (`w-28`) columns — each column reserved
-  whenever it's shown at all, even if a given row's cell is empty. Two
+  whenever it's shown at all. Above the rows, inside the same `Card`,
+  `HistoryHeaderRow` (exported) labels them — "Store", "Date", "Total"
+  (right-aligned like the amounts), "Apartment" (only in "All
+  apartments") and "Status" (only under Status "All") — in muted
+  `text-xs`, same padding/gap/widths as the rows, with a
+  `border-border-subtle` bottom divider; `aria-hidden="true"`, since each
+  row link already reads its own values. From `sm` up only. Two
   lines below `sm` (store+total; date+apartment+status) — only one layout
   ever mounted, via `useMediaQuery('(max-width: 639px)')`, same pattern
   as `ReceiptResult.tsx`/`ReceiptItems.tsx`. Each row's `apartment_name`
@@ -335,16 +341,16 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   (`sr-only`) span, or plain muted "Not assigned" when it's
   `null`/missing — shown only in "All apartments" (hidden inside a
   specific apartment tab — redundant there). Status: only when the Status
-  filter is "All", and then only a `needs_review` row shows a
-  `StatusBadge` (icon+text, shared with `ReceiptReviewStatus.tsx`/
-  `ReviewBar.tsx`); an approved row shows nothing, so the rows that still
-  need attention stand out. Under a specific Status filter no row shows a
-  badge (redundant, same reasoning as the apartment). Each row is a real
+  filter is "All", every row shows its `StatusBadge` ("Needs review" or
+  "Approved", icon+text, shared with `ReceiptReviewStatus.tsx`/
+  `ReviewBar.tsx`). Under a specific Status filter no row shows a badge
+  and there is no Status column (redundant, same reasoning as the
+  apartment). Each row is a real
   `<a href="/?receipt=<id>{&from=...}">` (not a `<button>`, so opening
   one in a new tab works) with the exact same `from` mechanism/target as
   before; `ReceiptUpload.tsx` adds a "Back to history" link when showing
   a result. `?view=styleguide`'s "History rows" section renders the real
-  `HistoryRowList`/`HistoryRow` for both layouts.
+  `HistoryRowList`/`HistoryHeaderRow`/`HistoryRow` for both layouts.
   **Splitting the history by apartment, with filters:** all state lives in
   the URL (`?view=history&apartment=<id>&year=<v>&status=<v>`), never
   component state — a tab/select change calls the existing

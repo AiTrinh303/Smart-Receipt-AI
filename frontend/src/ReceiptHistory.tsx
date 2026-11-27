@@ -67,13 +67,6 @@ function ApartmentBadge({ apartmentName }: { apartmentName: string | null | unde
   )
 }
 
-/** Under the "All" status filter only a receipt that still needs review
- * gets a badge; an approved one shows nothing (the calm, expected state),
- * so the rows that need attention stand out. */
-function RowStatus({ status }: { status: ReceiptSummary['status'] }) {
-  return status === 'needs_review' ? <StatusBadge status={status} /> : null
-}
-
 interface HistoryRowProps {
   item: ReceiptSummary
   href: string
@@ -87,8 +80,8 @@ interface HistoryRowProps {
  * rows separated by a divider). A real `<a>` link (same href/`from`
  * mechanism as the Items view's row links), so opening one in a new tab
  * works. From `sm` up, every value sits in a fixed-width column (store
- * takes the rest) so dates and amounts line up from row to row; the status
- * column is reserved even when it's empty, for the same reason. Below `sm`
+ * takes the rest) so dates and amounts line up from row to row and under
+ * `HistoryHeaderRow`'s labels, which use the same widths. Below `sm`
  * it's two lines. Only one of the two layouts is ever mounted, decided in
  * JS via `isSmallScreen`, same pattern as ReceiptResult.tsx/ReceiptItems.tsx. */
 export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusBadge, isSmallScreen }: HistoryRowProps) {
@@ -119,7 +112,7 @@ export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusB
               <DateCell value={item.purchase_date} />
             </span>
             {showApartmentBadge && <ApartmentBadge apartmentName={item.apartment_name} />}
-            {showStatusBadge && <RowStatus status={item.status} />}
+            {showStatusBadge && <StatusBadge status={item.status} />}
           </span>
         </span>
       ) : (
@@ -138,7 +131,7 @@ export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusB
           )}
           {showStatusBadge && (
             <span className="flex w-28 flex-shrink-0">
-              <RowStatus status={item.status} />
+              <StatusBadge status={item.status} />
             </span>
           )}
         </>
@@ -152,11 +145,42 @@ export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusB
  * negative margins cancel the Card's own padding so a row's hover
  * background reaches the card's edges; `overflow-hidden` clips it to the
  * rounded corners, which is why the row's focus ring is drawn inset. */
-export function HistoryRowList({ children }: { children: ReactNode }) {
+export function HistoryRowList({ header, children }: { header?: ReactNode; children: ReactNode }) {
   return (
     <Card className="overflow-hidden">
-      <ul className="-m-5 divide-y divide-border-subtle sm:-m-6">{children}</ul>
+      <div className="-m-5 sm:-m-6">
+        {header}
+        <ul className="divide-y divide-border-subtle">{children}</ul>
+      </div>
     </Card>
+  )
+}
+
+/** Column labels above the rows (from `sm` up only -- the two-line small
+ * layout has no columns to label). The same padding, gap and fixed widths
+ * as `HistoryRow`'s wide layout, so each label sits over its values; the
+ * Apartment/Status labels appear exactly when those columns do.
+ * `aria-hidden`: purely visual -- each row link already reads its own
+ * values, and a header that isn't a real table header would only be read
+ * as stray words. */
+export function HistoryHeaderRow({
+  showApartment,
+  showStatus,
+}: {
+  showApartment: boolean
+  showStatus: boolean
+}) {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex items-center gap-3 border-b border-border-subtle px-4 py-2 text-xs font-medium text-ink-muted"
+    >
+      <span className="min-w-0 flex-1">Store</span>
+      <span className="w-28 flex-shrink-0">Date</span>
+      <span className="w-28 flex-shrink-0 text-right">Total</span>
+      {showApartment && <span className="w-24 flex-shrink-0">Apartment</span>}
+      {showStatus && <span className="w-28 flex-shrink-0">Status</span>}
+    </div>
   )
 }
 
@@ -473,7 +497,13 @@ function ReceiptHistory() {
         )
       ) : (
         <>
-          <HistoryRowList>
+          <HistoryRowList
+            header={
+              isSmallScreen ? undefined : (
+                <HistoryHeaderRow showApartment={effectiveApartmentId === null} showStatus={statusValue === null} />
+              )
+            }
+          >
             {items?.map((item) => (
               <li key={item.receipt_id}>
                 <HistoryRow
