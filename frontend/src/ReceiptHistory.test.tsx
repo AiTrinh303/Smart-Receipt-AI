@@ -800,7 +800,7 @@ describe('ReceiptHistory', () => {
     // Then each row's label is a pill in its apartment's tone, titled with the full name
     const list = screen.getByRole('list')
     expect(within(list).getByTitle(OBERAUDORF.name)).toHaveClass('bg-apartment-sky-soft', 'text-apartment-sky')
-    expect(within(list).getByTitle(WALDGLUECK.name)).toHaveClass('bg-apartment-teal-soft', 'text-apartment-teal')
+    expect(within(list).getByTitle(WALDGLUECK.name)).toHaveClass('bg-apartment-fuchsia-soft', 'text-apartment-fuchsia')
     // And each apartment tab carries a decorative dot in that tone, the "All" tab none
     const bergblickTab = screen.getByRole('tab', { name: OBERAUDORF.name })
     expect(bergblickTab.querySelector('[aria-hidden="true"].bg-apartment-sky')).not.toBeNull()

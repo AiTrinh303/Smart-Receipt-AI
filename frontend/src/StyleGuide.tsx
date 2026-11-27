@@ -868,9 +868,9 @@ function StyleGuide() {
         </div>
       </Section>
 
-      <Section title="Apartment tones (ApartmentPill / ApartmentDot -- sky, teal, neutral)">
+      <Section title="Apartment tones (ApartmentPill / ApartmentDot -- sky, fuchsia, neutral)">
         <p className="text-sm text-ink-muted">
-          One colour per apartment (src/format/apartmentTone.ts): Bergblick sky, Waldglück teal, any other
+          One colour per apartment (src/format/apartmentTone.ts): Bergblick sky, Waldglück fuchsia, any other
           id neutral. Labels in lists are soft pills (History, Items, the upload side panel); tabs, the
           apartment choice cards and the report cards get a small dot before the name. The name is always
           visible text; the full name stays in the tooltip.
@@ -878,7 +878,7 @@ function StyleGuide() {
         <Card className="flex flex-col gap-4">
           {[
             { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick', label: 'Bergblick (sky)' },
-            { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück', label: 'Waldglück (teal)' },
+            { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück', label: 'Waldglück (fuchsia)' },
             { id: 'some-other-apartment', name: 'Another apartment', label: 'Any other id (neutral)' },
           ].map((sample) => (
             <div key={sample.id} className="flex flex-wrap items-center gap-4">

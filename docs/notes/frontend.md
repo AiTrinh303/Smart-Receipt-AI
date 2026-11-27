@@ -559,7 +559,7 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   "No items match these filters." + "Clear filters").
   **Apartment tones (`src/format/apartmentTone.ts`,
   `ui/ApartmentTone.tsx`):** each apartment has a colour (Bergblick sky,
-  Waldglück teal, anything else neutral). `ApartmentPill` (soft pill +
+  Waldglück fuchsia, anything else neutral). `ApartmentPill` (soft pill +
   icon) shows the apartment in History rows, Items' `ApartmentCell` (now
   `{name, apartmentId?}`) and the upload side panel's latest uploads;
   `ApartmentDot` (decorative) sits before the name in the apartment tabs

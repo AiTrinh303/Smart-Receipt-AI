@@ -7,14 +7,14 @@
  * CSS for class names it finds literally in the source), so callers use
  * them as they are and never build class names from the tone. */
 
-export type ApartmentTone = 'sky' | 'teal' | 'neutral'
+export type ApartmentTone = 'sky' | 'fuchsia' | 'neutral'
 
 /** Apartment id -> tone. To give an apartment a different colour, change
  * its entry here (and add tokens in tailwind.config.js for a new tone). An
  * id not listed here gets the neutral (muted) style. */
 export const TONE_BY_APARTMENT_ID: Readonly<Record<string, ApartmentTone>> = {
   'oberaudorf-bergblick': 'sky',
-  'sankt-englmar-waldglueck': 'teal',
+  'sankt-englmar-waldglueck': 'fuchsia',
 }
 
 export interface ApartmentToneClasses {
@@ -26,7 +26,7 @@ export interface ApartmentToneClasses {
 
 export const APARTMENT_TONE_CLASSES: Readonly<Record<ApartmentTone, ApartmentToneClasses>> = {
   sky: { pill: 'bg-apartment-sky-soft text-apartment-sky', dot: 'bg-apartment-sky' },
-  teal: { pill: 'bg-apartment-teal-soft text-apartment-teal', dot: 'bg-apartment-teal' },
+  fuchsia: { pill: 'bg-apartment-fuchsia-soft text-apartment-fuchsia', dot: 'bg-apartment-fuchsia' },
   neutral: { pill: 'bg-slate-100 text-ink-muted', dot: 'bg-ink-muted' },
 }
 

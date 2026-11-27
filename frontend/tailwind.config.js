@@ -43,9 +43,9 @@ export default {
             DEFAULT: '#0369a1', // sky-700
             soft: '#f0f9ff', // sky-50
           },
-          teal: {
-            DEFAULT: '#0f766e', // teal-700
-            soft: '#f0fdfa', // teal-50
+          fuchsia: {
+            DEFAULT: '#a21caf', // fuchsia-700
+            soft: '#fdf4ff', // fuchsia-50
           },
         },
       },

@@ -46,8 +46,8 @@ CSS" below -- jsdom's 100+ passing tests say nothing about layout or color.
 | `danger-soft`    | `#fef2f2` | Error background              | — (background)      |
 | `apartment-sky`  | `#0369a1` | Bergblick's tone: pill text, dot (sky-700) | 5.93:1; 5.57:1 on `apartment-sky-soft` |
 | `apartment-sky-soft` | `#f0f9ff` | Bergblick's pill background (sky-50) | — (background) |
-| `apartment-teal` | `#0f766e` | Waldglück's tone: pill text, dot (teal-700) | 5.47:1; 5.25:1 on `apartment-teal-soft` |
-| `apartment-teal-soft` | `#f0fdfa` | Waldglück's pill background (teal-50) | — (background) |
+| `apartment-fuchsia` | `#a21caf` | Waldglück's tone: pill text, dot (fuchsia-700) | 6.32:1; 5.89:1 on `apartment-fuchsia-soft` |
+| `apartment-fuchsia-soft` | `#fdf4ff` | Waldglück's pill background (fuchsia-50) | — (background) |
 
 All text-on-background combinations above meet WCAG AA (4.5:1 for normal
 text). A disabled `Button` uses `slate-300`/`slate-600` text, which still
@@ -2267,7 +2267,7 @@ height while every other control was a `Button` (`font-medium`).
 - **`ApartmentPill` / `ApartmentDot`** (`ApartmentTone.tsx`) — the one way
   to show which apartment something belongs to. The tone comes from
   `src/format/apartmentTone.ts` (`TONE_BY_APARTMENT_ID`: Bergblick → sky,
-  Waldglück → teal, any other id → neutral = `bg-slate-100
+  Waldglück → fuchsia, any other id → neutral = `bg-slate-100
   text-ink-muted`, 6.92:1), as complete static class strings.
   `ApartmentPill` (soft tone fill + tone text + the building icon) is for
   labels in lists: History rows, Items' `ApartmentCell`, the upload side
@@ -2279,16 +2279,18 @@ height while every other control was a `Button` (`font-medium`).
   name stays in `title` and the accessible name -- colour is a quicker
   cue, never the only one. Not toned: the Report's monthly table/card
   column labels and the "Both apartments" card.
-  **Changing a tone** (e.g. if Waldglück's teal reads too close to the
-  green "Approved" badge -- their text colours differ in luminance by only
-  1.09:1, so the difference is hue alone): add a tone's tokens under
+  **Changing a tone** (done once already: Waldglück started as teal-700,
+  which read too close to the green "Approved" badge -- the two text
+  colours differed in luminance by only 1.09:1 -- and was switched to
+  fuchsia): add a tone's tokens under
   `apartment` in `tailwind.config.js`, add the tone to `ApartmentTone` and
   `APARTMENT_TONE_CLASSES` (literal class strings), point the id at it in
   `TONE_BY_APARTMENT_ID`, and add the tone to `Button.contrast.test.ts`'s
   `describe.each`. Measured candidates: purple-700 `#7e22ce` on purple-50
   `#faf5ff` 6.51:1 (6.98:1 on white), fuchsia-700 `#a21caf` on fuchsia-50
-  `#fdf4ff` 5.89:1 (6.32:1). Avoid amber/orange (reads as the warning
-  colour), red/rose (danger) and indigo (brand).
+  `#fdf4ff` 5.89:1 (6.32:1, now Waldglück's). Avoid amber/orange (reads
+  as the warning colour), red/rose (danger), indigo (brand) and green/
+  teal (the "Approved" badge). Remove a tone that is no longer mapped.
 - **`Card`** — a bordered, padded, white surface for grouping content (forms,
   dropzones, confirmation panels).
 - **`Container`** — `size` `md` (`max-w-md`), `lg` (`max-w-3xl`, History's

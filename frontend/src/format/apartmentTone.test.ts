@@ -2,9 +2,9 @@ import { APARTMENT_TONE_CLASSES, apartmentTone, apartmentToneClasses } from './a
 
 test('each known apartment has its own tone; anything else is neutral', () => {
   // Given the two seeded apartment ids, an unknown id and no id
-  // Then Bergblick is sky, Waldglück teal, and the rest neutral
+  // Then Bergblick is sky, Waldglück fuchsia, and the rest neutral
   expect(apartmentTone('oberaudorf-bergblick')).toBe('sky')
-  expect(apartmentTone('sankt-englmar-waldglueck')).toBe('teal')
+  expect(apartmentTone('sankt-englmar-waldglueck')).toBe('fuchsia')
   expect(apartmentTone('some-new-apartment')).toBe('neutral')
   expect(apartmentTone(null)).toBe('neutral')
   expect(apartmentTone(undefined)).toBe('neutral')
@@ -17,8 +17,8 @@ test('the class strings are complete, static Tailwind classes', () => {
     dot: 'bg-apartment-sky',
   })
   expect(apartmentToneClasses('sankt-englmar-waldglueck')).toEqual({
-    pill: 'bg-apartment-teal-soft text-apartment-teal',
-    dot: 'bg-apartment-teal',
+    pill: 'bg-apartment-fuchsia-soft text-apartment-fuchsia',
+    dot: 'bg-apartment-fuchsia',
   })
   expect(APARTMENT_TONE_CLASSES.neutral).toEqual({ pill: 'bg-slate-100 text-ink-muted', dot: 'bg-ink-muted' })
 })

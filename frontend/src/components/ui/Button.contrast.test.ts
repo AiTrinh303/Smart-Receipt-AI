@@ -85,8 +85,8 @@ const ALL_CUSTOM_TOKENS = [
   'danger-soft',
   'apartment-sky',
   'apartment-sky-soft',
-  'apartment-teal',
-  'apartment-teal-soft',
+  'apartment-fuchsia',
+  'apartment-fuchsia-soft',
   'white',
 ]
 
@@ -223,7 +223,7 @@ describe.each([
 // fill is ever dropped) -- both pairs must clear 4.5:1 for normal text.
 // The measured ratios are printed so a run shows the real values.
 
-describe.each(['sky', 'teal'])('apartment tone "%s"', (tone) => {
+describe.each(['sky', 'fuchsia'])('apartment tone "%s"', (tone) => {
   const textHex = resolveToken(`apartment-${tone}`) as string
   const softHex = resolveToken(`apartment-${tone}-soft`) as string
   const whiteHex = resolveToken('white') as string

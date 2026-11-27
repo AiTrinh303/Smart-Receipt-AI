@@ -9,10 +9,10 @@ test('ApartmentPill shows its text in the apartment\'s tone, with the full name 
     </ApartmentPill>,
   )
 
-  // Then the visible name is there, in teal, with the full name as tooltip
+  // Then the visible name is there, in fuchsia, with the full name as tooltip
   const pill = screen.getByTitle('Fewo JoJo - Sankt Englmar - Waldglück')
   expect(pill).toHaveTextContent('Waldglück')
-  expect(pill).toHaveClass('bg-apartment-teal-soft', 'text-apartment-teal')
+  expect(pill).toHaveClass('bg-apartment-fuchsia-soft', 'text-apartment-fuchsia')
 })
 
 test('an unknown apartment gets the neutral pill', () => {
