@@ -15,9 +15,9 @@ import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_E
 import { ItemCardList, ItemsTable } from './ReceiptItems'
 import { HistoryHeaderRow, HistoryRow, HistoryRowList } from './ReceiptHistory'
 import ReceiptFileViewer from './ReceiptFileViewer'
-import { ExportCard } from './ReceiptReport'
+import { ExportCard, ReportChecks, VAT_FOOTNOTE } from './ReceiptReport'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
-import type { ItemRow, ReceiptFacets, ReceiptSummary } from './api/types'
+import type { ItemRow, ReceiptFacets, ReceiptSummary, YearlyReport } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
@@ -266,6 +266,49 @@ const SAMPLE_PORTRAIT_RECEIPT_URL = `data:image/svg+xml;utf8,${encodeURIComponen
 const SAMPLE_SIDEWAYS_RECEIPT_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><g transform="translate(0 300) rotate(-90)"><rect width="300" height="600" fill="#ffffff"/><rect x="30" y="40" width="160" height="28" rx="4" fill="#94a3b8"/>${SAMPLE_RECEIPT_LINES}<rect x="30" y="540" width="240" height="20" rx="3" fill="#64748b"/></g></svg>`,
 )}`
+
+const SAMPLE_REPORT_ALL_CLEAR: YearlyReport = {
+  year: 2026,
+  basis: 'all',
+  apartments: [],
+  overall: [],
+  excluded: { undated: 0, not_approved: 0, no_total: 0, no_currency: 0, no_apartment: 0 },
+  with_warnings: 0,
+  counted_unreviewed: 0,
+  attention: [],
+  possible_duplicates: [],
+  possible_duplicate_groups: 0,
+  largest: [],
+}
+
+const SAMPLE_REPORT_WITH_CHECKS: YearlyReport = {
+  ...SAMPLE_REPORT_ALL_CLEAR,
+  excluded: { undated: 2, not_approved: 0, no_total: 1, no_currency: 0, no_apartment: 0 },
+  with_warnings: 2,
+  counted_unreviewed: 5,
+  attention: [
+    {
+      receipt_id: 'sample-attention-1',
+      store_name: 'Corner Store',
+      purchase_date: '2026-01-15',
+      total: '19.99',
+      currency: 'EUR',
+      apartment_id: 'oberaudorf-bergblick',
+      warning_codes: ['TOTAL_MISMATCH'],
+    },
+  ],
+  possible_duplicates: [
+    {
+      receipt_ids: ['sample-dup-1', 'sample-dup-2'],
+      store_name: 'Bakery',
+      purchase_date: '2026-02-01',
+      total: '1000.00',
+      currency: 'EUR',
+      apartment_id: 'sankt-englmar-waldglueck',
+    },
+  ],
+  possible_duplicate_groups: 1,
+}
 
 const HISTORY_SAMPLE_BASE = {
   original_filename: 'a.jpg',
@@ -1397,10 +1440,14 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Yearly report (ReceiptReport -- summary cards, monthly table, Quick check, excluded panel)">
+      <Section title="Yearly report (ReceiptReport -- summary cards with Both apartments emphasised, Before you send it, export card, VAT note)">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Oberaudorf - Bergblick">
+            <h2
+              className="flex items-center gap-2 text-base font-semibold text-ink"
+              title="Fewo JoJo - Oberaudorf - Bergblick"
+            >
+              <ApartmentDot apartmentId="oberaudorf-bergblick" />
               Bergblick
             </h2>
             <div className="flex items-baseline justify-between gap-4">
@@ -1411,12 +1458,16 @@ function StyleGuide() {
             </div>
           </Card>
           <Card className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Sankt Englmar - Waldglück">
+            <h2
+              className="flex items-center gap-2 text-base font-semibold text-ink"
+              title="Fewo JoJo - Sankt Englmar - Waldglück"
+            >
+              <ApartmentDot apartmentId="sankt-englmar-waldglueck" />
               Waldglück
             </h2>
             <p className="text-sm text-ink-muted">No receipts in 2026.</p>
           </Card>
-          <Card className="flex flex-col gap-3">
+          <Card variant="emphasis" className="flex flex-col gap-3">
             <h2 className="text-base font-semibold text-ink">Both apartments</h2>
             <div className="flex items-baseline justify-between gap-4">
               <span className="text-sm text-ink-muted">7 receipts</span>
@@ -1427,6 +1478,22 @@ function StyleGuide() {
           </Card>
         </div>
 
+        <p className="text-sm font-medium text-ink">"Before you send it" -- basis all, with open checks</p>
+        <ReportChecks report={SAMPLE_REPORT_WITH_CHECKS} year={2026} basis="all" />
+        <p className="text-sm font-medium text-ink">Same data, basis approved (not-approved receipts are left out)</p>
+        <ReportChecks
+          report={{ ...SAMPLE_REPORT_WITH_CHECKS, basis: 'approved', counted_unreviewed: 0, excluded: { ...SAMPLE_REPORT_WITH_CHECKS.excluded, not_approved: 5 } }}
+          year={2026}
+          basis="approved"
+        />
+        <p className="text-sm font-medium text-ink">A year with nothing to check</p>
+        <ReportChecks report={SAMPLE_REPORT_ALL_CLEAR} year={2026} basis="all" />
+
+        <p className="text-sm text-ink-muted">
+          Then "Monthly breakdown" (a closed details with all 12 months, a dash where a month has no data,
+          no currency heading for a single currency), then the export card, then the VAT note.
+        </p>
+
         <ExportCard
           year={2026}
           basis="all"
@@ -1434,107 +1501,9 @@ function StyleGuide() {
             { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick' },
             { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück' },
           ]}
-          countedUnreviewed={3}
         />
-        <ExportCard year={null} basis="all" apartments={null} countedUnreviewed={0} />
-
-        <Card className="flex flex-col gap-4">
-          <h3 className="text-sm font-semibold text-ink">€</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <caption className="sr-only">Monthly totals in €</caption>
-              <thead>
-                <tr className="border-b border-border text-ink-muted">
-                  <th scope="col" className="py-1 pr-2 font-medium">
-                    Month
-                  </th>
-                  <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
-                    Bergblick
-                  </th>
-                  <th scope="col" className="whitespace-nowrap py-1 pr-2 text-right font-medium">
-                    Waldglück
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-border/40">
-                  <td className="py-1 pr-2">January</td>
-                  <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">120.00</td>
-                  <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">—</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs text-ink-muted">
-            No combined "Both" column here -- the backend has no monthly breakdown for the overall
-            total, and summing two apartments' amounts in the frontend would be arithmetic on money.
-          </p>
-        </Card>
-
-        <Card className="flex flex-col gap-4">
-          <h2 className="text-base font-semibold text-ink">Quick check</h2>
-          <details className="flex flex-col gap-2">
-            <summary className="cursor-pointer select-none text-sm font-semibold text-ink">
-              Receipts with warnings (2)
-            </summary>
-            <ul className="flex flex-col gap-2">
-              <li className="rounded-md border border-border p-3 text-sm">
-                <a href="#" className="font-medium text-ink underline">
-                  Corner Store
-                </a>
-                <p className="mt-1 text-ink-muted">15.01.2026 · €19.99</p>
-                <p className="mt-1 text-ink-muted">total does not match the items</p>
-              </li>
-            </ul>
-          </details>
-          <details className="flex flex-col gap-2">
-            <summary className="cursor-pointer select-none text-sm font-semibold text-ink">
-              Possible duplicates (1 groups)
-            </summary>
-            <ul className="flex flex-col gap-2">
-              <li className="rounded-md border border-border p-3 text-sm">
-                <p className="font-medium text-ink">Corner Store, 15.01.2026, €10.00</p>
-                <p className="mt-1 flex flex-wrap gap-2">
-                  <a href="#" className="font-medium text-ink underline">
-                    Open 1
-                  </a>
-                  <a href="#" className="font-medium text-ink underline">
-                    Open 2
-                  </a>
-                </p>
-                <p className="mt-1 text-ink-muted">Both are counted in the totals until you delete one.</p>
-              </li>
-            </ul>
-          </details>
-          <details className="flex flex-col gap-2">
-            <summary className="cursor-pointer select-none text-sm font-semibold text-ink">
-              Largest receipts
-            </summary>
-            <p className="text-sm text-ink-muted">None.</p>
-          </details>
-          <Alert variant="success">No warnings and no duplicates found in 2026.</Alert>
-        </Card>
-
-        <Card className="flex flex-col gap-3">
-          <h2 className="text-base font-semibold text-ink">Receipts not in these totals</h2>
-          <ul className="flex flex-col gap-2 text-sm">
-            <li>
-              <a href="#" className="font-medium text-brand underline">
-                3 receipts in 2026 are not approved yet
-              </a>
-            </li>
-            <li>
-              <a href="#" className="font-medium text-brand underline">
-                2 receipts have no valid date
-              </a>
-            </li>
-            <li className="text-ink-muted">1 receipt has no total. Open the receipt and fix it with Edit.</li>
-          </ul>
-          <p className="text-sm text-ink-muted">
-            Totals are the amounts printed on the receipts, including VAT. Ask your tax advisor how to
-            use them.
-          </p>
-        </Card>
+        <ExportCard year={null} basis="all" apartments={null} />
+        <p className="text-sm text-ink-muted">{VAT_FOOTNOTE}</p>
       </Section>
     </div>
   )

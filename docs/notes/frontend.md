@@ -662,55 +662,58 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   summing two apartments' decimal strings to produce one would be
   exactly the arithmetic this rule forbids — the monthly table shows one
   column per apartment only (documented in `ReceiptReport.tsx` itself).
+  **Page order** (top to bottom): header (the description follows the
+  basis), Year select and "Only count receipts I approved"; the summary
+  cards; "Before you send it"; "Monthly breakdown"; "For your tax
+  advisor"; the VAT note.
   **Summary**: one `Card` per apartment (`apartmentShortName` visible,
-  full name in `title`) with a right-aligned, tabular-nums amount per
-  currency plus "N receipts", then a combined "Both apartments" card
-  built straight from the backend's own `overall` (never summed from the
-  apartment cards). An apartment with no data shows "No approved
-  receipts in `<year>`." (`basis=approved`) or "No receipts in `<year>`."
-  (`basis=all`). A calm info line ("N of the counted receipts were not
-  reviewed. The quick check below shows what to look at first.") appears
-  under the summary only when `counted_unreviewed > 0` — there is no
-  unconditional notice.
-  **Monthly table**: one table per currency present in any apartment's
-  `months`, rows = months actually present (`MONTH_NAMES`, a fixed
-  array — no locale dependence), columns = one per apartment; a cell
-  with no data for that apartment/month/currency shows a plain dash.
-  From `sm` up it's a table, below `sm` a list of cards — only one ever
-  mounted (`useMediaQuery`, same pattern as `ReceiptItems.tsx`/
-  `ReceiptResult.tsx`).
-  **"Quick check"** (three `<details>`, closed by default, each
-  `<summary>` showing its own count): "Receipts with warnings (N)" lists
-  `attention` (capped at 50 server-side; `with_warnings` is the full,
-  uncapped count, so "Showing the first 50." shows only when it exceeds
-  the returned list), each a link to `?receipt=<id>` with the store,
-  `formatDisplayDate`'s `DD.MM.YYYY`, the amount, and every warning code
-  translated through a fixed map (`TOTAL_MISMATCH`/`LINE_MISMATCH`/
-  `MISSING_STORE`/`FUTURE_DATE` have plain-words labels; any other code
-  shows the raw code itself). "Possible duplicates (N groups)" lists
-  `possible_duplicates` (also capped at 50; `possible_duplicate_groups`
-  is the full count), each group as one line ("store, date, total")
-  with one "Open N" link per receipt in the group and a muted note that
-  both stay counted until the owner deletes one. "Largest receipts"
-  lists `largest`, per currency. An empty block shows "None." instead of
-  an empty list. When `with_warnings === 0 && possible_duplicate_groups
-  === 0`, a success `Alert` ("No warnings and no duplicates found in
-  `<year>`.") appears above the three blocks.
-  **"Receipts not in these totals"** (a second, separate panel): the
-  "not approved" link (`?view=history&year=<year>&status=needs_review`)
-  appears only when `basis === 'approved'` *and* `excluded.not_approved
-  > 0` (always `0` under `basis === 'all'` anyway); "undated" links to
-  `?view=history&year=none`; `no_total`/`no_currency`/`no_apartment` are
-  plain text with a count and a hint to fix it with Edit (no filter
-  link invented); a `with_warnings` line is also shown here as plain
-  text, even though those receipts *are* counted — this panel is a
-  general "check before you trust" area, not "excluded only". A zero
-  count renders nothing; when every one is zero, a *different* success
-  `Alert` ("Every receipt of `<year>` is in these totals.") appears —
-  distinct from the Quick check's own success message, since the two
-  panels have different success conditions. A fixed line always
-  follows: "Totals are the amounts printed on the receipts, including
-  VAT. Ask your tax advisor how to use them."
+  tone dot, full name in `title`) with a right-aligned, tabular-nums
+  amount per currency plus "N receipts", then a combined "Both
+  apartments" card built straight from the backend's own `overall`
+  (never summed from the apartment cards), emphasised with
+  `Card variant="emphasis"` (`bg-brand-soft`, `border-brand/30`; ink
+  15.97:1, ink-muted 6.78:1 on it). An apartment with no data shows "No
+  approved receipts in `<year>`." (`basis=approved`) or "No receipts in
+  `<year>`." (`basis=all`).
+  **"Before you send it" (`ReportChecks`, exported):** one card replacing
+  the former "Quick check", "Receipts not in these totals" panel and the
+  loose "N of the counted receipts were not reviewed" line. One row per
+  check (`CheckRow`: a warning-triangle or check-mark icon + text — the
+  shape and words carry the meaning, never colour alone):
+  - *Not reviewed:* `basis=all` → "N receipts not reviewed yet"
+    (`counted_unreviewed`); `basis=approved` → "N receipts not approved,
+    not in these totals" (`excluded.not_approved`); either with a
+    "Review them" link to `?view=history&year=<year>&status=needs_review`.
+  - *Warnings:* "N receipts have warnings" + a closed `<details>` "Show"
+    holding the `attention` list (capped at 50 server-side;
+    `with_warnings` is the full count, so "Showing the first 50." shows
+    only when it exceeds the list) — each a link to `?receipt=<id>` with
+    the store, `DD.MM.YYYY`, the amount and every warning code through a
+    fixed plain-words map (any other code shows raw).
+  - *Possible duplicates:* "N groups of possible duplicates" + a closed
+    "Show" with each group ("store, date, total", one "Open N" link per
+    receipt, "Both are counted in the totals until you delete one.").
+  - *Not in totals:* one row per non-zero bucket — "N receipts have no
+    valid date" (link to `?view=history&year=none`), and plain-text "no
+    total"/"no currency"/"no apartment" rows with "Open the receipt and
+    fix it with Edit.".
+  A check with nothing to do is a single success row ("Every counted
+  receipt is reviewed"/"Every receipt is approved", "No warnings", "No
+  possible duplicates", "No receipts left out of these totals"). When
+  every check is zero, the card shows only one success `Alert`: "Ready
+  to send: every receipt of `<year>` is reviewed and counted." "Largest
+  receipts" was removed from the page (the backend still sends
+  `largest`; nothing reads it).
+  **Monthly breakdown**: a closed `<details>` in a `Card`. When open,
+  one table per currency present in any apartment's `months`, with
+  **all 12 months** January–December (`ALL_MONTHS`, `MONTH_NAMES` — no
+  locale dependence) and one column per apartment; a cell with no data
+  shows a plain dash. The currency sub-heading appears only when the
+  year has more than one currency. From `sm` up it's a table, below
+  `sm` a list of cards — only one ever mounted (`useMediaQuery`).
+  **VAT note**: "Totals are the amounts printed on the receipts,
+  including VAT. Ask your tax advisor how to use them." — once, the
+  page's last element (`VAT_FOOTNOTE`, exported).
   **Loading/error/empty**: `role="status" aria-busy="true"` with the
   exact text "Loading report...", `Skeleton` blocks; `Alert` + Retry on
   error; "No dated receipts yet. Upload and approve receipts to see the
@@ -718,7 +721,8 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   in that case).
   **Download controls for the yearly export (`ExportCard`, exported from
   `ReceiptReport.tsx`; `src/api/reportExportUrl.ts`):** a "For your tax
-  advisor" `Card` below the summary cards, giving two plain `<a href>`
+  advisor" `Card` at the end of the page (just above the VAT note),
+  giving two plain `<a href>`
   links to the backend's `GET /reports/yearly/export.csv`/`.zip` — same
   "no fetch, the server's own `Content-Disposition` header triggers the
   download" contract as "Download PDF" in `ReceiptFileViewer.tsx`
@@ -730,8 +734,7 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   always sent, even for the default `"excel_de"`**, so the downloaded
   file's format can never silently depend on the backend's own default
   changing later (the one deliberate difference from the `basis`
-  convention). `ExportCard` takes `year`/`basis`/`apartments`/
-  `countedUnreviewed` as props (presentational, exported specifically so
+  convention). `ExportCard` takes `year`/`basis`/`apartments` as props (presentational, exported specifically so
   `StyleGuide.tsx` and tests can render it directly with static data,
   the same pattern `ApartmentCell`/`HistoryRow`/etc. already use) and
   keeps the chosen apartment and CSV style in its own component state —
@@ -742,7 +745,9 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   `apartmentShortName`, full name in the option's `title`) and "CSV
   format" select ("German Excel (semicolon, decimal comma)", the
   default value `"excel_de"`, or "Plain (comma, decimal point)",
-  `"plain"`) sit above the two links; Year and
+  `"plain"`) sit in a closed `<details>` "Export options" below the two
+  links (ZIP primary, CSV secondary), since the defaults fit almost
+  every export; Year and
   "Only count receipts I approved" are read from the surrounding view,
   never duplicated here, and also shown as plain text next to the links
   ("`2026, all receipts`"/"`2026, approved receipts only`"), so a
@@ -756,15 +761,14 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   selects stay enabled regardless, since choosing ahead of having data
   is harmless. Muted text always below the links explains what the ZIP
   contains, that it can take a minute for many receipts, and that it is
-  **not encrypted and holds personal data**; a second muted line,
-  "Receipts that were not reviewed are included.", appears only when
-  `basis === "all"` *and* `countedUnreviewed > 0` (never under
-  `basis === "approved"`, where every counted receipt already is
-  reviewed by definition). No request is ever made for the export
+  **not encrypted and holds personal data**. (The former "Receipts that
+  were not reviewed are included." line is gone — "Before you send it"
+  covers unreviewed receipts.) No request is ever made for the export
   itself — only a click on a link triggers the browser's own download;
-  `ExportCard` never calls `fetch`. Added to `?view=styleguide`: two
-  samples right after the summary cards' own sample — one with data (and
-  the unreviewed note), one with `year={null}` for the disabled state.
+  `ExportCard` never calls `fetch`. In `?view=styleguide`: the summary
+  cards, `ReportChecks` three ways (open checks under each basis, and
+  all clear), two `ExportCard` samples (with data, and `year={null}`),
+  and the VAT note.
   **Changing the apartment on a saved receipt (`ReceiptApartment.tsx`,
   `src/api/updateReceiptApartment.ts`):** rendered by the saved-receipt
   container (the same `if (result)` branch used right after extraction and

@@ -217,7 +217,8 @@ describe('ReceiptReport', () => {
     expect(screen.getByText('No receipts in 2026.')).toBeInTheDocument()
   })
 
-  test('the monthly table omits empty months and has a column per apartment, no combined column', async () => {
+  test('the monthly breakdown is closed, lists all 12 months with a dash where empty, one column per apartment and no currency heading for one currency', async () => {
+    // Given one apartment with January and March data, in one currency
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () =>
@@ -240,13 +241,28 @@ describe('ReceiptReport', () => {
       }),
     )
     render(<ReceiptReport />)
-    await waitFor(() => {
-      expect(screen.getByText('January')).toBeInTheDocument()
-    })
-    expect(screen.getByText('March')).toBeInTheDocument()
-    expect(screen.queryByText('February')).not.toBeInTheDocument()
-    expect(screen.queryByText('Both')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Bergblick').length).toBeGreaterThan(0)
+    const summary = await screen.findByText('Monthly breakdown')
+
+    // Then it sits in a closed <details>
+    const details = summary.closest('details') as HTMLDetailsElement
+    expect(details.open).toBe(false)
+
+    // And every month January..December is a row, a dash where there's no data
+    const table = within(details).getByRole('table')
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ])
+    expect(rows[1]).toHaveTextContent('—')
+    expect(rows[2]).toHaveTextContent('15.00')
+    // One column per apartment, no combined column, no currency sub-heading
+    expect(within(table).getAllByRole('columnheader').map((th) => th.textContent)).toEqual([
+      'Month',
+      'Bergblick',
+      'Waldglück',
+    ])
+    expect(within(details).queryByRole('heading', { name: '€' })).not.toBeInTheDocument()
   })
 
   test('switching the year updates the URL and refetches', async () => {
@@ -293,31 +309,40 @@ describe('ReceiptReport', () => {
     expect(calls[calls.length - 1]).toContain('basis=approved')
   })
 
-  test('counted_unreviewed > 0 shows the info line; 0 shows nothing', async () => {
+  test('basis all: unreviewed counted receipts are one check row with a "Review them" link; none is a success row', async () => {
+    // Given 3 counted receipts not reviewed yet
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () => Promise.resolve(jsonResponse(200, reportResponse({ counted_unreviewed: 3 }))),
       }),
     )
     const { unmount } = render(<ReceiptReport />)
-    await waitFor(() => {
-      expect(
-        screen.getByText('3 of the counted receipts were not reviewed. The quick check below shows what to look at first.'),
-      ).toBeInTheDocument()
-    })
+
+    // Then the checks card says so and links to the year's needs-review list
+    await screen.findByText(/3 receipts not reviewed yet/)
+    expect(screen.getByRole('link', { name: 'Review them' })).toHaveAttribute(
+      'href',
+      '/?view=history&year=2026&status=needs_review',
+    )
+    // And the old loose info line is gone
+    expect(screen.queryByText(/of the counted receipts were not reviewed/)).not.toBeInTheDocument()
     unmount()
 
+    // Given none unreviewed but another check open (so the rows still show)
     fetchSpy.mockImplementation(
-      routeFetch({ yearly: () => Promise.resolve(jsonResponse(200, reportResponse({ counted_unreviewed: 0 }))) }),
+      routeFetch({
+        yearly: () => Promise.resolve(jsonResponse(200, reportResponse({ counted_unreviewed: 0, with_warnings: 1 }))),
+      }),
     )
     render(<ReceiptReport />)
-    await waitFor(() => {
-      expect(screen.getByText('Both apartments')).toBeInTheDocument()
-    })
-    expect(screen.queryByText(/were not reviewed/i)).not.toBeInTheDocument()
+
+    // Then that check is a single success row
+    expect(await screen.findByText('Every counted receipt is reviewed')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Review them' })).not.toBeInTheDocument()
   })
 
-  test('the three Quick check blocks show their counts, closed by default', async () => {
+  test('warnings and possible duplicates are check rows with a count and a closed "Show"; Largest receipts is gone', async () => {
+    // Given receipts with warnings and one duplicate group
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () =>
@@ -355,14 +380,20 @@ describe('ReceiptReport', () => {
       }),
     )
     render(<ReceiptReport />)
-    await waitFor(() => {
-      expect(screen.getByText('Receipts with warnings (2)')).toBeInTheDocument()
-    })
-    expect(screen.getByText('Possible duplicates (1 groups)')).toBeInTheDocument()
-    expect(screen.getByText('Largest receipts')).toBeInTheDocument()
 
-    const details = document.querySelectorAll('details')
-    details.forEach((detail) => expect((detail as HTMLDetailsElement).open).toBe(false))
+    // Then each has a count row and a closed "Show" with today's list inside
+    expect(await screen.findByText('2 receipts have warnings')).toBeInTheDocument()
+    expect(screen.getByText('1 group of possible duplicates')).toBeInTheDocument()
+    const shows = screen.getAllByText('Show')
+    expect(shows).toHaveLength(2)
+    shows.forEach((summary) => expect((summary.closest('details') as HTMLDetailsElement).open).toBe(false))
+    expect(screen.getByRole('link', { name: 'Store A' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open 1' })).toBeInTheDocument()
+
+    // And the old blocks are gone
+    expect(screen.queryByText('Largest receipts')).not.toBeInTheDocument()
+    expect(screen.queryByText('Quick check')).not.toBeInTheDocument()
+    expect(screen.queryByText('Receipts not in these totals')).not.toBeInTheDocument()
   })
 
   test('a warning receipt shows the plain-words label and a link to ?receipt=<id>', async () => {
@@ -397,7 +428,7 @@ describe('ReceiptReport', () => {
   })
 
   test('a receipt link leaves ctrl/cmd-click to the browser; a plain click still opens it in place', async () => {
-    // Given a receipt link in the Quick check
+    // Given a receipt link in the "Before you send it" warnings list
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () =>
@@ -484,14 +515,20 @@ describe('ReceiptReport', () => {
     expect(screen.getByText('Both are counted in the totals until you delete one.')).toBeInTheDocument()
   })
 
-  test('when nothing needs attention, the Quick check success Alert is shown', async () => {
+  test('when every check is zero, the checks card shows only the "Ready to send" Alert', async () => {
+    // Given the default report (nothing to check)
     render(<ReceiptReport />)
-    await waitFor(() => {
-      expect(screen.getByText('No warnings and no duplicates found in 2026.')).toBeInTheDocument()
-    })
+
+    // Then one success Alert, and no check rows
+    expect(
+      await screen.findByText('Ready to send: every receipt of 2026 is reviewed and counted.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Before you send it' })).toBeInTheDocument()
+    expect(screen.queryByText('No possible duplicates')).not.toBeInTheDocument()
   })
 
-  test('the "Receipts not in these totals" panel links and the VAT line', async () => {
+  test('basis approved: the checks card lists not-approved and every non-zero "not in totals" bucket, and the VAT line appears once at the bottom', async () => {
+    // Given basis=approved with every bucket non-zero
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () =>
@@ -510,22 +547,28 @@ describe('ReceiptReport', () => {
     window.history.replaceState({}, '', '/?view=report&year=2026&basis=approved')
     render(<ReceiptReport />)
 
-    const notApprovedLink = await screen.findByRole('link', {
-      name: '3 receipts in 2026 are not approved yet',
-    })
-    expect(notApprovedLink).toHaveAttribute('href', '/?view=history&year=2026&status=needs_review')
-
-    const undatedLink = screen.getByRole('link', { name: '2 receipts have no valid date' })
-    expect(undatedLink).toHaveAttribute('href', '/?view=history&year=none')
-
+    // Then not-approved reads as left out of the totals, with the same "Review them" link
+    await screen.findByText(/3 receipts not approved, not in these totals/)
+    expect(screen.getByRole('link', { name: 'Review them' })).toHaveAttribute(
+      'href',
+      '/?view=history&year=2026&status=needs_review',
+    )
+    // And each "not in totals" bucket keeps its text and link
+    expect(screen.getByRole('link', { name: '2 receipts have no valid date' })).toHaveAttribute(
+      'href',
+      '/?view=history&year=none',
+    )
     expect(screen.getByText(/1 receipt has no total/)).toBeInTheDocument()
     expect(screen.getByText(/1 receipt has no currency/)).toBeInTheDocument()
     expect(screen.getByText(/1 receipt has no apartment/)).toBeInTheDocument()
-    expect(screen.getByText(/4 counted receipts still have warnings/)).toBeInTheDocument()
+    expect(screen.getByText('4 receipts have warnings')).toBeInTheDocument()
 
-    expect(
-      screen.getByText('Totals are the amounts printed on the receipts, including VAT. Ask your tax advisor how to use them.'),
-    ).toBeInTheDocument()
+    // And the VAT note appears exactly once, as the page's last element
+    const vat = screen.getAllByText(
+      'Totals are the amounts printed on the receipts, including VAT. Ask your tax advisor how to use them.',
+    )
+    expect(vat).toHaveLength(1)
+    expect(vat[0].nextElementSibling).toBeNull()
   })
 
   test('the "not approved" link is hidden when basis=all, even if excluded.not_approved were somehow nonzero', async () => {
@@ -544,11 +587,18 @@ describe('ReceiptReport', () => {
     expect(screen.queryByText(/are not approved yet/)).not.toBeInTheDocument()
   })
 
-  test('when every excluded count is zero, the excluded panel shows its own success Alert', async () => {
+  test('a zero check is one success row while another check is open', async () => {
+    // Given only one receipt with warnings
+    fetchSpy.mockImplementation(
+      routeFetch({ yearly: () => Promise.resolve(jsonResponse(200, reportResponse({ with_warnings: 1 }))) }),
+    )
     render(<ReceiptReport />)
-    await waitFor(() => {
-      expect(screen.getByText('Every receipt of 2026 is in these totals.')).toBeInTheDocument()
-    })
+
+    // Then every other check shows its single success row
+    expect(await screen.findByText('1 receipt has warnings')).toBeInTheDocument()
+    expect(screen.getByText('No possible duplicates')).toBeInTheDocument()
+    expect(screen.getByText('No receipts left out of these totals')).toBeInTheDocument()
+    expect(screen.getByText('Every counted receipt is reviewed')).toBeInTheDocument()
   })
 
   test('decimal string amounts display exactly as given, including negative and "0.00"', async () => {
@@ -830,23 +880,32 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     }
   })
 
-  test('the "not reviewed" line appears only when basis is all and counted_unreviewed > 0', async () => {
+  test('the export card comes last before the VAT note: ZIP primary, CSV secondary, options folded away, privacy note kept, no "not reviewed" line', async () => {
+    // Given a year with unreviewed receipts
     fetchSpy.mockImplementation(
       withApartments(
         routeFetch({
-          yearly: () =>
-            Promise.resolve(jsonResponse(200, reportResponse({ counted_unreviewed: 3 }))),
+          yearly: () => Promise.resolve(jsonResponse(200, reportResponse({ counted_unreviewed: 3 }))),
         }),
       ),
     )
     await renderReady()
-    expect(screen.getByText('Receipts that were not reviewed are included.')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByLabelText('Only count receipts I approved'))
-    await waitFor(() => {
-      expect(screen.getByText('2026, approved receipts only')).toBeInTheDocument()
-    })
+    // Then ZIP is the primary link and CSV the secondary one
+    expect(zipLink().className).toMatch(/\bbg-brand\b/)
+    expect(csvLink().className).not.toMatch(/\bbg-brand\b/)
+    // And the two selects sit in a closed "Export options" <details>
+    const options = screen.getByText('Export options').closest('details') as HTMLDetailsElement
+    expect(options.open).toBe(false)
+    expect(within(options).getByLabelText('Apartment')).toHaveValue('')
+    expect(within(options).getByLabelText('CSV format')).toHaveValue('excel_de')
+    // And the privacy note stays, the old "not reviewed" note is gone
+    expect(screen.getByText(/not encrypted/)).toBeInTheDocument()
     expect(screen.queryByText('Receipts that were not reviewed are included.')).not.toBeInTheDocument()
+    // And the export card is the last card on the page (only the VAT note follows)
+    const exportHeading = screen.getByRole('heading', { name: 'For your tax advisor' })
+    const exportCard = exportHeading.parentElement as HTMLElement
+    expect(exportCard.nextElementSibling?.textContent).toMatch(/^Totals are the amounts printed/)
   })
 
   test('counted_unreviewed = 0 under basis all shows no "not reviewed" line', async () => {

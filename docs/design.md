@@ -2220,6 +2220,53 @@ navigates (`src/test/linkClicks.ts`).
   added), plus grouping tests. `ReceiptReport.test.tsx` -- new: both
   cards' dots, and the description per basis.
 
+## Report: show only what matters
+
+The Report had grown to seven blocks; the owner needs the totals, one
+place that says whether it's safe to send, and the export.
+
+- **Order:** header + Year + "Only count receipts I approved"
+  (unchanged) -> summary cards -> "Before you send it" -> "Monthly
+  breakdown" (closed) -> "For your tax advisor" -> the VAT note, once.
+- **"Both apartments" emphasised** with a new `Card` prop,
+  `variant="emphasis"` (`bg-brand-soft` + `border-brand/30` instead of
+  `bg-surface` + `border-border-subtle` -- a complete class string per
+  variant, never a second competing background class; ink 15.97:1,
+  ink-muted 6.78:1 on `brand-soft`).
+- **"Before you send it" (`ReportChecks`)** replaces "Quick check",
+  "Receipts not in these totals" and the loose "N of the counted receipts
+  were not reviewed" line: one row per check with an icon + text (warning
+  triangle in `text-warning`, check mark in `text-success`; shape and
+  words carry the meaning). Not reviewed (or, under `basis=approved`,
+  not approved and not in these totals) + "Review them"; warnings +
+  closed "Show"; possible duplicates + closed "Show"; one row per non-zero
+  "not in totals" bucket. A clear check is one success row; all clear is
+  one success `Alert`, "Ready to send: every receipt of <year> is
+  reviewed and counted."
+- **Monthly breakdown:** closed `<details>`; all 12 months, a dash where
+  empty; no currency sub-heading with a single currency.
+- **Export card last:** ZIP primary, CSV secondary (unchanged), the
+  Apartment/CSV-format selects folded into a closed "Export options"
+  (defaults unchanged), the privacy note kept, the "not reviewed are
+  included" line dropped (`countedUnreviewed` prop removed).
+- **Removed:** "Largest receipts".
+- **Tests changed** (`ReceiptReport.test.tsx`, 7, all because the block
+  they checked was replaced): "counted_unreviewed > 0 shows the info line"
+  -> the not-reviewed check row + "Review them" link; "the monthly table
+  omits empty months" -> closed details with all 12 months, dashes, no
+  currency heading; 'the "Receipts not in these totals" panel links and
+  the VAT line' -> the same buckets as check rows under
+  `basis=approved`, VAT note once and last; "the three Quick check
+  blocks show their counts" -> warnings/duplicates rows with closed
+  "Show", no Largest/Quick check/excluded panel; "when every excluded
+  count is zero, the excluded panel shows its own success Alert" -> a
+  zero check is one success row; "when nothing needs attention, the
+  Quick check success Alert is shown" -> only the "Ready to send" Alert;
+  'the "not reviewed" line appears only when basis is all' (export card)
+  -> ZIP/CSV order, closed "Export options", privacy note, no "not
+  reviewed" line, export card last. New: `Card.test.tsx` -- the emphasis
+  variant.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
