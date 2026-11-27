@@ -799,6 +799,9 @@ describe('ReceiptHistory', () => {
       'Status',
     ])
     expect(header!.children[2]).toHaveClass('text-right')
+    // Status is right-aligned too, and Apartment is set apart from Total
+    expect(header!.children[4]).toHaveClass('text-right')
+    expect(header!.children[3]).toHaveClass('ml-4')
     expect(header!.parentElement).toBe(screen.getByRole('list').parentElement)
   })
 

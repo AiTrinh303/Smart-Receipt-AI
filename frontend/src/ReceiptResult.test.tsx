@@ -330,3 +330,14 @@ test('no discounts: one muted line "Discounts (USD): None detected" and no Disco
   // And Taxes is unchanged
   expect(screen.getByRole('heading', { name: 'Taxes (USD)' })).toBeInTheDocument()
 })
+
+test('an EUR receipt labels its columns and section headings with "€", and its total as "€…"', () => {
+  // Given a receipt in EUR
+  render(<ReceiptResult data={{ ...FULL_DATA, currency: 'EUR' }} onEdit={() => {}} />)
+
+  // Then column and section headings say "(€)", and the total reads "Total: €8.14"
+  expect(screen.getByText('Unit price (€)')).toBeInTheDocument()
+  expect(screen.getByText('Line total (€)')).toBeInTheDocument()
+  expect(screen.getByText('Discounts (€)')).toBeInTheDocument()
+  expect(screen.getByText('Total: €8.14')).toBeInTheDocument()
+})

@@ -125,12 +125,12 @@ export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusB
             {amount}
           </span>
           {showApartmentBadge && (
-            <span className="flex w-24 min-w-0 flex-shrink-0">
+            <span className="ml-4 flex w-24 min-w-0 flex-shrink-0">
               <ApartmentBadge apartmentName={item.apartment_name} />
             </span>
           )}
           {showStatusBadge && (
-            <span className="flex w-28 flex-shrink-0">
+            <span className="flex w-28 flex-shrink-0 justify-end">
               <StatusBadge status={item.status} />
             </span>
           )}
@@ -178,8 +178,8 @@ export function HistoryHeaderRow({
       <span className="min-w-0 flex-1">Store</span>
       <span className="w-28 flex-shrink-0">Date</span>
       <span className="w-28 flex-shrink-0 text-right">Total</span>
-      {showApartment && <span className="w-24 flex-shrink-0">Apartment</span>}
-      {showStatus && <span className="w-28 flex-shrink-0">Status</span>}
+      {showApartment && <span className="ml-4 w-24 flex-shrink-0">Apartment</span>}
+      {showStatus && <span className="w-28 flex-shrink-0 text-right">Status</span>}
     </div>
   )
 }

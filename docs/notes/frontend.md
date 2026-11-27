@@ -325,7 +325,10 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   else, `MissingValue` when missing), amount (`w-28`, right-aligned,
   `tabular-nums`, `whitespace-nowrap`, via `formatMoney`), then the
   apartment (`w-24`) and status (`w-28`) columns — each column reserved
-  whenever it's shown at all. Above the rows, inside the same `Card`,
+  whenever it's shown at all. Status (cell and header) is right-aligned
+  (`justify-end`/`text-right`), ending at the row's `px-4` padding; the
+  Apartment cell and header carry `ml-4` so the right-aligned Total never
+  touches it. Above the rows, inside the same `Card`,
   `HistoryHeaderRow` (exported) labels them — "Store", "Date", "Total"
   (right-aligned like the amounts), "Apartment" (only in "All
   apartments") and "Status" (only under Status "All") — in muted
@@ -515,7 +518,8 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   Amounts use `formatMoney` **with** `includeCurrency` (its default)
   rather than `false`, since — unlike `ReceiptResult.tsx`'s
   one-currency-per-receipt table — rows here can carry different
-  currencies, so each amount must say which one (e.g. "EUR 4.99"). The
+  currencies, so each amount must say which one (e.g. "€4.99" or
+  "USD 4.99"). The
   item link attaches the same `&from=`
   mechanism as History's rows (`e.preventDefault()` + `navigateTo`).
   **Cards** (below `sm`) show the same name link (2 lines), a muted
@@ -594,7 +598,15 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   already-rounded decimal strings (e.g. `"1234.56"`, `"-12.50"`).
   `formatMoneyFromString()` (`components/ui/formatMoney.ts`) displays
   one exactly as given, with its currency prefix — never parsed into a
-  number and re-formatted. This is also why the monthly table has **no
+  number and re-formatted. **Currency display (both helpers):** EUR
+  shows as "€8.49"/"-€0.12" (minus before the symbol; matched
+  case-insensitively), any other currency keeps its code ("USD 4.99",
+  "USD -0.12") — pure string placement around the finished amount.
+  `currencySymbol(currency)` ("€" for EUR, else the code) labels amounts
+  in headings: the receipt table's "Unit price (€)"/"Line total (€)",
+  "Discounts (€)"/"Taxes (€)", the Report's per-currency headings and
+  captions. The receipt meta line's currency field, the edit form's
+  currency input and the exports keep the code. This is also why the monthly table has **no
   combined "Both" column**: `GET /reports/yearly`'s `overall` field has
   no monthly breakdown (only each apartment's own `months` does), and
   summing two apartments' decimal strings to produce one would be

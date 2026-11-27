@@ -775,7 +775,7 @@ button with no file selected gave no explanation.
   apartment-badge-hidden-in-one-tab rule) -- and Status. Numbers are
   right-aligned, `tabular-nums`, `whitespace-nowrap`. Amounts use the
   existing `formatMoney` helper **with each row's own currency included**
-  (e.g. "EUR 4.99", not just "4.99") -- unlike `ReceiptResult.tsx`'s
+  (e.g. "€4.99" / "USD 4.99", not just "4.99") -- unlike `ReceiptResult.tsx`'s
   per-receipt table (one currency, shown once in the column header), rows
   here can come from receipts in different currencies, so the currency
   has to travel with every amount. A missing value in any column shows
@@ -1840,7 +1840,7 @@ useful on the hundredth visit too.
   keeps `store_name`/`purchase_date`/`total`/`currency` (each nullable)
   from the extract response as the item's `extracted`; skipped and
   failed items never get one. A done row adds a line "`<store>` ·
-  `<date>` · `<amount>`" (amount through `formatMoney`, so "EUR 23.50";
+  `<date>` · `<amount>`" (amount through `formatMoney`, so "€23.50";
   `MissingValue` for a missing part; `DateCell`'s warning icon and hidden
   "Date not recognized" for a non-ISO date) above the unchanged "Open"
   link and "Check values (N)" badge -- an obviously wrong store or total
@@ -2022,7 +2022,8 @@ height while every other control was a `Button` (`font-medium`).
   total column. The previous single string "Total: <amount>" is kept as
   an `sr-only` span (screen readers read it once; the visible parts are
   `aria-hidden`), so every test asserting it still passes unchanged.
-- **No discounts:** one muted line "Discounts (EUR): None detected"
+- **No discounts:** one muted line "Discounts (€): None detected" (an EUR
+  receipt; "(€)" since "Money: € for EUR" below)
   instead of a heading plus "None detected". Taxes unchanged.
 - **"Upload another receipt":** same text, same `handleReset`, now a
   text-style `<button>` (brand, underlined) instead of an outlined ghost
@@ -2102,6 +2103,40 @@ height while every other control was a `Button` (`font-medium`).
   under Status "Approved", no header below `sm`.
 - **`?view=styleguide`:** the "History rows" sample shows the header row
   above the wide layout.
+
+## Money: "€" for EUR, and right-aligned History columns
+
+- **"€" for EUR, everywhere amounts are shown.** The shared helpers in
+  `components/ui/formatMoney.ts` decide this once, so History, Items,
+  Report, the receipt detail, the upload side panel, the batch queue and
+  the duplicate warnings all follow: an EUR amount reads "€8.49", a
+  negative one "-€0.12" (the minus before the symbol); any other currency
+  keeps its code exactly as before ("USD 4.99", "USD -0.12"). EUR is
+  matched case-insensitively ("eur" too). Still no arithmetic: the
+  helper only places the sign/symbol around the already-finished amount
+  string (`formatMoneyFromString` still shows the backend's decimal
+  string as given).
+- **Currency labels:** a new `currencySymbol(currency)` ("€" for EUR,
+  else the code) labels amounts in headings: the receipt table's "Unit
+  price (€)"/"Line total (€)", "Discounts (€)"/"Taxes (€)", and the
+  Report's per-currency headings and table captions.
+- **Left as the code on purpose:** the receipt meta line's currency
+  ("15.01.2026 · EUR" -- it states the receipt's currency field, not an
+  amount), the edit form's currency input, and the CSV/ZIP exports
+  (backend, out of scope).
+- **History columns (from `sm` up):** Status (header and badge) is now
+  right-aligned, ending at the row's right padding (`px-4`), matching
+  Store's left edge; Apartment (header and cell) gets `ml-4` on top of the
+  row gap, so the right-aligned Total no longer runs into it. Date and
+  Apartment stay left-aligned, Total right-aligned. Below `sm`: unchanged.
+- **Tests:** only "EUR " -> "€" in expected strings, by file:
+  `ReceiptItems.test.tsx` 4, `ReceiptReport.test.tsx` 3,
+  `formatMoney.test.ts` 3, `ReceiptUpload.duplicate.test.tsx` 2,
+  `BatchQueue.test.tsx` 2, `UploadSidePanel.test.tsx` 1,
+  `ReceiptUpload.batch.test.tsx` 1 (16 in all). New: EUR positive/negative
+  and lower-case, other currencies unchanged, `currencySymbol`, the "(€)"
+  headings and "Total: €8.14" on an EUR receipt, and the right-aligned
+  Status / spaced Apartment header in History.
 
 ## Changelog
 

@@ -254,7 +254,7 @@ const SAMPLE_SIDEWAYS_RECEIPT_URL = `data:image/svg+xml;utf8,${encodeURIComponen
 
 const HISTORY_SAMPLE_BASE = {
   original_filename: 'a.jpg',
-  currency: 'USD',
+  currency: 'EUR',
   created_at: '2026-01-15T00:00:00+00:00',
 }
 
@@ -292,6 +292,7 @@ const HISTORY_SAMPLE_ROWS: { item: ReceiptSummary; showApartmentBadge: boolean; 
       ...HISTORY_SAMPLE_BASE,
       receipt_id: 'sg-3',
       store_name: 'Bakery',
+      currency: 'USD',
       purchase_date: null,
       total: 3.2,
       apartment_id: null,
@@ -885,7 +886,9 @@ function StyleGuide() {
           From sm up, a muted column header row (Store, Date, Total, Apartment, Status -- hidden from
           assistive tech) sits above the rows with the same widths; below sm there is none. Rows 1-3 are as
           in the "All apartments" tab with Status "All": the muted apartment (short name, full name in the
-          tooltip) and a status badge for every receipt, approved or not. Row 2 shows an
+          tooltip) and a status badge for every receipt, approved or not. Total and Status are right-aligned,
+          with extra space between Total and Apartment; EUR amounts read "€…", other currencies keep their
+          code (row 3, USD). Row 2 shows an
           unrecognized date with the same warning marker the Items view uses, row 3 a missing date and a
           missing apartment. Row 4 is a clamped long store name inside a specific apartment tab with a
           Status filter active (no apartment, no status).
@@ -1110,7 +1113,7 @@ function StyleGuide() {
         <Card className="flex flex-col gap-3">
           <Alert variant="warning">
             <p>
-              This file is already saved as Corner Store, 15.01.2026, EUR 19.99 (Bergblick).
+              This file is already saved as Corner Store, 15.01.2026, €19.99 (Bergblick).
             </p>
             <div className="mt-2 flex flex-wrap gap-3">
               <a
@@ -1479,10 +1482,10 @@ function StyleGuide() {
         <ExportCard year={null} basis="all" apartments={null} countedUnreviewed={0} />
 
         <Card className="flex flex-col gap-4">
-          <h3 className="text-sm font-semibold text-ink">EUR</h3>
+          <h3 className="text-sm font-semibold text-ink">€</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <caption className="sr-only">Monthly totals in EUR</caption>
+              <caption className="sr-only">Monthly totals in €</caption>
               <thead>
                 <tr className="border-b border-border text-ink-muted">
                   <th scope="col" className="py-1 pr-2 font-medium">
@@ -1522,7 +1525,7 @@ function StyleGuide() {
                 <a href="#" className="font-medium text-ink underline">
                   Corner Store
                 </a>
-                <p className="mt-1 text-ink-muted">15.01.2026 · EUR 19.99</p>
+                <p className="mt-1 text-ink-muted">15.01.2026 · €19.99</p>
                 <p className="mt-1 text-ink-muted">total does not match the items</p>
               </li>
             </ul>
@@ -1533,7 +1536,7 @@ function StyleGuide() {
             </summary>
             <ul className="flex flex-col gap-2">
               <li className="rounded-md border border-border p-3 text-sm">
-                <p className="font-medium text-ink">Corner Store, 15.01.2026, EUR 10.00</p>
+                <p className="font-medium text-ink">Corner Store, 15.01.2026, €10.00</p>
                 <p className="mt-1 flex flex-wrap gap-2">
                   <a href="#" className="font-medium text-ink underline">
                     Open 1

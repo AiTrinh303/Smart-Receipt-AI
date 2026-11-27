@@ -1,4 +1,4 @@
-import { formatMoney, formatMoneyFromString } from './formatMoney'
+import { currencySymbol, formatMoney, formatMoneyFromString } from './formatMoney'
 
 test('formats with the currency code by default', () => {
   expect(formatMoney(79.4, 'USD')).toBe('USD 79.40')
@@ -40,10 +40,10 @@ test('never outputs "NaN", "null" or "undefined"', () => {
 // --- formatMoneyFromString: decimal strings, no arithmetic -----------------
 
 test('formatMoneyFromString shows the decimal string exactly as given, with its currency', () => {
-  expect(formatMoneyFromString('0.30', 'EUR')).toBe('EUR 0.30')
+  expect(formatMoneyFromString('0.30', 'EUR')).toBe('€0.30')
   expect(formatMoneyFromString('1234.56', 'USD')).toBe('USD 1234.56')
-  expect(formatMoneyFromString('-12.50', 'EUR')).toBe('EUR -12.50')
-  expect(formatMoneyFromString('0.00', 'EUR')).toBe('EUR 0.00')
+  expect(formatMoneyFromString('-12.50', 'EUR')).toBe('-€12.50')
+  expect(formatMoneyFromString('0.00', 'EUR')).toBe('€0.00')
 })
 
 test('formatMoneyFromString omits the currency when includeCurrency is false', () => {
@@ -64,4 +64,32 @@ test('formatMoneyFromString never outputs "NaN", "null" or "undefined"', () => {
   ]) {
     expect(result).not.toMatch(/NaN|null|undefined/i)
   }
+})
+
+// --- "€" for EUR -------------------------------------------------------------
+
+test('EUR amounts show the € sign, with a minus sign before it', () => {
+  // Given EUR amounts, as numbers and as decimal strings
+  // Then they read "€8.49" / "-€0.12", never "EUR 8.49"
+  expect(formatMoney(8.49, 'EUR')).toBe('€8.49')
+  expect(formatMoney(-0.12, 'EUR')).toBe('-€0.12')
+  expect(formatMoneyFromString('8.49', 'EUR')).toBe('€8.49')
+  expect(formatMoneyFromString('-0.12', 'EUR')).toBe('-€0.12')
+  // And a lower-case or padded code is still recognized as EUR
+  expect(formatMoney(1, 'eur')).toBe('€1.00')
+})
+
+test('other currencies keep their code, exactly as before', () => {
+  expect(formatMoney(4.99, 'USD')).toBe('USD 4.99')
+  expect(formatMoney(-0.12, 'USD')).toBe('USD -0.12')
+  expect(formatMoneyFromString('-12.50', 'CHF')).toBe('CHF -12.50')
+})
+
+test('without the currency prefix, EUR amounts are plain numbers', () => {
+  expect(formatMoney(8.49, 'EUR', { includeCurrency: false })).toBe('8.49')
+})
+
+test('currencySymbol labels EUR as € and leaves other codes alone', () => {
+  expect(currencySymbol('EUR')).toBe('€')
+  expect(currencySymbol('USD')).toBe('USD')
 })

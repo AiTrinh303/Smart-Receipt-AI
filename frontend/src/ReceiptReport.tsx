@@ -17,7 +17,7 @@ import Alert from './components/ui/Alert'
 import Card from './components/ui/Card'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
-import { formatMoneyFromString } from './components/ui/formatMoney'
+import { formatMoneyFromString, currencySymbol } from './components/ui/formatMoney'
 import { useApartments } from './hooks/useApartments'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo } from './navigation'
@@ -107,7 +107,7 @@ function openReceipt(receiptId: string) {
   navigateTo(receiptHref(receiptId).slice(1))
 }
 
-/** Renders one currency row ("EUR 1,234.56 Β· 7 receipts" -- the amount
+/** Renders one currency row ("€1,234.56 Β· 7 receipts" -- the amount
  * large/tabular/right-aligned, as the summary cards call for). */
 function CurrencyRow({ entry }: { entry: ReportCurrencyTotal }) {
   return (
@@ -233,7 +233,7 @@ function MonthlyCurrencyTable({
   if (isSmallScreen) {
     return (
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-ink">{currency}</h3>
+        <h3 className="text-sm font-semibold text-ink">{currencySymbol(currency)}</h3>
         <ul className="flex flex-col gap-2">
           {months.map((month) => (
             <li key={month} className="rounded-md border border-border p-3 text-sm">
@@ -257,10 +257,10 @@ function MonthlyCurrencyTable({
 
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold text-ink">{currency}</h3>
+      <h3 className="text-sm font-semibold text-ink">{currencySymbol(currency)}</h3>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <caption className="sr-only">Monthly totals in {currency}</caption>
+          <caption className="sr-only">Monthly totals in {currencySymbol(currency)}</caption>
           <thead>
             <tr className="border-b border-border text-ink-muted">
               <th scope="col" className="py-1 pr-2 font-medium">

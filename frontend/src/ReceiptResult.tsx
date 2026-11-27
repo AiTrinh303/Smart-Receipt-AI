@@ -4,7 +4,7 @@ import { UNRECOGNIZED_DATE_TITLE } from './ReceiptItems'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import MissingValue from './components/ui/MissingValue'
-import { formatMoney } from './components/ui/formatMoney'
+import { formatMoney, currencySymbol } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
 
 const NOT_DETECTED = 'Not detected'
@@ -140,7 +140,7 @@ interface ReceiptResultProps {
 }
 
 function ReceiptResult({ data, onEdit }: ReceiptResultProps) {
-  const currencyLabel = data.currency ? ` (${data.currency})` : ''
+  const currencyLabel = data.currency ? ` (${currencySymbol(data.currency)})` : ''
   const isSmallScreen = useMediaQuery('(max-width: 639px)')
 
   return (

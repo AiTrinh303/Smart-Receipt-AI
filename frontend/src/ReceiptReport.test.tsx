@@ -147,7 +147,7 @@ describe('ReceiptReport', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Bergblick' })).toBeInTheDocument()
     })
-    expect(screen.getAllByText('EUR 25.00').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('€25.00').length).toBeGreaterThan(0)
     expect(screen.getAllByText('2 receipts').length).toBeGreaterThan(0)
     expect(screen.getByText('Both apartments')).toBeInTheDocument()
   })
@@ -174,7 +174,7 @@ describe('ReceiptReport', () => {
     )
     render(<ReceiptReport />)
     await waitFor(() => {
-      expect(screen.getAllByText('EUR 10.00').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('€10.00').length).toBeGreaterThan(0)
     })
     expect(screen.getAllByText('USD 20.00').length).toBeGreaterThan(0)
   })
@@ -508,7 +508,7 @@ describe('ReceiptReport', () => {
     )
     render(<ReceiptReport />)
     await waitFor(() => {
-      expect(screen.getAllByText('EUR -12.50').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('-€12.50').length).toBeGreaterThan(0)
     })
     expect(screen.getAllByText('USD 0.00').length).toBeGreaterThan(0)
   })

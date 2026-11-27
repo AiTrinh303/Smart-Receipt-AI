@@ -15,8 +15,30 @@ function resolveDecimals(currency: string): number | null {
 }
 
 interface FormatMoneyOptions {
-  /** Prefix the amount with its currency code, e.g. "USD 79.40". */
+  /** Prefix the amount with its currency: "€79.40" for EUR, the code for
+   * any other currency ("USD 79.40"). */
   includeCurrency?: boolean
+}
+
+function isEuro(currency: string): boolean {
+  return currency.trim().toUpperCase() === 'EUR'
+}
+
+/** How a currency is labeled on screen: "€" for EUR, otherwise the code as
+ * given ("USD"). For headings/column labels such as "Unit price (€)". */
+export function currencySymbol(currency: string): string {
+  return isEuro(currency) ? '€' : currency
+}
+
+/** Puts the currency in front of an amount that is already a finished
+ * string: "€8.49"/"-€0.12" (the sign goes before the symbol, as is usual
+ * for €), or "USD 4.99"/"USD -0.12" for any other currency, as before.
+ * Pure string handling -- the amount itself is never parsed or changed. */
+function withCurrency(amount: string, currency: string): string {
+  if (!isEuro(currency)) {
+    return `${currency} ${amount}`
+  }
+  return amount.startsWith('-') ? `-€${amount.slice(1)}` : `€${amount}`
 }
 
 export function formatMoney(
@@ -39,7 +61,7 @@ export function formatMoney(
   }
 
   const amount = value.toFixed(decimals)
-  return includeCurrency ? `${currency} ${amount}` : amount
+  return includeCurrency ? withCurrency(amount, currency) : amount
 }
 
 /** Displays an amount that already arrived as a decimal STRING (e.g. the
@@ -56,5 +78,5 @@ export function formatMoneyFromString(
     return NOT_DETECTED
   }
 
-  return includeCurrency && currency ? `${currency} ${value}` : value
+  return includeCurrency && currency ? withCurrency(value, currency) : value
 }

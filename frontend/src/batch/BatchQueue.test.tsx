@@ -148,7 +148,7 @@ test('a server-matched duplicate shows the "Already saved" badge, the summary li
     screen.getByText(
       (_, element) =>
         element?.tagName.toLowerCase() === 'p' &&
-        element.textContent === 'Same file as Corner Store · 15.01.2026 · EUR 19.99 · Bergblick',
+        element.textContent === 'Same file as Corner Store · 15.01.2026 · €19.99 · Bergblick',
     ),
   ).toBeInTheDocument()
 
@@ -245,7 +245,7 @@ test('a done row shows "<store> · <date> · <amount>" under the main line, keep
   const store = screen.getByText('Edeka')
   expect(store).toHaveAttribute('title', 'Edeka')
   const line = store.closest('p') as HTMLElement
-  expect(line).toHaveTextContent('Edeka · 20.11.2026 · EUR 23.50')
+  expect(line).toHaveTextContent('Edeka · 20.11.2026 · €23.50')
 
   // And Open and Check values are still there
   expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/?receipt=r1')

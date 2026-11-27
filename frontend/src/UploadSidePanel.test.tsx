@@ -200,7 +200,7 @@ test('"Latest uploads" lists the 5 receipts, each linking to ?receipt=<id>, with
   expect(store).toHaveAttribute('title', 'Edeka')
   expect(store.className).toContain('line-clamp-1')
   expect(within(first).getByText('20.11.2026')).toBeInTheDocument()
-  expect(within(first).getByText('EUR 23.50')).toBeInTheDocument()
+  expect(within(first).getByText('€23.50')).toBeInTheDocument()
   expect(within(first).getByText('Waldglück')).toBeInTheDocument()
 })
 

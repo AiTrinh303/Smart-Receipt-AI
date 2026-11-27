@@ -479,7 +479,7 @@ test('Given a finished batch, Then the done alert keeps its text, gains an "Open
   expect(reportLink).toHaveAttribute('href', '/?view=report')
 
   // And each done row shows store · date · amount (MissingValue when absent)
-  expect(screen.getByText('Edeka').closest('p')).toHaveTextContent('Edeka · 20.11.2026 · EUR 23.50')
+  expect(screen.getByText('Edeka').closest('p')).toHaveTextContent('Edeka · 20.11.2026 · €23.50')
   const rowB = screen.getByText('b.jpg').closest('li') as HTMLElement
   expect(rowB).toHaveTextContent('—Not detected · 15.01.2026 · —Not detected')
 

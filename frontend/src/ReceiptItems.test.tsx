@@ -169,8 +169,8 @@ describe('ReceiptItems', () => {
     const rows = screen.getAllByRole('row').slice(1) // drop header row
     expect(rows[0]).toHaveTextContent('Milk')
     expect(rows[1]).toHaveTextContent('Bread')
-    expect(screen.getByText('EUR 1.50')).toBeInTheDocument()
-    expect(screen.getByText('EUR 3.00')).toBeInTheDocument()
+    expect(screen.getByText('€1.50')).toBeInTheDocument()
+    expect(screen.getByText('€3.00')).toBeInTheDocument()
     expect(screen.getByText('USD 2.00')).toBeInTheDocument()
     expect(screen.getByText('USD 4.00')).toBeInTheDocument()
   })
@@ -746,7 +746,7 @@ describe('ReceiptItems', () => {
     expect(screen.getByTitle(longStore)).toBeInTheDocument()
   })
 
-  test('money text is unchanged ("EUR 2.23")', async () => {
+  test('money text is unchanged ("€2.23")', async () => {
     const row = makeRow({ unit_price: 2.23, currency: 'EUR' })
     fetchSpy.mockImplementation(
       routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
@@ -755,7 +755,7 @@ describe('ReceiptItems', () => {
     render(<ReceiptItems />)
 
     await waitFor(() => {
-      expect(screen.getByText('EUR 2.23')).toBeInTheDocument()
+      expect(screen.getByText('€2.23')).toBeInTheDocument()
     })
   })
 

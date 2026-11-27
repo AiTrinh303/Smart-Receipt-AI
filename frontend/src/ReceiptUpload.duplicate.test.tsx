@@ -108,7 +108,7 @@ test('a 409 DUPLICATE_FILE shows the warning Alert instead of the generic error,
         (_, element) =>
           element?.tagName.toLowerCase() === 'p' &&
           element.textContent ===
-            'This file is already saved as Corner Store, 15.01.2026, EUR 19.99 (Oberaudorf Bergblick).',
+            'This file is already saved as Corner Store, 15.01.2026, €19.99 (Oberaudorf Bergblick).',
       ),
     ).toBeInTheDocument()
   })
@@ -180,7 +180,7 @@ test('"Upload anyway" repeats the upload with allow_duplicate=true, then extract
     screen.queryByText(
       (_, element) =>
         element?.tagName.toLowerCase() === 'p' &&
-        element.textContent === 'This file is already saved as Corner Store, 15.01.2026, EUR 19.99 (Oberaudorf Bergblick).',
+        element.textContent === 'This file is already saved as Corner Store, 15.01.2026, €19.99 (Oberaudorf Bergblick).',
     ),
   ).not.toBeInTheDocument()
 })
