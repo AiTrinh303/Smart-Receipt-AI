@@ -153,21 +153,21 @@ describe('ReceiptReport', () => {
     expect(screen.getByText('Both apartments')).toBeInTheDocument()
   })
 
-  test('each apartment card takes its tone as background and border (no dot); Both apartments is white with a brand border', async () => {
+  test('each apartment card takes its tone\'s stronger tint and border (no dot); Both apartments is a neutral slate-100 card', async () => {
     // Given the default report with both apartments
     render(<ReceiptReport />)
     const waldglueck = await screen.findByRole('heading', { name: 'Waldglück' })
     const bergblick = screen.getByRole('heading', { name: 'Bergblick' })
 
     // Then each card has its tone's soft fill and faint border, and no dot
-    expect(bergblick.parentElement).toHaveClass('bg-apartment-sky-soft', 'border-apartment-sky/30')
-    expect(waldglueck.parentElement).toHaveClass('bg-apartment-fuchsia-soft', 'border-apartment-fuchsia/30')
+    expect(bergblick.parentElement).toHaveClass('bg-apartment-sky-tint', 'border-apartment-sky-border')
+    expect(waldglueck.parentElement).toHaveClass('bg-apartment-fuchsia-tint', 'border-apartment-fuchsia-border')
     expect(bergblick.querySelector('[aria-hidden="true"]')).toBeNull()
     expect(waldglueck.querySelector('[aria-hidden="true"]')).toBeNull()
-    // And "Both apartments" is white, set apart by a brand border
+    // And "Both apartments" is neutral: slate-100 with the decorative border, no brand border
     const both = screen.getByRole('heading', { name: 'Both apartments' }).parentElement as HTMLElement
-    expect(both).toHaveClass('bg-surface', 'border-2', 'border-brand')
-    expect(both).not.toHaveClass('bg-brand-soft')
+    expect(both).toHaveClass('bg-slate-100', 'border-border-subtle')
+    expect(both).not.toHaveClass('border-brand')
   })
 
   test('an apartment id with no tone gets the plain card', async () => {

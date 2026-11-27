@@ -668,14 +668,17 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   advisor"; the VAT note.
   **Summary**: one `Card` per apartment (`apartmentShortName` visible,
   full name in `title`) whose whole surface is the apartment's tone —
-  `Card`'s `surface` prop with `apartmentToneClasses(id).card` (the soft
-  fill plus a faint `/30` border in the tone colour; an unknown apartment
-  gets the plain card; ink ≥ 16.6:1 and ink-muted ≥ 7.0:1 on either soft
-  fill) — with a right-aligned, tabular-nums amount per currency plus "N
-  receipts", then a combined "Both apartments" card built straight from
-  the backend's own `overall` (never summed from the apartment cards),
-  white with a 2px brand border (`Card variant="emphasis"`), so it
-  doesn't read as a third apartment. An apartment with no data shows "No
+  `Card`'s `surface` prop with `apartmentToneClasses(id).card` (the
+  tone's `tint`, the -100 shade, with a `border` one step stronger, the
+  -300 shade — deliberately stronger than the pills' `soft` -50 fill; an
+  unknown apartment gets the plain card; ink ≥ 15.3:1, ink-muted ≥
+  6.5:1 on either tint) — with a right-aligned, tabular-nums amount per
+  currency plus "N receipts", then a combined "Both apartments" card
+  built straight from the backend's own `overall` (never summed from the
+  apartment cards), neutral: `Card variant="emphasis"` is now
+  `bg-slate-100` with the normal decorative border (ink 16.30:1,
+  ink-muted 6.92:1), amount still bold, so it reads as the sum of the
+  two, not as a third apartment or a focused control. An apartment with no data shows "No
   approved receipts in `<year>`." (`basis=approved`) or "No receipts in
   `<year>`." (`basis=all`).
   **"Before you send it" (`ReportChecks`, exported):** one card replacing

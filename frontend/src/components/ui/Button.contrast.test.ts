@@ -252,11 +252,11 @@ describe.each(['sky', 'fuchsia'])('apartment tone "%s"', (tone) => {
 
 describe.each(['oberaudorf-bergblick', 'sankt-englmar-waldglueck'])('apartment id "%s"', (apartmentId) => {
   test('gets a real (non-neutral) tone whose every class resolves to a theme colour', () => {
-    const { pill, dot } = apartmentToneClasses(apartmentId)
-    const colourClasses = `${pill} ${dot}`.split(' ')
+    const { pill, dot, card } = apartmentToneClasses(apartmentId)
+    const colourClasses = `${pill} ${dot} ${card}`.split(' ').filter((cls) => cls !== 'border')
     expect(colourClasses.every((cls) => cls.includes('apartment-'))).toBe(true)
     for (const cls of colourClasses) {
-      const token = cls.replace(/^(bg|text)-/, '')
+      const token = cls.replace(/^(bg|text|border)-/, '')
       expect(resolveToken(token)).toMatch(HEX_PATTERN)
     }
   })
@@ -265,18 +265,38 @@ describe.each(['oberaudorf-bergblick', 'sankt-englmar-waldglueck'])('apartment i
 // --- Text on an apartment-toned card (the Report's summary cards) ----------
 //
 // The name and amount are `ink`, the receipt count `ink-muted`, both on the
-// tone's soft fill. Ratios printed so a run shows the measured values.
+// tone's `tint` (-100). Ratios printed so a run shows the measured values.
+// The -200 shades are printed too (not used, no assertion), to compare if a
+// darker card is wanted later; the "Both apartments" card (slate-100) is
+// checked as well.
+
+const SHADES_200: Record<string, string> = { sky: '#bae6fd', fuchsia: '#f5d0fe' }
 
 describe.each(['sky', 'fuchsia'])('text on the "%s" summary card', (tone) => {
-  test('ink and ink-muted meet 4.5:1 on the soft background -- measured ratios shown below', () => {
-    const softHex = resolveToken(`apartment-${tone}-soft`) as string
-    const ink = contrastRatio(resolveToken('ink') as string, softHex)
-    const inkMuted = contrastRatio(resolveToken('ink-muted') as string, softHex)
+  test('ink and ink-muted meet 4.5:1 on the tint -- measured ratios (and the -200 shade for comparison) shown below', () => {
+    const tintHex = resolveToken(`apartment-${tone}-tint`) as string
+    const inkHex = resolveToken('ink') as string
+    const inkMutedHex = resolveToken('ink-muted') as string
+    const ink = contrastRatio(inkHex, tintHex)
+    const inkMuted = contrastRatio(inkMutedHex, tintHex)
+    const shade200 = SHADES_200[tone]
     // eslint-disable-next-line no-console
     console.log(
-      `${tone} card (${softHex}): ink ${ink.toFixed(2)}:1, ink-muted ${inkMuted.toFixed(2)}:1`,
+      `${tone} card tint ${tintHex}: ink ${ink.toFixed(2)}:1, ink-muted ${inkMuted.toFixed(2)}:1 | ` +
+        `for comparison ${tone}-200 ${shade200}: ink ${contrastRatio(inkHex, shade200).toFixed(2)}:1, ` +
+        `ink-muted ${contrastRatio(inkMutedHex, shade200).toFixed(2)}:1`,
     )
     expect(ink).toBeGreaterThanOrEqual(4.5)
     expect(inkMuted).toBeGreaterThanOrEqual(4.5)
   })
+})
+
+test('ink and ink-muted meet 4.5:1 on the "Both apartments" card (slate-100) -- measured ratios shown below', () => {
+  const slate100 = '#f1f5f9'
+  const ink = contrastRatio(resolveToken('ink') as string, slate100)
+  const inkMuted = contrastRatio(resolveToken('ink-muted') as string, slate100)
+  // eslint-disable-next-line no-console
+  console.log(`Both apartments card slate-100 ${slate100}: ink ${ink.toFixed(2)}:1, ink-muted ${inkMuted.toFixed(2)}:1`)
+  expect(ink).toBeGreaterThanOrEqual(4.5)
+  expect(inkMuted).toBeGreaterThanOrEqual(4.5)
 })

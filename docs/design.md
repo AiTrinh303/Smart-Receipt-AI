@@ -46,8 +46,12 @@ CSS" below -- jsdom's 100+ passing tests say nothing about layout or color.
 | `danger-soft`    | `#fef2f2` | Error background              | — (background)      |
 | `apartment-sky`  | `#0369a1` | Bergblick's tone: pill text, dot (sky-700) | 5.93:1; 5.57:1 on `apartment-sky-soft` |
 | `apartment-sky-soft` | `#f0f9ff` | Bergblick's pill background (sky-50) | — (background) |
+| `apartment-sky-tint` | `#e0f2fe` | Bergblick's Report card background (sky-100) | ink 15.56:1, ink-muted 6.60:1 on it |
+| `apartment-sky-border` | `#7dd3fc` | Bergblick's Report card border (sky-300) | — (decorative) |
 | `apartment-fuchsia` | `#a21caf` | Waldglück's tone: pill text, dot (fuchsia-700) | 6.32:1; 5.89:1 on `apartment-fuchsia-soft` |
 | `apartment-fuchsia-soft` | `#fdf4ff` | Waldglück's pill background (fuchsia-50) | — (background) |
+| `apartment-fuchsia-tint` | `#fae8ff` | Waldglück's Report card background (fuchsia-100) | ink 15.35:1, ink-muted 6.51:1 on it |
+| `apartment-fuchsia-border` | `#f0abfc` | Waldglück's Report card border (fuchsia-300) | — (decorative) |
 
 All text-on-background combinations above meet WCAG AA (4.5:1 for normal
 text). A disabled `Button` uses `slate-300`/`slate-600` text, which still
@@ -2324,6 +2328,28 @@ itself; that part was verified by hand, as above.)
   `Card.test.tsx` emphasis test -> white + `border-2 border-brand`, plus
   the `surface` override. New: an unknown apartment's plain card; ink/
   ink-muted contrast on each soft fill.
+
+## Stronger apartment colours on the Report cards
+
+- **Tint per tone:** new tokens `apartment-<tone>-tint` (-100) and
+  `apartment-<tone>-border` (-300); `apartmentToneClasses(id).card` is
+  now `border border-apartment-<tone>-border bg-apartment-<tone>-tint` --
+  one step stronger than the pills, which keep the `soft` (-50) fill.
+- **"Both apartments" neutral:** the brand border read as a focused
+  control; `Card variant="emphasis"` is now `border border-border-subtle
+  bg-slate-100`; the amount stays bold.
+- **Measured** (`Button.contrast.test.ts`, printed): sky tint `#e0f2fe`
+  ink 15.56:1, ink-muted 6.60:1; fuchsia tint `#fae8ff` ink 15.35:1,
+  ink-muted 6.51:1; slate-100 ink 16.30:1, ink-muted 6.92:1. For a
+  darker card later (printed, not used): sky-200 `#bae6fd` ink 13.45:1,
+  ink-muted 5.71:1; fuchsia-200 `#f5d0fe` ink 13.04:1, ink-muted 5.53:1
+  -- both would still pass 4.5:1.
+- **Tests changed:** `ReceiptReport.test.tsx` (the card test expects the
+  tint/border classes and a slate-100 "Both apartments"),
+  `apartmentTone.test.ts` (the `card` strings), `Card.test.tsx` (the
+  emphasis variant and the `surface` sample) -- each because the class
+  string it asserts changed. The contrast test now also resolves each
+  apartment's `card` classes against the theme, and checks slate-100.
 
 ## Changelog
 

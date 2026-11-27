@@ -23,9 +23,10 @@ export interface ApartmentToneClasses {
   /** A small dot before a name (tabs, choice cards, side panel). */
   dot: string
   /** A whole card in the apartment's tone (the Report's summary cards):
-   * the soft fill plus a faint border in the tone colour, as one complete
-   * border-and-background string for `Card`'s `surface` prop. Neutral is
-   * the plain card (white, decorative `border-subtle`). */
+   * the stronger `tint` fill (-100) with a `border` one step stronger
+   * (-300), as one complete border-and-background string for `Card`'s
+   * `surface` prop -- deliberately stronger than the pills' `soft` fill.
+   * Neutral is the plain card (white, decorative `border-subtle`). */
   card: string
 }
 
@@ -33,12 +34,12 @@ export const APARTMENT_TONE_CLASSES: Readonly<Record<ApartmentTone, ApartmentTon
   sky: {
     pill: 'bg-apartment-sky-soft text-apartment-sky',
     dot: 'bg-apartment-sky',
-    card: 'border border-apartment-sky/30 bg-apartment-sky-soft',
+    card: 'border border-apartment-sky-border bg-apartment-sky-tint',
   },
   fuchsia: {
     pill: 'bg-apartment-fuchsia-soft text-apartment-fuchsia',
     dot: 'bg-apartment-fuchsia',
-    card: 'border border-apartment-fuchsia/30 bg-apartment-fuchsia-soft',
+    card: 'border border-apartment-fuchsia-border bg-apartment-fuchsia-tint',
   },
   neutral: {
     pill: 'bg-slate-100 text-ink-muted',

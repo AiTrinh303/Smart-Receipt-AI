@@ -1441,7 +1441,7 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Yearly report (ReceiptReport -- apartment cards in their tone, Both apartments white with a brand border, Before you send it, export card, VAT note)">
+      <Section title="Yearly report (ReceiptReport -- apartment cards in their tone (stronger tint), Both apartments a neutral slate-100 card, Before you send it, export card, VAT note)">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card surface={apartmentToneClasses('oberaudorf-bergblick').card} className="flex flex-col gap-3">
             <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Oberaudorf - Bergblick">
