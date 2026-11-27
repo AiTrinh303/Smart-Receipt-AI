@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptReport from './ReceiptReport'
 import { SAMPLE_APARTMENTS, clearApartmentsCache, withApartments } from './test/apartmentsFetch'
+import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -364,6 +365,39 @@ describe('ReceiptReport', () => {
     const link = await screen.findByRole('link', { name: 'Store A' })
     expect(link).toHaveAttribute('href', '/?receipt=r1')
     expect(screen.getByText('total does not match the items, SOME_OTHER_CODE')).toBeInTheDocument()
+  })
+
+  test('a receipt link leaves ctrl/cmd-click to the browser; a plain click still opens it in place', async () => {
+    // Given a receipt link in the Quick check
+    fetchSpy.mockImplementation(
+      routeFetch({
+        yearly: () =>
+          Promise.resolve(
+            jsonResponse(
+              200,
+              reportResponse({
+                with_warnings: 1,
+                attention: [
+                  {
+                    receipt_id: 'r1',
+                    store_name: 'Store A',
+                    purchase_date: '2026-01-15',
+                    total: '19.99',
+                    currency: 'EUR',
+                    apartment_id: OBERAUDORF.id,
+                    warning_codes: ['TOTAL_MISMATCH'],
+                  },
+                ],
+              }),
+            ),
+          ),
+      }),
+    )
+    render(<ReceiptReport />)
+    const link = await screen.findByRole('link', { name: 'Store A' })
+
+    // Then modified clicks are not prevented, and a plain click navigates
+    expectBrowserHandlesModifiedClicks(link, '?receipt=r1')
   })
 
   test('"Showing the first 50." appears only when with_warnings exceeds the attention list', async () => {

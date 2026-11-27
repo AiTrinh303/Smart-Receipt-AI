@@ -22,7 +22,7 @@ import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
 import { formatMoney } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
-import { navigateTo } from './navigation'
+import { navigateTo, isPlainLeftClick } from './navigation'
 
 const PAGE_SIZE = 50
 const MAX_SEARCH_LENGTH = 100
@@ -191,7 +191,7 @@ function ItemRowLink({
     <a
       href={href}
       onClick={(e) => {
-        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+        if (!isPlainLeftClick(e)) {
           return
         }
         e.preventDefault()
@@ -494,6 +494,9 @@ function ReceiptItems() {
   }
 
   const goToUpload = (e: React.MouseEvent) => {
+    if (!isPlainLeftClick(e)) {
+      return
+    }
     e.preventDefault()
     navigateTo('')
   }

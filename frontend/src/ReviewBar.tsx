@@ -5,6 +5,7 @@ import { useReceiptReviewStatus } from './hooks/useReceiptReviewStatus'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import StatusBadge from './components/ui/StatusBadge'
+import { isPlainLeftClick } from './navigation'
 
 export interface ReviewNavigationNeighbour {
   id: string
@@ -163,6 +164,9 @@ function WarningsLink({ count, targetId }: { count: number; targetId: string }) 
         if (!target) {
           return
         }
+        if (!isPlainLeftClick(e)) {
+          return
+        }
         e.preventDefault()
         target.scrollIntoView?.({ block: 'center' })
         target.focus({ preventScroll: true })
@@ -196,6 +200,9 @@ function ReviewNavLink({
     <a
       href={neighbour.href}
       onClick={(e) => {
+        if (!isPlainLeftClick(e)) {
+          return
+        }
         e.preventDefault()
         onNavigate(neighbour.id)
       }}

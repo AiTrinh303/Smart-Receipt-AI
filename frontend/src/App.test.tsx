@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { CONTAINER_SIZE_CLASSES } from './components/ui/Container'
+import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -453,5 +454,35 @@ describe('navigation between upload, history and a saved receipt', () => {
       ).toBeInTheDocument()
     })
     expect(window.location.search).toBe('?view=history')
+  })
+
+  test('"Back to history" leaves ctrl/cmd-click to the browser; a plain click still goes back in place', async () => {
+    // Given a saved receipt opened from a filtered history list
+    const from = '?view=history&status=needs_review'
+    window.history.replaceState({}, '', `/?receipt=${VALID_UUID}&from=${encodeURIComponent(from)}`)
+    routeFetch(fetchSpy, {
+      get: () => Promise.resolve(jsonResponse(200, SAVED_RECEIPT)),
+      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
+    })
+    render(<App />)
+    const back = await screen.findByRole('link', { name: /back to history/i })
+
+    // Then its href is the full target, modified clicks are not prevented, and a plain click navigates
+    expect(back).toHaveAttribute('href', `/${from}`)
+    expectBrowserHandlesModifiedClicks(back, from)
+  })
+
+  test('a header nav link leaves ctrl/cmd-click to the browser; a plain click still switches view in place', async () => {
+    // Given a saved receipt is open (any view will do)
+    window.history.replaceState({}, '', `/?receipt=${VALID_UUID}`)
+    routeFetch(fetchSpy, {
+      get: () => Promise.resolve(jsonResponse(200, SAVED_RECEIPT)),
+      list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
+    })
+    render(<App />)
+    await screen.findByText('Corner Store')
+
+    // Then the "History" nav link behaves like every other internal link
+    expectBrowserHandlesModifiedClicks(screen.getByRole('link', { name: 'History' }), '?view=history')
   })
 })

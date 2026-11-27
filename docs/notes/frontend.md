@@ -247,6 +247,20 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   reaches the server — it goes straight to "Receipt not found", the same
   message shown for a real `404`. "Upload another receipt" clears the
   `receipt` param along with all state.
+  **Modified clicks on internal links (`isPlainLeftClick`, in
+  `src/navigation.ts`):** every internal `<a>` whose click handler
+  navigates in place first checks `isPlainLeftClick(e)` (primary button,
+  no ctrl/cmd/shift/alt); only then does it call `preventDefault()` and
+  navigate. Any other click is left to the browser, which opens the
+  link's real `href` — so every such `href` holds the full target, `from=`
+  included. Middle-click fires `auxclick`, never reaches these handlers,
+  and always works. Used by: the header nav links (`App.tsx`), History
+  rows and its empty-state "Upload a receipt", Items rows and its "Upload
+  a receipt", every Report link, the saved receipt's back link, the
+  batch's "Open yearly report", review-mode Previous/Next and the
+  "N warnings to check" link (`ReviewBar.tsx`), and the upload side
+  panel's `AppLink`. Tests use `src/test/linkClicks.ts`'s
+  `expectBrowserHandlesModifiedClicks(link, expectedSearch)`.
   **Navigation (`App.tsx`, `src/navigation.ts`):** no router library — a
   tiny `navigateTo(search)` helper does `history.pushState` and dispatches a
   synthetic `popstate` event (since `pushState`/`replaceState` never fire

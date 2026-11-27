@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import ReceiptUpload from './ReceiptUpload'
 import { mockObjectUrl } from './test/objectUrl'
 import { SAMPLE_APARTMENTS, clearApartmentsCache, jsonResponse, withApartments } from './test/apartmentsFetch'
+import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
 
 const APARTMENT_ID = SAMPLE_APARTMENTS[0].id
 const ID_A = '11111111-1111-1111-1111-111111111111'
@@ -231,6 +232,20 @@ test('outside review mode "Mark as approved" stays the primary button', async ()
 
   // Then "Mark as approved" is primary
   expect(screen.getByRole('button', { name: 'Mark as approved' }).className).toMatch(/\bbg-brand\b/)
+})
+
+test('review-mode Next leaves ctrl/cmd-click to the browser; a plain click still moves in place', async () => {
+  // Given the middle receipt of a filtered snapshot
+  await open(ID_B, FROM_HISTORY, {
+    get: (id) => jsonResponse(200, savedReceipt(id)),
+    list: () => listOf([ID_A, ID_B, ID_C]),
+  })
+  await screen.findByText('2 of 3')
+  const next = screen.getByRole('link', { name: 'Next' })
+
+  // Then its href is the full target, modified clicks are not prevented, and a plain click moves to ID_C
+  expect(next).toHaveAttribute('href', `/?receipt=${ID_C}&from=${encodeURIComponent(FROM_HISTORY)}`)
+  expectBrowserHandlesModifiedClicks(next, `?receipt=${ID_C}&from=${encodeURIComponent(FROM_HISTORY)}`)
 })
 
 test('"Approve and next" sends exactly one PUT .../status and navigates to the next receipt still needing review, skipping an already-approved one', async () => {

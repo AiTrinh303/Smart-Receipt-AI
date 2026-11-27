@@ -21,7 +21,7 @@ import Skeleton from './components/ui/Skeleton'
 import { formatMoneyFromString, currencySymbol } from './components/ui/formatMoney'
 import { useApartments } from './hooks/useApartments'
 import { useMediaQuery } from './hooks/useMediaQuery'
-import { navigateTo } from './navigation'
+import { navigateTo, isPlainLeftClick } from './navigation'
 import { DownloadIcon } from './ReceiptFileViewer'
 
 const REPORT_DESCRIPTION = 'Spending per apartment, from the receipts you approved.'
@@ -456,6 +456,9 @@ function AttentionBlock({ report }: { report: YearlyReport }) {
                 <a
                   href={receiptHref(receipt.receipt_id)}
                   onClick={(e) => {
+                    if (!isPlainLeftClick(e)) {
+                      return
+                    }
                     e.preventDefault()
                     openReceipt(receipt.receipt_id)
                   }}
@@ -504,6 +507,9 @@ function DuplicatesBlock({ report }: { report: YearlyReport }) {
                     key={receiptId}
                     href={receiptHref(receiptId)}
                     onClick={(e) => {
+                      if (!isPlainLeftClick(e)) {
+                        return
+                      }
                       e.preventDefault()
                       openReceipt(receiptId)
                     }}
@@ -542,6 +548,9 @@ function LargestBlock({ report }: { report: YearlyReport }) {
                     <a
                       href={receiptHref(receipt.receipt_id)}
                       onClick={(e) => {
+                        if (!isPlainLeftClick(e)) {
+                          return
+                        }
                         e.preventDefault()
                         openReceipt(receipt.receipt_id)
                       }}
@@ -606,6 +615,9 @@ function ExcludedPanel({ report, year, basis }: { report: YearlyReport; year: nu
               <a
                 href={`/?view=history&year=${year}&status=needs_review`}
                 onClick={(e) => {
+                  if (!isPlainLeftClick(e)) {
+                    return
+                  }
                   e.preventDefault()
                   navigateTo(`?view=history&year=${year}&status=needs_review`)
                 }}
@@ -620,6 +632,9 @@ function ExcludedPanel({ report, year, basis }: { report: YearlyReport; year: nu
               <a
                 href="/?view=history&year=none"
                 onClick={(e) => {
+                  if (!isPlainLeftClick(e)) {
+                    return
+                  }
                   e.preventDefault()
                   navigateTo('?view=history&year=none')
                 }}

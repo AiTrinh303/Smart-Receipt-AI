@@ -4,7 +4,7 @@ import { getReceiptFacets } from './api/getReceiptFacets'
 import { listReceipts } from './api/listReceipts'
 import type { ReceiptFacets, ReceiptSummary } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
-import { navigateTo } from './navigation'
+import { navigateTo, isPlainLeftClick } from './navigation'
 import { DateCell } from './ReceiptItems'
 import { ApartmentDot, ApartmentPill } from './components/ui/ApartmentTone'
 import Card from './components/ui/Card'
@@ -47,7 +47,7 @@ function AppLink({ search, className, title, children }: {
   children: ReactNode
 }) {
   const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+    if (!isPlainLeftClick(e)) {
       return
     }
     e.preventDefault()

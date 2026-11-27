@@ -16,7 +16,7 @@ import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
 import { formatMoney } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
-import { navigateTo } from './navigation'
+import { navigateTo, isPlainLeftClick } from './navigation'
 
 const LOADING_ROW_COUNT = 4
 const PAGE_SIZE = 50
@@ -88,6 +88,9 @@ export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusB
     <a
       href={href}
       onClick={(e) => {
+        if (!isPlainLeftClick(e)) {
+          return
+        }
         e.preventDefault()
         onOpen(item.receipt_id)
       }}
@@ -364,6 +367,9 @@ function ReceiptHistory() {
   }
 
   const goToUpload = (e: React.MouseEvent) => {
+    if (!isPlainLeftClick(e)) {
+      return
+    }
     e.preventDefault()
     navigateTo('')
   }

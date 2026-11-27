@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptHistory from './ReceiptHistory'
+import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -1008,6 +1009,18 @@ describe('ReceiptHistory', () => {
       'href',
       `/?receipt=11111111-1111-1111-1111-111111111111&from=${encodeURIComponent(`?view=history&apartment=${OBERAUDORF.id}`)}`,
     )
+  })
+
+  test('a row leaves ctrl/cmd-click to the browser; a plain click still opens the receipt in place', async () => {
+    // Given the unfiltered list with one receipt
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptHistory />)
+    const link = await screen.findByRole('link', { name: /store a/i })
+
+    // Then modified clicks are not prevented (new tab via the href), and a plain click navigates
+    expectBrowserHandlesModifiedClicks(link, '?receipt=11111111-1111-1111-1111-111111111111')
   })
 
   test('row hrefs have no `from` when unfiltered', async () => {

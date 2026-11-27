@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import UploadSidePanel, { ReceiptsOverview } from './UploadSidePanel'
 import type { ReceiptFacets, ReceiptSummary } from './api/types'
 import { jsonResponse } from './test/apartmentsFetch'
+import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
 
 const FACETS: ReceiptFacets = {
   apartments: [
@@ -284,4 +285,15 @@ test('changing refreshKey refetches once, keeping the current content (no skelet
   // And re-rendering with the same key fetches nothing more
   rerender(<UploadSidePanel refreshKey={1} />)
   await waitFor(() => expect(callsTo('/receipts/facets')).toHaveLength(1))
+})
+
+test('a latest-upload link leaves ctrl/cmd-click to the browser; a plain click still opens it in place', async () => {
+  // Given the panel with saved receipts
+  routeFetch({ facets: okFacets(), receipts: okReceipts() })
+  render(<UploadSidePanel />)
+  const list = (await screen.findByRole('heading', { level: 3, name: 'Latest uploads' })).nextElementSibling as HTMLElement
+  const first = within(list).getAllByRole('link')[0]
+
+  // Then modified clicks are not prevented, and a plain click navigates
+  expectBrowserHandlesModifiedClicks(first, `?receipt=${LATEST[0].receipt_id}`)
 })

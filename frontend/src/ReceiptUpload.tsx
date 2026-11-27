@@ -15,7 +15,7 @@ import {
   NETWORK_ERROR_MESSAGE,
 } from './errorMessages'
 import { IMAGE_EXTENSIONS, getExtension, isLikelyValidPdf, isValidFile } from './fileValidation'
-import { navigateTo } from './navigation'
+import { navigateTo, isPlainLeftClick } from './navigation'
 import { apartmentPlace } from './format/apartmentPlace'
 import { apartmentShortName } from './format/apartmentShortName'
 import { formatDisplayDate } from './format/formatDisplayDate'
@@ -787,6 +787,9 @@ function ReceiptUpload() {
             <a
               href={`/${backNavigation.search}`}
               onClick={(e) => {
+                if (!isPlainLeftClick(e)) {
+                  return
+                }
                 e.preventDefault()
                 navigateTo(backNavigation.search)
               }}
@@ -1196,6 +1199,9 @@ function ReceiptUpload() {
                           <a
                             href="/?view=report"
                             onClick={(e) => {
+                              if (!isPlainLeftClick(e)) {
+                                return
+                              }
                               e.preventDefault()
                               navigateTo('?view=report')
                             }}

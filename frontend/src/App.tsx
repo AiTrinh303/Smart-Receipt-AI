@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import Container from './components/ui/Container'
 import { isDev } from './env'
-import { navigateTo } from './navigation'
+import { navigateTo, isPlainLeftClick } from './navigation'
 import ReceiptHistory from './ReceiptHistory'
 import ReceiptItems from './ReceiptItems'
 import ReceiptReport from './ReceiptReport'
@@ -111,6 +111,9 @@ function NavLink({ href, search, active, children }: NavLinkProps) {
       href={href}
       aria-current={active ? 'page' : undefined}
       onClick={(e) => {
+        if (!isPlainLeftClick(e)) {
+          return
+        }
         e.preventDefault()
         navigateTo(search)
       }}

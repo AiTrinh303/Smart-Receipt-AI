@@ -2166,7 +2166,8 @@ height while every other control was a `Button` (`font-medium`).
   own row links (`HistoryRow`) still call `preventDefault()` on every
   click, so ctrl/cmd-click there opens the receipt in the *same* tab;
   only middle-click opens a new one. The upload side panel's `AppLink`
-  and now Items handle modifier keys correctly.
+  and now Items handle modifier keys correctly. (Fixed app-wide next --
+  see "Modified clicks on internal links".)
 - **Tests:** no existing test changed. New: Items tabs (short name, dot,
   full name as name/title, no count); the whole-row link (one link per
   row, no underline, the `from` href, ctrl-click not prevented, plain
@@ -2175,6 +2176,22 @@ height while every other control was a `Button` (`font-medium`).
 - **`?view=styleguide`:** the Items table and cards are the real
   `ItemsTable`/`ItemCardList`, with a second line of the first receipt to
   show the grouping.
+
+## Modified clicks on internal links
+
+Every internal link that navigates in place (no router -- `navigateTo`)
+now asks the shared `isPlainLeftClick(e)` first: a plain primary click
+navigates in place as before; ctrl/cmd-click (new tab), shift-click (new
+window), alt-click or another button is left entirely to the browser,
+which uses the link's real `href`. Every such `href` was checked to hold
+the full target, `from=` included (Report's receipt links carry none,
+same as their plain click -- "Back" never returns to the Report). This
+fixes History rows, the header nav, the Report links, the back link,
+review-mode Previous/Next and more, which used to cancel every click so
+ctrl/cmd-click opened in the same tab. Middle-click uses `auxclick` and
+always worked. Each changed component has a test asserting a ctrl- and
+cmd-click are not prevented (URL unchanged) and a plain click still
+navigates (`src/test/linkClicks.ts`).
 
 ## Changelog
 
