@@ -83,7 +83,7 @@ def mk_item(name="Item", quantity=1.0, unit_price=10.0, line_total=10.0):
         ("29.02.2025", None),  # 2025 is not a leap year
         ("31.04.2026", None),  # April has 30 days
         ("02/06/2026", None),  # slash dates stay out of scope
-        ("02.06.26", None),  # 2-digit years stay out of scope
+        ("02.06.26", "2026-06-02"),  # 2-digit year, read as 20YY (Ticket AY)
         ("2026.06.02", None),  # year-first dotted order is not recognized
         # Month-name dates (German/English, full/abbreviated), added for
         # Issue "recognize month-name dates":

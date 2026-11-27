@@ -67,10 +67,21 @@ Per-feature detail for `backend/`, moved verbatim from CLAUDE.md's former "Proje
     resolved against `MONTH_NAMES_BY_WORD`, a module-level constant
     mapping every accepted German and English spelling (full and
     abbreviated) to its month number — an unrecognized word simply fails
-    that lookup, returning `None`, and
+    that lookup, returning `None` — **or** a dotted date with a 2-digit
+    year, `D.M.YY`/`DD.MM.YY`, read as `20YY` (`"27.06.26"`/`"27.06.26
+    09:52"`/`"06.06.26 12:32:39"` -> `"2026-06-27"`/`"2026-06-27"`/
+    `"2026-06-06"`, via `_SHORT_YEAR_DOTTED_DATE_PATTERN`): stricter than
+    the other shapes on purpose — only the date alone or the date plus one
+    well-formed `HH:MM`/`HH:MM:SS` time (hours 0-23, minutes/seconds 0-59)
+    is accepted, nothing else after it (`"27.06.26 abc"` and `"27.06.26
+    09:52 x"` stay unrecognized), since a short year is easier to confuse
+    with other numbers. A time after any accepted shape is dropped (the
+    4-digit dotted, ISO and month-name shapes already allowed trailing
+    text, so `"06.06.2026 12:32:39"` worked before). It
     returns `None` for anything else (never guesses day/month order for
-    `"26/06/2025"`, and deliberately never recognizes slash dates or
-    2-digit years — both still explicitly out of scope). Every
+    `"26/06/2025"`, and deliberately never recognizes slash dates, or a
+    2-digit year in a month-name date like `"02 Juni 26"` — still out of
+    scope). Every
     shape is validated against a real calendar by constructing a
     `date(year, month, day)` and catching the `ValueError` it raises for
     an out-of-range day/month (e.g. `"31.04.2026"`, a non-leap-year

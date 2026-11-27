@@ -101,6 +101,18 @@ _LEADING_ISO_DATE_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2})([ T,][^\s]*)?$")
 # explicitly out of scope).
 _LEADING_DOTTED_DATE_PATTERN = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ ,].*)?$")
 
+# A dotted German date with a 2-digit year, D.M.YY / DD.MM.YY (read as
+# 20YY), optionally followed by a time of day (HH:MM or HH:MM:SS, after
+# whitespace) that is dropped -- e.g. "27.06.26 09:52". Stricter than the
+# 4-digit pattern above on purpose: nothing else may follow, since a short
+# year is easier to mistake for something else (a price, a till number), so
+# only a date alone or a date plus a well-formed time is accepted. A 4-digit
+# year can never match this (the year group is exactly 2 digits, anchored
+# by `$` or the time).
+_SHORT_YEAR_DOTTED_DATE_PATTERN = re.compile(
+    r"^(\d{1,2})\.(\d{1,2})\.(\d{2})(?:\s+(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?)?$"
+)
+
 # A month-name date, "D[.]? Month YYYY" / "DD[.]? Month YYYY" (1-2 digit day,
 # optional dot right after the day, one or more spaces, a month word, exactly
 # 4-digit year), optionally followed by one separator (space or comma) and
@@ -148,12 +160,14 @@ VAT_LINE_TOTAL_TOLERANCE = Decimal("0.02")
 
 def normalize_purchase_date(raw: str | None) -> str | None:
     """Extracts a valid date from the start of a raw AI-extracted date
-    string, in one of three accepted shapes: an ISO date (YYYY-MM-DD), a
-    dotted German date (D.M.YYYY / DD.MM.YYYY), or a month-name date
-    (D[.]? Month YYYY, German or English, full or abbreviated,
-    case-insensitive) -- see the patterns above. Never guesses day/month
-    order for an ambiguous format like "26/06/2025" -- that, slash dates,
-    2-digit years, unknown month words, and any other text that doesn't
+    string, in one of four accepted shapes: an ISO date (YYYY-MM-DD), a
+    dotted German date (D.M.YYYY / DD.MM.YYYY), a dotted German date with
+    a 2-digit year (D.M.YY / DD.MM.YY, read as 20YY, alone or followed by
+    an HH:MM[:SS] time), or a month-name date (D[.]? Month YYYY, German or
+    English, full or abbreviated, case-insensitive) -- see the patterns
+    above. A trailing time is dropped. Never guesses day/month order for
+    an ambiguous format like "26/06/2025" -- that, slash dates, a 2-digit
+    year in any other shape, unknown month words, and any other text that doesn't
     start with one of the three accepted shapes (or has more than one
     trailing stray token, for the ISO shape) all return None rather than a
     guess. Every shape is validated against a real calendar (leap years
@@ -177,6 +191,14 @@ def normalize_purchase_date(raw: str | None) -> str | None:
         day, month, year = (int(group) for group in dotted_match.groups())
         try:
             return date(year, month, day).isoformat()
+        except ValueError:
+            return None
+
+    short_year_match = _SHORT_YEAR_DOTTED_DATE_PATTERN.match(raw)
+    if short_year_match:
+        day, month, short_year = (int(group) for group in short_year_match.groups())
+        try:
+            return date(2000 + short_year, month, day).isoformat()
         except ValueError:
             return None
 
