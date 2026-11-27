@@ -19,6 +19,7 @@ import { ExportCard, ReportChecks, VAT_FOOTNOTE } from './ReceiptReport'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
 import type { ItemRow, ReceiptFacets, ReceiptSummary, YearlyReport } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
+import { apartmentToneClasses } from './format/apartmentTone'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 const ALERT_VARIANTS = ['info', 'success', 'warning', 'error'] as const
@@ -1440,14 +1441,10 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Yearly report (ReceiptReport -- summary cards with Both apartments emphasised, Before you send it, export card, VAT note)">
+      <Section title="Yearly report (ReceiptReport -- apartment cards in their tone, Both apartments white with a brand border, Before you send it, export card, VAT note)">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card className="flex flex-col gap-3">
-            <h2
-              className="flex items-center gap-2 text-base font-semibold text-ink"
-              title="Fewo JoJo - Oberaudorf - Bergblick"
-            >
-              <ApartmentDot apartmentId="oberaudorf-bergblick" />
+          <Card surface={apartmentToneClasses('oberaudorf-bergblick').card} className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Oberaudorf - Bergblick">
               Bergblick
             </h2>
             <div className="flex items-baseline justify-between gap-4">
@@ -1457,12 +1454,8 @@ function StyleGuide() {
               </span>
             </div>
           </Card>
-          <Card className="flex flex-col gap-3">
-            <h2
-              className="flex items-center gap-2 text-base font-semibold text-ink"
-              title="Fewo JoJo - Sankt Englmar - Waldglück"
-            >
-              <ApartmentDot apartmentId="sankt-englmar-waldglueck" />
+          <Card surface={apartmentToneClasses('sankt-englmar-waldglueck').card} className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Sankt Englmar - Waldglück">
               Waldglück
             </h2>
             <p className="text-sm text-ink-muted">No receipts in 2026.</p>

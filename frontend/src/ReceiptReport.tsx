@@ -14,7 +14,7 @@ import type {
 import { apartmentShortName } from './format/apartmentShortName'
 import { formatDisplayDate } from './format/formatDisplayDate'
 import Alert from './components/ui/Alert'
-import { ApartmentDot } from './components/ui/ApartmentTone'
+import { apartmentToneClasses } from './format/apartmentTone'
 import Card from './components/ui/Card'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
@@ -146,9 +146,14 @@ function ApartmentSummaryCard({
   basis: ReportBasis
 }) {
   return (
-    <Card className="flex flex-col gap-3" title={apartment.apartment_name}>
-      <h2 className="flex items-center gap-2 text-base font-semibold text-ink" title={apartment.apartment_name}>
-        <ApartmentDot apartmentId={apartment.apartment_id} />
+    // The apartment's tone as the whole card's surface (soft fill + faint
+    // tone border); an unknown apartment gets the plain card.
+    <Card
+      surface={apartmentToneClasses(apartment.apartment_id).card}
+      className="flex flex-col gap-3"
+      title={apartment.apartment_name}
+    >
+      <h2 className="text-base font-semibold text-ink" title={apartment.apartment_name}>
         {apartmentShortName(apartment.apartment_name) ?? apartment.apartment_name}
       </h2>
       {apartment.by_currency.length === 0 ? (

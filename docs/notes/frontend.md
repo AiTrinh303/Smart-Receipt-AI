@@ -667,12 +667,15 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   cards; "Before you send it"; "Monthly breakdown"; "For your tax
   advisor"; the VAT note.
   **Summary**: one `Card` per apartment (`apartmentShortName` visible,
-  tone dot, full name in `title`) with a right-aligned, tabular-nums
-  amount per currency plus "N receipts", then a combined "Both
-  apartments" card built straight from the backend's own `overall`
-  (never summed from the apartment cards), emphasised with
-  `Card variant="emphasis"` (`bg-brand-soft`, `border-brand/30`; ink
-  15.97:1, ink-muted 6.78:1 on it). An apartment with no data shows "No
+  full name in `title`) whose whole surface is the apartment's tone —
+  `Card`'s `surface` prop with `apartmentToneClasses(id).card` (the soft
+  fill plus a faint `/30` border in the tone colour; an unknown apartment
+  gets the plain card; ink ≥ 16.6:1 and ink-muted ≥ 7.0:1 on either soft
+  fill) — with a right-aligned, tabular-nums amount per currency plus "N
+  receipts", then a combined "Both apartments" card built straight from
+  the backend's own `overall` (never summed from the apartment cards),
+  white with a 2px brand border (`Card variant="emphasis"`), so it
+  doesn't read as a third apartment. An apartment with no data shows "No
   approved receipts in `<year>`." (`basis=approved`) or "No receipts in
   `<year>`." (`basis=all`).
   **"Before you send it" (`ReportChecks`, exported):** one card replacing

@@ -20,14 +20,31 @@ export const TONE_BY_APARTMENT_ID: Readonly<Record<string, ApartmentTone>> = {
 export interface ApartmentToneClasses {
   /** Soft pill: tone background + tone text (labels in lists). */
   pill: string
-  /** A small dot before a name (tabs, choice cards, report cards). */
+  /** A small dot before a name (tabs, choice cards, side panel). */
   dot: string
+  /** A whole card in the apartment's tone (the Report's summary cards):
+   * the soft fill plus a faint border in the tone colour, as one complete
+   * border-and-background string for `Card`'s `surface` prop. Neutral is
+   * the plain card (white, decorative `border-subtle`). */
+  card: string
 }
 
 export const APARTMENT_TONE_CLASSES: Readonly<Record<ApartmentTone, ApartmentToneClasses>> = {
-  sky: { pill: 'bg-apartment-sky-soft text-apartment-sky', dot: 'bg-apartment-sky' },
-  fuchsia: { pill: 'bg-apartment-fuchsia-soft text-apartment-fuchsia', dot: 'bg-apartment-fuchsia' },
-  neutral: { pill: 'bg-slate-100 text-ink-muted', dot: 'bg-ink-muted' },
+  sky: {
+    pill: 'bg-apartment-sky-soft text-apartment-sky',
+    dot: 'bg-apartment-sky',
+    card: 'border border-apartment-sky/30 bg-apartment-sky-soft',
+  },
+  fuchsia: {
+    pill: 'bg-apartment-fuchsia-soft text-apartment-fuchsia',
+    dot: 'bg-apartment-fuchsia',
+    card: 'border border-apartment-fuchsia/30 bg-apartment-fuchsia-soft',
+  },
+  neutral: {
+    pill: 'bg-slate-100 text-ink-muted',
+    dot: 'bg-ink-muted',
+    card: 'border border-border-subtle bg-surface',
+  },
 }
 
 export function apartmentTone(apartmentId: string | null | undefined): ApartmentTone {

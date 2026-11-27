@@ -153,14 +153,41 @@ describe('ReceiptReport', () => {
     expect(screen.getByText('Both apartments')).toBeInTheDocument()
   })
 
-  test('both apartment cards show their colour dot (Bergblick sky, Waldglück fuchsia)', async () => {
+  test('each apartment card takes its tone as background and border (no dot); Both apartments is white with a brand border', async () => {
     // Given the default report with both apartments
     render(<ReceiptReport />)
     const waldglueck = await screen.findByRole('heading', { name: 'Waldglück' })
+    const bergblick = screen.getByRole('heading', { name: 'Bergblick' })
 
-    // Then each card heading carries its apartment's dot
-    expect(screen.getByRole('heading', { name: 'Bergblick' }).querySelector('[aria-hidden="true"].bg-apartment-sky')).not.toBeNull()
-    expect(waldglueck.querySelector('[aria-hidden="true"].bg-apartment-fuchsia')).not.toBeNull()
+    // Then each card has its tone's soft fill and faint border, and no dot
+    expect(bergblick.parentElement).toHaveClass('bg-apartment-sky-soft', 'border-apartment-sky/30')
+    expect(waldglueck.parentElement).toHaveClass('bg-apartment-fuchsia-soft', 'border-apartment-fuchsia/30')
+    expect(bergblick.querySelector('[aria-hidden="true"]')).toBeNull()
+    expect(waldglueck.querySelector('[aria-hidden="true"]')).toBeNull()
+    // And "Both apartments" is white, set apart by a brand border
+    const both = screen.getByRole('heading', { name: 'Both apartments' }).parentElement as HTMLElement
+    expect(both).toHaveClass('bg-surface', 'border-2', 'border-brand')
+    expect(both).not.toHaveClass('bg-brand-soft')
+  })
+
+  test('an apartment id with no tone gets the plain card', async () => {
+    // Given an apartment the tone map doesn't know
+    fetchSpy.mockImplementation(
+      routeFetch({
+        yearly: () =>
+          Promise.resolve(
+            jsonResponse(
+              200,
+              reportResponse({ apartments: [apartmentSummary({ apartment_id: 'elsewhere', apartment_name: 'Elsewhere' })] }),
+            ),
+          ),
+      }),
+    )
+    render(<ReceiptReport />)
+
+    // Then its card is the plain white one
+    const heading = await screen.findByRole('heading', { name: 'Elsewhere' })
+    expect(heading.parentElement).toHaveClass('bg-surface', 'border-border-subtle')
   })
 
   test('the page description follows "Only count receipts I approved"', async () => {

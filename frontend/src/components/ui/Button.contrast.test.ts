@@ -261,3 +261,22 @@ describe.each(['oberaudorf-bergblick', 'sankt-englmar-waldglueck'])('apartment i
     }
   })
 })
+
+// --- Text on an apartment-toned card (the Report's summary cards) ----------
+//
+// The name and amount are `ink`, the receipt count `ink-muted`, both on the
+// tone's soft fill. Ratios printed so a run shows the measured values.
+
+describe.each(['sky', 'fuchsia'])('text on the "%s" summary card', (tone) => {
+  test('ink and ink-muted meet 4.5:1 on the soft background -- measured ratios shown below', () => {
+    const softHex = resolveToken(`apartment-${tone}-soft`) as string
+    const ink = contrastRatio(resolveToken('ink') as string, softHex)
+    const inkMuted = contrastRatio(resolveToken('ink-muted') as string, softHex)
+    // eslint-disable-next-line no-console
+    console.log(
+      `${tone} card (${softHex}): ink ${ink.toFixed(2)}:1, ink-muted ${inkMuted.toFixed(2)}:1`,
+    )
+    expect(ink).toBeGreaterThanOrEqual(4.5)
+    expect(inkMuted).toBeGreaterThanOrEqual(4.5)
+  })
+})

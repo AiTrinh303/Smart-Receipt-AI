@@ -2233,7 +2233,8 @@ place that says whether it's safe to send, and the export.
   `variant="emphasis"` (`bg-brand-soft` + `border-brand/30` instead of
   `bg-surface` + `border-border-subtle` -- a complete class string per
   variant, never a second competing background class; ink 15.97:1,
-  ink-muted 6.78:1 on `brand-soft`).
+  ink-muted 6.78:1 on `brand-soft`). (Changed later: white with a brand border -- see "Report
+  summary cards in the apartment's colour".)
 - **"Before you send it" (`ReportChecks`)** replaces "Quick check",
   "Receipts not in these totals" and the loose "N of the counted receipts
   were not reviewed" line: one row per check with an icon + text (warning
@@ -2297,6 +2298,32 @@ and dot names a real theme colour -- a mismatch between
 `apartmentTone.ts` and `tailwind.config.js` fails a test instead of
 showing as an empty space. (jsdom can't see the dev server's caching
 itself; that part was verified by hand, as above.)
+
+## Report summary cards in the apartment's colour
+
+- **Apartment cards:** the tone is now the card itself instead of a dot:
+  `apartmentToneClasses(id).card` (sky: `border border-apartment-sky/30
+  bg-apartment-sky-soft`; fuchsia likewise; neutral: the plain `border
+  border-border-subtle bg-surface`), passed to `Card`'s new `surface`
+  prop, which *replaces* the variant's border/background string rather
+  than adding a second one. Measured (printed by
+  `Button.contrast.test.ts`): sky card ink 16.75:1, ink-muted 7.11:1;
+  fuchsia card ink 16.63:1, ink-muted 7.06:1.
+- **"Both apartments":** back to white, emphasised by a 2px `brand`
+  border (`variant="emphasis"` is now `border-2 border-brand bg-surface`;
+  `Card`'s base no longer carries a border of its own, each surface
+  string brings its width), so it no longer looks like Bergblick's light
+  blue.
+- **Unchanged:** the dots in tabs, apartment choice cards and the side
+  panel.
+- **Tests changed:** `ReceiptReport.test.tsx` "both apartment cards show
+  their colour dot" -> each card's tone background/border and no dot,
+  plus "Both apartments" white with a brand border (the dot was
+  replaced); `apartmentTone.test.ts` "the class strings are complete,
+  static Tailwind classes" -> includes the new `card` string;
+  `Card.test.tsx` emphasis test -> white + `border-2 border-brand`, plus
+  the `surface` override. New: an unknown apartment's plain card; ink/
+  ink-muted contrast on each soft fill.
 
 ## Changelog
 

@@ -15,10 +15,16 @@ test('the class strings are complete, static Tailwind classes', () => {
   expect(apartmentToneClasses('oberaudorf-bergblick')).toEqual({
     pill: 'bg-apartment-sky-soft text-apartment-sky',
     dot: 'bg-apartment-sky',
+    card: 'border border-apartment-sky/30 bg-apartment-sky-soft',
   })
   expect(apartmentToneClasses('sankt-englmar-waldglueck')).toEqual({
     pill: 'bg-apartment-fuchsia-soft text-apartment-fuchsia',
     dot: 'bg-apartment-fuchsia',
+    card: 'border border-apartment-fuchsia/30 bg-apartment-fuchsia-soft',
   })
-  expect(APARTMENT_TONE_CLASSES.neutral).toEqual({ pill: 'bg-slate-100 text-ink-muted', dot: 'bg-ink-muted' })
+  expect(APARTMENT_TONE_CLASSES.neutral).toEqual({
+    pill: 'bg-slate-100 text-ink-muted',
+    dot: 'bg-ink-muted',
+    card: 'border border-border-subtle bg-surface',
+  })
 })
