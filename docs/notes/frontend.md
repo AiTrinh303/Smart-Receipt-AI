@@ -693,9 +693,9 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   you send it" card (and before it "Quick check", "Receipts not in these
   totals" and "Largest receipts") is gone; what's still open is a short
   note inside the export card (below). The Report no longer lists the
-  receipts with warnings or the possible-duplicate groups at all — the
-  backend still sends `attention`/`possible_duplicates`/`largest`;
-  nothing reads them. A History "Has warnings" filter would be the new
+  receipts with warnings (the backend still sends `attention` and
+  `largest`; nothing reads them); possible duplicates are counted in the
+  note and listed under its "Show possible duplicates". A History "Has warnings" filter would be the new
   home for the warnings list (not built).
   **VAT note**: "Totals are the amounts printed on the receipts,
   including VAT. Ask your tax advisor how to use them." — once, the
@@ -710,7 +710,8 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   advisor" `Card` at the end of the page (just above the VAT note).
   **Its note (`ExportNote`, from `openItems` = `exportOpenItems(report,
   basis)`, in `src/reportOpenItems.ts`), above the buttons, only when something is open:** one line
-  "N not reviewed · M with warnings" — "not approved" under
+  "N not reviewed · M with warnings · K possible duplicates" (K =
+  `possible_duplicate_groups`, singular "1 possible duplicate") — "not approved" under
   `basis=approved` (`excluded.not_approved`), else `counted_unreviewed`;
   a zero part is left out — with a right-aligned "Review them" link to
   `?view=history&year=<year>&status=needs_review` (shown only while the
@@ -718,7 +719,13 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   empty list); then one line per non-zero "not in these totals" bucket:
   "N receipts have no valid date" (link to `?view=history&year=none`)
   and the plain "no total"/"no currency"/"no apartment" texts ("Open the
-  receipt and fix it with Edit."). Every line starts with the warning
+  receipt and fix it with Edit."); then, when K > 0, a closed
+  `<details>` "Show possible duplicates" with the former list
+  (`DuplicatesList`, restored from git): one line per group "store,
+  date, total", an "Open N" link per receipt (`ReceiptLink`, modified
+  clicks left to the browser) and the muted "Both are counted in the
+  totals until you delete one." A re-photographed receipt is counted
+  twice until one copy is deleted, so this stays visible. Every line starts with the warning
   icon. Nothing at all when everything is zero (and none for the
   no-year card). The card gives two plain `<a href>`
   links to the backend's `GET /reports/yearly/export.csv`/`.zip` — same

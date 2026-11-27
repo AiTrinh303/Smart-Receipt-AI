@@ -9,10 +9,12 @@ import type {
   ReportApartmentSummary,
   ReportBasis,
   ReportCurrencyTotal,
+  ReportDuplicateGroup,
   YearlyReport,
 } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
 import { apartmentToneClasses } from './format/apartmentTone'
+import { formatDisplayDate } from './format/formatDisplayDate'
 import Card from './components/ui/Card'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
@@ -337,12 +339,76 @@ export interface ExportCardProps {
   openItems?: ExportOpenItems
 }
 
+/** The backend only ever sends an already-normalized purchase_date for a
+ * possible-duplicate group (every receipt in it is counted, which
+ * requires a valid date), so `formatDisplayDate`'s "missing" case never
+ * actually happens -- this just satisfies the return type safely. */
+function displayDateText(value: string): string {
+  const display = formatDisplayDate(value)
+  return display.kind === 'missing' ? 'Not detected' : display.text
+}
+
+function receiptHref(receiptId: string): string {
+  return `/?receipt=${receiptId}`
+}
+
+const REPORT_LINK_CLASSES =
+  'font-medium text-ink underline hover:text-brand focus-visible:text-brand focus-visible:outline ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
+
+/** A link to a saved receipt; a plain click opens it in place, any
+ * modified click is left to the browser (new tab). */
+function ReceiptLink({ receiptId, children }: { receiptId: string; children: ReactNode }) {
+  return (
+    <a
+      href={receiptHref(receiptId)}
+      onClick={(e) => {
+        if (!isPlainLeftClick(e)) {
+          return
+        }
+        e.preventDefault()
+        navigateTo(receiptHref(receiptId).slice(1))
+      }}
+      className={REPORT_LINK_CLASSES}
+    >
+      {children}
+    </a>
+  )
+}
+
+/** One line per possible-duplicate group (store, date, total) with an
+ * "Open N" link per receipt -- restored from the former Report list. */
+function DuplicatesList({ groups }: { groups: ReportDuplicateGroup[] }) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {groups.map((group, index) => (
+        <li key={index} className="rounded-md border border-border-subtle p-3 text-sm">
+          <p className="font-medium text-ink">
+            {group.store_name}, {displayDateText(group.purchase_date)},{' '}
+            {formatMoneyFromString(group.total, group.currency)}
+          </p>
+          <p className="mt-1 flex flex-wrap gap-2">
+            {group.receipt_ids.map((receiptId, receiptIndex) => (
+              <ReceiptLink key={receiptId} receiptId={receiptId}>
+                Open {receiptIndex + 1}
+              </ReceiptLink>
+            ))}
+          </p>
+          <p className="mt-1 text-ink-muted">Both are counted in the totals until you delete one.</p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /** The short "check before you send" note above the export buttons: one
- * line "N not reviewed · M with warnings" (parts that are 0 left out;
+ * line "N not reviewed · M with warnings · K possible duplicates" (parts
+ * that are 0 left out;
  * "not approved" under basis=approved) with a right-aligned "Review them"
  * link while anything is unreviewed, then one line per non-zero "not in
- * these totals" bucket. Every line starts with the warning icon and says
- * what it means in words. Nothing at all when everything is zero. */
+ * these totals" bucket, then (when there are any) a closed "Show possible
+ * duplicates" list. Every line starts with the warning icon and says what
+ * it means in words. Nothing at all when everything is zero. */
 function ExportNote({ year, basis, items }: { year: number; basis: ReportBasis; items: ExportOpenItems }) {
   const parts: string[] = []
   if (items.notReviewed > 0) {
@@ -351,6 +417,9 @@ function ExportNote({ year, basis, items }: { year: number; basis: ReportBasis; 
   if (items.withWarnings > 0) {
     parts.push(`${items.withWarnings} with warnings`)
   }
+  if (items.possibleDuplicates > 0) {
+    parts.push(`${items.possibleDuplicates} possible ${items.possibleDuplicates === 1 ? 'duplicate' : 'duplicates'}`)
+  }
   const anything =
     parts.length > 0 || items.undated > 0 || items.noTotal > 0 || items.noCurrency > 0 || items.noApartment > 0
   if (!anything) {
@@ -358,52 +427,62 @@ function ExportNote({ year, basis, items }: { year: number; basis: ReportBasis; 
   }
 
   return (
-    <ul className="flex flex-col gap-2 text-sm text-ink">
-      {parts.length > 0 && (
-        <li className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-          <span className="flex items-start gap-2">
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2 text-sm text-ink">
+        {parts.length > 0 && (
+          <li className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+            <span className="flex items-start gap-2">
+              <NoteIcon />
+              {parts.join(' · ')}
+            </span>
+            {items.notReviewed > 0 && (
+              <HistoryLink search={`?view=history&year=${year}&status=needs_review`}>Review them</HistoryLink>
+            )}
+          </li>
+        )}
+        {items.undated > 0 && (
+          <li className="flex items-start gap-2">
             <NoteIcon />
-            {parts.join(' · ')}
-          </span>
-          {items.notReviewed > 0 && (
-            <HistoryLink search={`?view=history&year=${year}&status=needs_review`}>Review them</HistoryLink>
-          )}
-        </li>
+            <HistoryLink search="?view=history&year=none">{items.undated} receipts have no valid date</HistoryLink>
+          </li>
+        )}
+        {items.noTotal > 0 && (
+          <li className="flex items-start gap-2">
+            <NoteIcon />
+            <span>
+              {items.noTotal} {items.noTotal === 1 ? 'receipt has' : 'receipts have'} no total. Open the receipt
+              and fix it with Edit.
+            </span>
+          </li>
+        )}
+        {items.noCurrency > 0 && (
+          <li className="flex items-start gap-2">
+            <NoteIcon />
+            <span>
+              {items.noCurrency} {items.noCurrency === 1 ? 'receipt has' : 'receipts have'} no currency. Open the
+              receipt and fix it with Edit.
+            </span>
+          </li>
+        )}
+        {items.noApartment > 0 && (
+          <li className="flex items-start gap-2">
+            <NoteIcon />
+            <span>
+              {items.noApartment} {items.noApartment === 1 ? 'receipt has' : 'receipts have'} no apartment. Open
+              the receipt and fix it with Edit.
+            </span>
+          </li>
+        )}
+      </ul>
+      {items.possibleDuplicates > 0 && (
+        <details>
+          <summary className={DETAILS_SUMMARY_CLASSES}>Show possible duplicates</summary>
+          <div className="mt-2">
+            <DuplicatesList groups={items.duplicateGroups} />
+          </div>
+        </details>
       )}
-      {items.undated > 0 && (
-        <li className="flex items-start gap-2">
-          <NoteIcon />
-          <HistoryLink search="?view=history&year=none">{items.undated} receipts have no valid date</HistoryLink>
-        </li>
-      )}
-      {items.noTotal > 0 && (
-        <li className="flex items-start gap-2">
-          <NoteIcon />
-          <span>
-            {items.noTotal} {items.noTotal === 1 ? 'receipt has' : 'receipts have'} no total. Open the receipt
-            and fix it with Edit.
-          </span>
-        </li>
-      )}
-      {items.noCurrency > 0 && (
-        <li className="flex items-start gap-2">
-          <NoteIcon />
-          <span>
-            {items.noCurrency} {items.noCurrency === 1 ? 'receipt has' : 'receipts have'} no currency. Open the
-            receipt and fix it with Edit.
-          </span>
-        </li>
-      )}
-      {items.noApartment > 0 && (
-        <li className="flex items-start gap-2">
-          <NoteIcon />
-          <span>
-            {items.noApartment} {items.noApartment === 1 ? 'receipt has' : 'receipts have'} no apartment. Open
-            the receipt and fix it with Edit.
-          </span>
-        </li>
-      )}
-    </ul>
+    </div>
   )
 }
 

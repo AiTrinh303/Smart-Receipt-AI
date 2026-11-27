@@ -372,8 +372,8 @@ describe('ReceiptReport', () => {
     expect(screen.queryByRole('link', { name: 'Review them' })).not.toBeInTheDocument()
   })
 
-  test('the checks card and the warnings/duplicates lists are gone from the page', async () => {
-    // Given receipts with warnings and one duplicate group
+  test('possible duplicates: counted in the note line, with a closed "Show possible duplicates" list of groups and "Open N" links', async () => {
+    // Given 5 unreviewed, 2 with warnings and 1 duplicate group
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () =>
@@ -381,6 +381,7 @@ describe('ReceiptReport', () => {
             jsonResponse(
               200,
               reportResponse({
+                counted_unreviewed: 5,
                 with_warnings: 2,
                 attention: [
                   {
@@ -399,7 +400,7 @@ describe('ReceiptReport', () => {
                     receipt_ids: ['d1', 'd2'],
                     store_name: 'Store B',
                     purchase_date: '2026-02-01',
-                    total: '10.00',
+                    total: '1000.00',
                     currency: 'EUR',
                     apartment_id: OBERAUDORF.id,
                   },
@@ -411,13 +412,63 @@ describe('ReceiptReport', () => {
     )
     render(<ReceiptReport />)
 
-    // Then only the count remains, in the export note
-    expect(await screen.findByText('2 with warnings')).toBeInTheDocument()
-    // And no checks card, no warnings list, no duplicates list
-    expect(screen.queryByText('Before you send it')).not.toBeInTheDocument()
+    // Then the note's first line counts the group, singular
+    expect(await screen.findByText('5 not reviewed · 2 with warnings · 1 possible duplicate')).toBeInTheDocument()
+
+    // And a closed "Show possible duplicates" holds the group: store, date, total, one "Open N" per receipt
+    const details = within(exportCard()).getByText('Show possible duplicates').closest('details') as HTMLDetailsElement
+    expect(details.open).toBe(false)
+    expect(within(details).getByText('Store B, 01.02.2026, €1,000.00')).toBeInTheDocument()
+    expect(within(details).getByRole('link', { name: 'Open 1' })).toHaveAttribute('href', '/?receipt=d1')
+    expect(within(details).getByRole('link', { name: 'Open 2' })).toHaveAttribute('href', '/?receipt=d2')
+    expect(within(details).getByText('Both are counted in the totals until you delete one.')).toBeInTheDocument()
+
+    // And the warnings list and the old checks card stay gone
     expect(screen.queryByRole('link', { name: 'Store A' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Open 1' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/possible duplicates/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('Before you send it')).not.toBeInTheDocument()
+  })
+
+  test('several duplicate groups read as plural; an "Open N" link opens in place on a plain click and leaves ctrl/cmd-click to the browser', async () => {
+    // Given 2 duplicate groups (only duplicates open)
+    const group = (ids: string[]) => ({
+      receipt_ids: ids,
+      store_name: 'Store B',
+      purchase_date: '2026-02-01',
+      total: '10.00',
+      currency: 'EUR',
+      apartment_id: OBERAUDORF.id,
+    })
+    fetchSpy.mockImplementation(
+      routeFetch({
+        yearly: () =>
+          Promise.resolve(
+            jsonResponse(
+              200,
+              reportResponse({ possible_duplicate_groups: 2, possible_duplicates: [group(['a1', 'a2']), group(['b1', 'b2'])] }),
+            ),
+          ),
+      }),
+    )
+    render(<ReceiptReport />)
+
+    // Then the line reads "2 possible duplicates", with no review link (nothing unreviewed)
+    expect(await screen.findByText('2 possible duplicates')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Review them' })).not.toBeInTheDocument()
+    // And an "Open" link behaves like every internal link
+    expectBrowserHandlesModifiedClicks(screen.getAllByRole('link', { name: 'Open 1' })[0], '?receipt=a1')
+  })
+
+  test('with no possible duplicates the note has no duplicates part and no list', async () => {
+    // Given warnings but no duplicates
+    fetchSpy.mockImplementation(
+      routeFetch({ yearly: () => Promise.resolve(jsonResponse(200, reportResponse({ with_warnings: 2 }))) }),
+    )
+    render(<ReceiptReport />)
+
+    // Then neither the count nor the list appears
+    expect(await screen.findByText('2 with warnings')).toBeInTheDocument()
+    expect(screen.queryByText(/possible duplicate/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Show possible duplicates')).not.toBeInTheDocument()
   })
 
   test('the "Review them" link leaves ctrl/cmd-click to the browser; a plain click still opens the list in place', async () => {

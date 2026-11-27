@@ -2384,6 +2384,26 @@ itself; that part was verified by hand, as above.)
   uses the "Review them" link (the receipt links it used are gone); the
   export test asserts the exact new privacy sentence.
 
+## Possible duplicates back in the Report note
+
+BL removed the duplicates list and the note didn't count duplicates --
+but a re-photographed receipt is counted twice in the totals until one
+copy is deleted, so it must stay visible. The note's first line gains
+"N possible duplicates" (`possible_duplicate_groups`; "1 possible
+duplicate"; left out at 0), e.g. "5 not reviewed · 2 with warnings · 1
+possible duplicate", and below the note a closed "Show possible
+duplicates" holds the former list, restored from git (`DuplicatesList`,
+`ReceiptLink`, `displayDateText`): per group "store, date, total", an
+"Open N" link per receipt, and "Both are counted in the totals until you
+delete one." Nothing changes at 0. `ExportOpenItems` gained
+`possibleDuplicates` and `duplicateGroups`. **Tests:**
+`ReceiptReport.test.tsx` "the checks card and the warnings/duplicates
+lists are gone from the page" became the duplicates test (count in the
+line, closed list, group line, both "Open" hrefs, the muted line; the
+warnings list and checks card still gone) -- it had asserted the
+duplicates list was gone, which this reverses. New: plural wording and
+an "Open" link's modified-click behaviour; no part and no list at 0.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
