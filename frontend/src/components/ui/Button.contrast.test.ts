@@ -1,6 +1,7 @@
 import resolveConfig from 'tailwindcss/resolveConfig'
 import tailwindConfig from '../../../tailwind.config.js'
 import { PRIMARY_DISABLED_COLOR_TOKENS, VARIANT_COLOR_TOKENS } from './Button'
+import { apartmentToneClasses } from '../../format/apartmentTone'
 
 const HEX_PATTERN = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
 
@@ -238,5 +239,25 @@ describe.each(['sky', 'fuchsia'])('apartment tone "%s"', (tone) => {
     )
     expect(onSoft).toBeGreaterThanOrEqual(4.5)
     expect(onWhite).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+// --- Apartment ids exactly as the API returns them ---------------------------
+//
+// GET /reports/yearly, /receipts, /items and /apartments all send these two
+// ids (checked against the running backend). Every colour class their pill
+// and dot use must name a token that really exists in the Tailwind theme --
+// otherwise the class is in the markup but generates no CSS, which is how
+// Waldglück's dot ended up an invisible empty space.
+
+describe.each(['oberaudorf-bergblick', 'sankt-englmar-waldglueck'])('apartment id "%s"', (apartmentId) => {
+  test('gets a real (non-neutral) tone whose every class resolves to a theme colour', () => {
+    const { pill, dot } = apartmentToneClasses(apartmentId)
+    const colourClasses = `${pill} ${dot}`.split(' ')
+    expect(colourClasses.every((cls) => cls.includes('apartment-'))).toBe(true)
+    for (const cls of colourClasses) {
+      const token = cls.replace(/^(bg|text)-/, '')
+      expect(resolveToken(token)).toMatch(HEX_PATTERN)
+    }
   })
 })

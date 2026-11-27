@@ -2205,9 +2205,10 @@ navigates (`src/test/linkClicks.ts`).
   change: its CSS contained the `apartment-sky` classes but no
   `apartment-fuchsia` ones, so *every* Waldglück dot and pill (History,
   Items, side panel, tabs, choice cards, Report) was uncoloured there.
-  A fresh `npm run build` contains all three fuchsia classes. **After
-  any change to `tailwind.config.js`, restart `npm run dev`.** A test now
-  checks both Report cards carry their dot.
+  A fresh `npm run build` contains all three fuchsia classes. A test now
+  checks both Report cards carry their dot. (The restart advice given
+  here turned out not to be enough on its own -- see "Tailwind config
+  changes in the dev server" below for the real cause and fix.)
 - **Thousands separators everywhere money is shown:** "€1,238.45",
   "-€1,000.00", "USD 12,345.67" -- `groupThousands()` in
   `formatMoney.ts`, used by both `formatMoney` and
@@ -2266,6 +2267,36 @@ place that says whether it's safe to send, and the export.
   -> ZIP/CSV order, closed "Export options", privacy note, no "not
   reviewed" line, export card last. New: `Card.test.tsx` -- the emphasis
   variant.
+
+## Tailwind config changes in the dev server
+
+**Symptom:** after `apartment.fuchsia` was added to `tailwind.config.js`,
+Waldglück's dot (and pill) stayed an invisible empty space in `npm run
+dev`, while `npm run build` was correct. The API sends the right id
+(`sankt-englmar-waldglueck`), and the markup had the right classes, but
+the dev server's CSS contained no `apartment-fuchsia` rules.
+
+**Cause (reproduced in an isolated copy):** on Node 22, Tailwind 3 loads
+an ESM `tailwind.config.js` with `require()`, which puts it in Node's ESM
+module cache. Tailwind's reload trick, `delete require.cache[file]`,
+cannot evict that, so a running dev server keeps the old theme forever:
+new token classes generate nothing. Even Vite's own server restart
+(same process) didn't help -- only a brand-new process did.
+
+**Fix:** `vite.config.ts` imports `tailwind.config.js` and passes the
+config *object* to Tailwind via an inline `css.postcss` (with
+Autoprefixer). The config is then part of Vite's own config bundle, so
+Vite restarts by itself when `tailwind.config.js` changes and reads it
+fresh (verified: adding a token while the server ran produced its CSS
+right after "tailwind.config.js changed, restarting server"). The
+production CSS is byte-identical to before. `postcss.config.js` is no
+longer read by Vite (comment added; not deleted). `tailwind.config.d.ts`
+types the import. **Test:** `Button.contrast.test.ts` now checks, for each
+apartment id exactly as the API returns it, that every class of its pill
+and dot names a real theme colour -- a mismatch between
+`apartmentTone.ts` and `tailwind.config.js` fails a test instead of
+showing as an empty space. (jsdom can't see the dev server's caching
+itself; that part was verified by hand, as above.)
 
 ## Changelog
 
