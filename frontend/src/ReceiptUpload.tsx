@@ -37,6 +37,7 @@ import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
 import PageHeader from './components/ui/PageHeader'
+import { ApartmentDot } from './components/ui/ApartmentTone'
 import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import Spinner from './components/ui/Spinner'
@@ -1015,6 +1016,7 @@ function ReceiptUpload() {
                       label: apartmentShortName(apartment.name) ?? apartment.name,
                       secondaryLabel: apartmentPlace(apartment.name),
                       accessibleName: apartment.name,
+                      leading: <ApartmentDot apartmentId={apartment.id} />,
                     }))}
                     value={apartmentId}
                     onChange={setApartmentId}

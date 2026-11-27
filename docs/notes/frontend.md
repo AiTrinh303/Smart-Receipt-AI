@@ -557,6 +557,17 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   shape exactly (`role="status" aria-busy="true"` + "Loading items...",
   `Alert variant="error"` + Retry, "No items yet. Upload a receipt." vs.
   "No items match these filters." + "Clear filters").
+  **Apartment tones (`src/format/apartmentTone.ts`,
+  `ui/ApartmentTone.tsx`):** each apartment has a colour (Bergblick sky,
+  Waldglück teal, anything else neutral). `ApartmentPill` (soft pill +
+  icon) shows the apartment in History rows, Items' `ApartmentCell` (now
+  `{name, apartmentId?}`) and the upload side panel's latest uploads;
+  `ApartmentDot` (decorative) sits before the name in the apartment tabs
+  (`ReceiptFilters.tsx`, any tab whose `id` isn't `null`), the apartment
+  choice cards (`RadioCardOption.leading`), the Report's apartment cards
+  and the side panel's per-apartment counts. Names stay visible; full
+  names stay in `title`/accessible names. See `docs/design.md`
+  ("Components") for the tokens, ratios and how to change a tone.
   **Display helpers (`src/format/formatDisplayDate.ts`,
   `src/format/apartmentShortName.ts`, `ui/MissingValue.tsx`,
   `ui/ClampedText.tsx`):** added for the Items table redesign (see

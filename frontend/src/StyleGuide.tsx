@@ -6,6 +6,7 @@ import Card from './components/ui/Card'
 import ClampedText from './components/ui/ClampedText'
 import MissingValue from './components/ui/MissingValue'
 import PageHeader from './components/ui/PageHeader'
+import { ApartmentDot, ApartmentPill } from './components/ui/ApartmentTone'
 import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
@@ -184,6 +185,7 @@ const SAMPLE_ITEM_ROWS = [
     currency: 'EUR',
     purchase_date: '2026-01-15',
     store_name: 'Corner Store',
+    apartment_id: 'oberaudorf-bergblick',
     apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
     status: 'needs_review' as const,
   },
@@ -197,6 +199,7 @@ const SAMPLE_ITEM_ROWS = [
     currency: 'EUR',
     purchase_date: '02.06.2026',
     store_name: 'Bakery',
+    apartment_id: 'sankt-englmar-waldglueck',
     apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück',
     status: 'approved' as const,
   },
@@ -210,6 +213,7 @@ const SAMPLE_ITEM_ROWS = [
     currency: null,
     purchase_date: null,
     store_name: null,
+    apartment_id: null,
     apartment_name: null,
     status: null,
   },
@@ -223,6 +227,7 @@ const SAMPLE_ITEM_ROWS = [
     currency: 'EUR',
     purchase_date: '2026-02-01',
     store_name: 'Amazon EU S.a r.l., Niederlassung Deutschland',
+    apartment_id: 'oberaudorf-bergblick',
     apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
     status: 'needs_review' as const,
   },
@@ -236,6 +241,7 @@ const SAMPLE_ITEM_ROWS = [
     currency: 'EUR',
     purchase_date: '2026-02-03',
     store_name: 'Amazon EU S.a r.l., Niederlassung Deutschland',
+    apartment_id: 'sankt-englmar-waldglueck',
     apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück',
     status: 'approved' as const,
   },
@@ -862,6 +868,33 @@ function StyleGuide() {
         </div>
       </Section>
 
+      <Section title="Apartment tones (ApartmentPill / ApartmentDot -- sky, teal, neutral)">
+        <p className="text-sm text-ink-muted">
+          One colour per apartment (src/format/apartmentTone.ts): Bergblick sky, Waldglück teal, any other
+          id neutral. Labels in lists are soft pills (History, Items, the upload side panel); tabs, the
+          apartment choice cards and the report cards get a small dot before the name. The name is always
+          visible text; the full name stays in the tooltip.
+        </p>
+        <Card className="flex flex-col gap-4">
+          {[
+            { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick', label: 'Bergblick (sky)' },
+            { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück', label: 'Waldglück (teal)' },
+            { id: 'some-other-apartment', name: 'Another apartment', label: 'Any other id (neutral)' },
+          ].map((sample) => (
+            <div key={sample.id} className="flex flex-wrap items-center gap-4">
+              <span className="w-44 text-sm text-ink-muted">{sample.label}</span>
+              <ApartmentPill apartmentId={sample.id} title={sample.name}>
+                <span className="truncate">{sample.label.split(' (')[0]}</span>
+              </ApartmentPill>
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-ink">
+                <ApartmentDot apartmentId={sample.id} />
+                {sample.label.split(' (')[0]}
+              </span>
+            </div>
+          ))}
+        </Card>
+      </Section>
+
       <Section title="History rows (HistoryRowList + HistoryHeaderRow + HistoryRow -- one Card with dividers and a column header row from sm up; approved vs. needs review, unrecognized/missing date, long store name, All tab vs. a filtered tab, wide vs. small screen)">
         {[false, true].map((small) => (
           <div key={String(small)} className="flex flex-col gap-2">
@@ -1383,7 +1416,7 @@ function StyleGuide() {
                         <StoreCell value={row.store_name} />
                       </td>
                       <td className="py-2 pr-2">
-                        <ApartmentCell name={row.apartment_name} />
+                        <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />
                       </td>
                       <td className="py-2">
                         <StatusCell status={row.status} />
@@ -1430,7 +1463,7 @@ function StyleGuide() {
                     </span>
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <ApartmentCell name={row.apartment_name} />
+                    <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />
                     <StatusCell status={row.status} />
                   </div>
                 </li>

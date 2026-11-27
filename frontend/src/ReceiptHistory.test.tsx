@@ -770,6 +770,43 @@ describe('ReceiptHistory', () => {
     }
   }
 
+  test('apartment labels and apartment tabs use the apartment\'s colour, with the name still as text', async () => {
+    // Given a receipt in each known apartment
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: () =>
+          Promise.resolve(
+            jsonResponse(200, {
+              items: [
+                oneItem({ apartment_id: OBERAUDORF.id, apartment_name: OBERAUDORF.name }),
+                oneItem({
+                  receipt_id: '22222222-2222-2222-2222-222222222222',
+                  store_name: 'Store B',
+                  apartment_id: WALDGLUECK.id,
+                  apartment_name: WALDGLUECK.name,
+                }),
+              ],
+              count: 2,
+              total: 2,
+            }),
+          ),
+      }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => {
+      expect(screen.getByText('Store B')).toBeInTheDocument()
+    })
+
+    // Then each row's label is a pill in its apartment's tone, titled with the full name
+    const list = screen.getByRole('list')
+    expect(within(list).getByTitle(OBERAUDORF.name)).toHaveClass('bg-apartment-sky-soft', 'text-apartment-sky')
+    expect(within(list).getByTitle(WALDGLUECK.name)).toHaveClass('bg-apartment-teal-soft', 'text-apartment-teal')
+    // And each apartment tab carries a decorative dot in that tone, the "All" tab none
+    const bergblickTab = screen.getByRole('tab', { name: OBERAUDORF.name })
+    expect(bergblickTab.querySelector('[aria-hidden="true"].bg-apartment-sky')).not.toBeNull()
+    expect(screen.getByRole('tab', { name: /all apartments/i }).querySelector('[aria-hidden="true"]')).toBeNull()
+  })
+
   // --- Column header row (from sm up) ------------------------------------
 
   function headerRow(): HTMLElement | null {

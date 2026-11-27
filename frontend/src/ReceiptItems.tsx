@@ -12,6 +12,7 @@ import ReceiptFilters, {
   effectiveStatus,
   effectiveYear,
 } from './ReceiptFilters'
+import { ApartmentPill } from './components/ui/ApartmentTone'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import ClampedText from './components/ui/ClampedText'
@@ -77,18 +78,18 @@ function WarningIcon() {
   )
 }
 
-export function ApartmentCell({ name }: { name: string | null }) {
+/** The apartment as a soft pill in its own tone (src/format/apartmentTone.ts):
+ * short name visible, full name in `title`. `apartmentId` picks the tone;
+ * without it the pill is neutral. */
+export function ApartmentCell({ name, apartmentId }: { name: string | null; apartmentId?: string | null }) {
   if (!name) {
     return <MissingValue />
   }
   const short = apartmentShortName(name)
   return (
-    <span
-      title={name}
-      className="inline-flex max-w-full items-center truncate rounded-full border border-border px-2 py-0.5 text-xs font-medium text-ink"
-    >
-      {short}
-    </span>
+    <ApartmentPill apartmentId={apartmentId} title={name}>
+      <span className="truncate">{short}</span>
+    </ApartmentPill>
   )
 }
 
@@ -229,7 +230,7 @@ function ItemCard({ row, showApartment, onOpen }: ItemCardProps) {
         </span>
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {showApartment && <ApartmentCell name={row.apartment_name} />}
+        {showApartment && <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />}
         <StatusCell status={row.status} />
       </div>
     </li>
@@ -643,7 +644,7 @@ function ReceiptItems() {
                       </td>
                       {showApartmentColumn && (
                         <td className="py-2 pr-2">
-                          <ApartmentCell name={row.apartment_name} />
+                          <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />
                         </td>
                       )}
                       <td className="py-2">

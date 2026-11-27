@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 export interface RadioCardOption {
   value: string
   /** Primary, bold line shown on the card. */
@@ -8,6 +9,10 @@ export interface RadioCardOption {
    * the visible label/secondaryLabel don't spell out the full name on their
    * own (e.g. a shortened apartment name). Falls back to `label`. */
   accessibleName?: string
+  /** Optional decorative element shown before the label (e.g. an
+   * apartment's colour dot). Should be `aria-hidden`; the accessible name
+   * still comes from `accessibleName`/`label`. */
+  leading?: ReactNode
 }
 
 interface RadioCardGroupProps {
@@ -98,6 +103,7 @@ function RadioCardGroup({
                 } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'}`}
               >
                 {checked && <CheckIcon />}
+                {option.leading}
                 <span className="truncate">{option.label}</span>
                 <input
                   type="radio"
@@ -140,6 +146,7 @@ function RadioCardGroup({
                   : 'border-border font-normal text-ink'
               } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'}`}
             >
+              {option.leading}
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{option.label}</span>
                 {option.secondaryLabel && (

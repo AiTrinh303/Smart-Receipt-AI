@@ -6,6 +6,7 @@ import type { ReceiptFacets, ReceiptSummary } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
 import { navigateTo } from './navigation'
 import { DateCell } from './ReceiptItems'
+import { ApartmentDot, ApartmentPill } from './components/ui/ApartmentTone'
 import Card from './components/ui/Card'
 import ClampedText from './components/ui/ClampedText'
 import MissingValue from './components/ui/MissingValue'
@@ -145,9 +146,13 @@ function LatestUploadRow({ receipt }: { receipt: ReceiptSummary }) {
           <span className="whitespace-nowrap">
             <DateCell value={receipt.purchase_date} />
           </span>
-          <span className="truncate" title={receipt.apartment_name ?? undefined}>
-            {apartmentLabel ?? <MissingValue />}
-          </span>
+          {apartmentLabel ? (
+            <ApartmentPill apartmentId={receipt.apartment_id} title={receipt.apartment_name ?? undefined}>
+              <span className="truncate">{apartmentLabel}</span>
+            </ApartmentPill>
+          ) : (
+            <MissingValue />
+          )}
         </span>
       </AppLink>
     </li>
@@ -176,6 +181,7 @@ export function ReceiptsOverview({ facets, latest }: { facets: ReceiptFacets; la
                 className={LINK_CLASSES}
                 title={apartment.name}
               >
+                <ApartmentDot apartmentId={apartment.id} />{' '}
                 {apartmentShortName(apartment.name) ?? apartment.name}: {apartment.count}
               </AppLink>
             </li>

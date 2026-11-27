@@ -83,6 +83,10 @@ const ALL_CUSTOM_TOKENS = [
   'warning-soft',
   'danger',
   'danger-soft',
+  'apartment-sky',
+  'apartment-sky-soft',
+  'apartment-teal',
+  'apartment-teal-soft',
   'white',
 ]
 
@@ -209,5 +213,30 @@ describe.each([
     // eslint-disable-next-line no-console
     console.log(`StatusBadge ${text} (${textHex}) on ${background} (${backgroundHex}) = ${ratio.toFixed(2)}:1`)
     expect(ratio).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+// --- Apartment tones (src/format/apartmentTone.ts) --------------------------
+//
+// Each apartment's label is tone text on its soft fill (a pill), and the
+// same tone may sit on plain white (a dot next to a name, or the text if a
+// fill is ever dropped) -- both pairs must clear 4.5:1 for normal text.
+// The measured ratios are printed so a run shows the real values.
+
+describe.each(['sky', 'teal'])('apartment tone "%s"', (tone) => {
+  const textHex = resolveToken(`apartment-${tone}`) as string
+  const softHex = resolveToken(`apartment-${tone}-soft`) as string
+  const whiteHex = resolveToken('white') as string
+
+  test('tone text meets 4.5:1 on its soft background and on white -- measured ratios shown below', () => {
+    const onSoft = contrastRatio(textHex, softHex)
+    const onWhite = contrastRatio(textHex, whiteHex)
+    // eslint-disable-next-line no-console
+    console.log(
+      `apartment ${tone}: text ${textHex} on soft ${softHex} = ${onSoft.toFixed(2)}:1, ` +
+        `on white ${whiteHex} = ${onWhite.toFixed(2)}:1`,
+    )
+    expect(onSoft).toBeGreaterThanOrEqual(4.5)
+    expect(onWhite).toBeGreaterThanOrEqual(4.5)
   })
 })

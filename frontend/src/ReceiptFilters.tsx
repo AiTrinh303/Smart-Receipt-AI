@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { ReceiptStatus } from './api/types'
+import { ApartmentDot } from './components/ui/ApartmentTone'
 
 /** Shared by ReceiptHistory and the Items view: the apartment tab bar plus
  * the Year/Status selects. Pure presentation + URL-agnostic callbacks --
@@ -129,10 +130,13 @@ function ReceiptFilters({
               tabIndex={selected ? 0 : -1}
               onClick={() => onSelectApartment(tab.id)}
               onKeyDown={(e) => handleTabKeyDown(e, index)}
-              className={`min-h-[44px] flex-1 rounded-md px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+              className={`inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
                 selected ? 'bg-white font-semibold text-brand shadow-sm' : 'font-medium text-ink-muted'
               }`}
             >
+              {/* An apartment tab (any tab but "All apartments") gets its
+                  apartment's colour dot; decorative, the label names it. */}
+              {tab.id !== null && <ApartmentDot apartmentId={tab.id} />}
               {tab.label}
             </button>
           )

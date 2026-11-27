@@ -34,6 +34,20 @@ export default {
           DEFAULT: '#b91c1c', // red-700
           soft: '#fef2f2', // red-50
         },
+        // One tone per apartment (src/format/apartmentTone.ts maps apartment
+        // id -> tone). Text on its soft fill and on white is >= 4.5:1
+        // (Button.contrast.test.ts prints the ratios). Labels only -- never
+        // used to convey state, and the name is always shown as text too.
+        apartment: {
+          sky: {
+            DEFAULT: '#0369a1', // sky-700
+            soft: '#f0f9ff', // sky-50
+          },
+          teal: {
+            DEFAULT: '#0f766e', // teal-700
+            soft: '#f0fdfa', // teal-50
+          },
+        },
       },
       borderRadius: {
         sm: '0.25rem',

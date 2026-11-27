@@ -8,6 +8,7 @@ import { DateCell } from './ReceiptItems'
 import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
+import { ApartmentPill } from './components/ui/ApartmentTone'
 import Card from './components/ui/Card'
 import ClampedText from './components/ui/ClampedText'
 import PageHeader from './components/ui/PageHeader'
@@ -27,29 +28,21 @@ const NOT_ASSIGNED = 'Not assigned'
 
 const FOCUS_TAB_INDEX_SESSION_KEY = 'receiptHistoryFocusTabIndex'
 
-function ApartmentIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 flex-shrink-0" fill="none">
-      <path
-        d="M4 17.5V5.5a1 1 0 011-1h4.5v13M11.5 17.5V9h3.5a1 1 0 011 1v7.5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M6 7.5h1M6 10.5h1M6 13.5h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 /** The apartment shows the short name visibly (same convenience as the
  * Items view's ApartmentCell and the upload form's apartment choice), but
  * keeps the full name available both as a `title` tooltip and as hidden
  * text for assistive tech that doesn't read `title` -- the visible short
  * name is purely decorative (`aria-hidden`) so the two are never both
- * announced. Muted icon + text rather than a filled pill, so a list of
- * rows doesn't turn into a column of colored blocks. */
-function ApartmentBadge({ apartmentName }: { apartmentName: string | null | undefined }) {
+ * announced. Shown as a soft pill in the apartment's own tone
+ * (src/format/apartmentTone.ts), so the two apartments are told apart at a
+ * glance; the name is always there as text too. */
+function ApartmentBadge({
+  apartmentId,
+  apartmentName,
+}: {
+  apartmentId: string | null | undefined
+  apartmentName: string | null | undefined
+}) {
   if (!apartmentName) {
     return <span className="text-xs text-ink-muted">{NOT_ASSIGNED}</span>
   }
@@ -57,13 +50,12 @@ function ApartmentBadge({ apartmentName }: { apartmentName: string | null | unde
   const short = apartmentShortName(apartmentName) ?? apartmentName
 
   return (
-    <span title={apartmentName} className="inline-flex min-w-0 items-center gap-1 text-xs text-ink-muted">
-      <ApartmentIcon />
+    <ApartmentPill apartmentId={apartmentId} title={apartmentName}>
       <span aria-hidden="true" className="truncate">
         {short}
       </span>
       <span className="sr-only">{apartmentName}</span>
-    </span>
+    </ApartmentPill>
   )
 }
 
@@ -111,7 +103,7 @@ export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusB
             <span className="tabular-nums">
               <DateCell value={item.purchase_date} />
             </span>
-            {showApartmentBadge && <ApartmentBadge apartmentName={item.apartment_name} />}
+            {showApartmentBadge && <ApartmentBadge apartmentId={item.apartment_id} apartmentName={item.apartment_name} />}
             {showStatusBadge && <StatusBadge status={item.status} />}
           </span>
         </span>
@@ -126,7 +118,7 @@ export function HistoryRow({ item, href, onOpen, showApartmentBadge, showStatusB
           </span>
           {showApartmentBadge && (
             <span className="ml-4 flex w-24 min-w-0 flex-shrink-0">
-              <ApartmentBadge apartmentName={item.apartment_name} />
+              <ApartmentBadge apartmentId={item.apartment_id} apartmentName={item.apartment_name} />
             </span>
           )}
           {showStatusBadge && (

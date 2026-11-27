@@ -6,6 +6,7 @@ import { apartmentShortName } from './format/apartmentShortName'
 import { useApartments } from './hooks/useApartments'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
+import { ApartmentDot } from './components/ui/ApartmentTone'
 import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 
@@ -88,6 +89,7 @@ function ReceiptApartment({ receiptId, apartmentId, onUpdated }: ReceiptApartmen
             value: apartment.id,
             label: apartmentShortName(apartment.name) ?? apartment.name,
             accessibleName: apartment.name,
+            leading: <ApartmentDot apartmentId={apartment.id} />,
           }))}
           value={selected}
           onChange={handleChange}
