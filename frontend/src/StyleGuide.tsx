@@ -15,7 +15,8 @@ import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_E
 import { ItemCardList, ItemsTable } from './ReceiptItems'
 import { HistoryHeaderRow, HistoryRow, HistoryRowList } from './ReceiptHistory'
 import ReceiptFileViewer from './ReceiptFileViewer'
-import { ExportCard, ReportChecks, VAT_FOOTNOTE } from './ReceiptReport'
+import { ExportCard, VAT_FOOTNOTE } from './ReceiptReport'
+import { exportOpenItems } from './reportOpenItems'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
 import type { ItemRow, ReceiptFacets, ReceiptSummary, YearlyReport } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
@@ -267,6 +268,11 @@ const SAMPLE_PORTRAIT_RECEIPT_URL = `data:image/svg+xml;utf8,${encodeURIComponen
 const SAMPLE_SIDEWAYS_RECEIPT_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><g transform="translate(0 300) rotate(-90)"><rect width="300" height="600" fill="#ffffff"/><rect x="30" y="40" width="160" height="28" rx="4" fill="#94a3b8"/>${SAMPLE_RECEIPT_LINES}<rect x="30" y="540" width="240" height="20" rx="3" fill="#64748b"/></g></svg>`,
 )}`
+
+const SAMPLE_EXPORT_APARTMENTS = [
+  { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick' },
+  { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück' },
+]
 
 const SAMPLE_REPORT_ALL_CLEAR: YearlyReport = {
   year: 2026,
@@ -1441,7 +1447,7 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Yearly report (ReceiptReport -- apartment cards in their tone (stronger tint), Both apartments a neutral slate-100 card, Before you send it, export card, VAT note)">
+      <Section title="Yearly report (ReceiptReport -- apartment cards in their tone (stronger tint), Both apartments a neutral slate-100 card, Show by month, export card with its short note, VAT note)">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card surface={apartmentToneClasses('oberaudorf-bergblick').card} className="flex flex-col gap-3">
             <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Oberaudorf - Bergblick">
@@ -1471,29 +1477,38 @@ function StyleGuide() {
           </Card>
         </div>
 
-        <p className="text-sm font-medium text-ink">"Before you send it" -- basis all, with open checks</p>
-        <ReportChecks report={SAMPLE_REPORT_WITH_CHECKS} year={2026} basis="all" />
-        <p className="text-sm font-medium text-ink">Same data, basis approved (not-approved receipts are left out)</p>
-        <ReportChecks
-          report={{ ...SAMPLE_REPORT_WITH_CHECKS, basis: 'approved', counted_unreviewed: 0, excluded: { ...SAMPLE_REPORT_WITH_CHECKS.excluded, not_approved: 5 } }}
-          year={2026}
-          basis="approved"
-        />
-        <p className="text-sm font-medium text-ink">A year with nothing to check</p>
-        <ReportChecks report={SAMPLE_REPORT_ALL_CLEAR} year={2026} basis="all" />
-
         <p className="text-sm text-ink-muted">
-          Then "Monthly breakdown" (a closed details with all 12 months, a dash where a month has no data,
-          no currency heading for a single currency), then the export card, then the VAT note.
+          Under the summary cards: a closed "Show by month" (all 12 months, a dash where a month has no
+          data, no currency heading for a single currency), then the export card, then the VAT note.
         </p>
 
+        <p className="text-sm font-medium text-ink">Export card -- basis all, with things still open</p>
         <ExportCard
           year={2026}
           basis="all"
-          apartments={[
-            { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick' },
-            { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück' },
-          ]}
+          apartments={SAMPLE_EXPORT_APARTMENTS}
+          openItems={exportOpenItems(SAMPLE_REPORT_WITH_CHECKS, 'all')}
+        />
+        <p className="text-sm font-medium text-ink">Same data, basis approved ("not approved")</p>
+        <ExportCard
+          year={2026}
+          basis="approved"
+          apartments={SAMPLE_EXPORT_APARTMENTS}
+          openItems={exportOpenItems(
+            {
+              ...SAMPLE_REPORT_WITH_CHECKS,
+              counted_unreviewed: 0,
+              excluded: { ...SAMPLE_REPORT_WITH_CHECKS.excluded, not_approved: 5 },
+            },
+            'approved',
+          )}
+        />
+        <p className="text-sm font-medium text-ink">Nothing open (no note at all)</p>
+        <ExportCard
+          year={2026}
+          basis="all"
+          apartments={SAMPLE_EXPORT_APARTMENTS}
+          openItems={exportOpenItems(SAMPLE_REPORT_ALL_CLEAR, 'all')}
         />
         <ExportCard year={null} basis="all" apartments={null} />
         <p className="text-sm text-ink-muted">{VAT_FOOTNOTE}</p>

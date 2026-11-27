@@ -2351,6 +2351,39 @@ itself; that part was verified by hand, as above.)
   string it asserts changed. The contrast test now also resolves each
   apartment's `card` classes against the theme, and checks slate-100.
 
+## Report: one short note instead of the checks card
+
+- **Removed:** the "Before you send it" card (`ReportChecks` and its
+  helpers deleted). The Report no longer shows the warnings list or the
+  possible-duplicates list; the backend is unchanged and still sends
+  them. **A History "Has warnings" filter would be the new home for the
+  warnings list** (not built yet).
+- **Export note** (inside "For your tax advisor", above the buttons, only
+  when something is open): "N not reviewed · M with warnings" ("not
+  approved" under `basis=approved`; a zero part left out) with a
+  right-aligned "Review them" link -- shown only while the not-reviewed
+  count is above 0, since with only warnings the needs-review list would
+  be empty -- then one line per non-zero "not in these totals" bucket
+  with today's texts and the "no valid date" link. Each line has the
+  warning icon + words. Nothing when all is zero.
+- **"Show by month":** the monthly tables in a closed `<details>`
+  directly under the summary cards, no card of its own; same content.
+- **Privacy note:** one sentence, "The ZIP contains personal data and is
+  not encrypted; send it only to your tax advisor." (it also used to say
+  what the ZIP contains and that it can take a minute -- dropped).
+- **Tests (`ReceiptReport.test.tsx`):** removed (their feature is gone): 'a
+  warning receipt shows the plain-words label and a link',
+  '"Showing the first 50." appears only when…', 'a duplicate group shows
+  one "Open N" link…', 'a zero check is one success row…'. Rewritten:
+  the not-reviewed test -> the note line and link, a zero part left out,
+  no link with only warnings; the basis-approved test -> "not approved"
+  plus every bucket inside the export card, above the buttons, VAT last;
+  the monthly test -> "Show by month" right under the summary cards, not
+  in a card; the warnings/duplicates test -> lists and checks card gone;
+  the all-clear test -> no note at all; the BE modified-click test now
+  uses the "Review them" link (the receipt links it used are gone); the
+  export test asserts the exact new privacy sentence.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

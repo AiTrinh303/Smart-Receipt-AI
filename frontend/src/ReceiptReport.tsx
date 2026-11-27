@@ -12,8 +12,6 @@ import type {
   YearlyReport,
 } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
-import { formatDisplayDate } from './format/formatDisplayDate'
-import Alert from './components/ui/Alert'
 import { apartmentToneClasses } from './format/apartmentTone'
 import Card from './components/ui/Card'
 import PageHeader from './components/ui/PageHeader'
@@ -23,6 +21,7 @@ import { useApartments } from './hooks/useApartments'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo, isPlainLeftClick } from './navigation'
 import { DownloadIcon } from './ReceiptFileViewer'
+import { exportOpenItems, type ExportOpenItems } from './reportOpenItems'
 
 /** The page description follows the "Only count receipts I approved"
  * choice, so it never claims approved-only totals while every receipt is
@@ -36,8 +35,6 @@ const LOADING_ROW_COUNT = 4
 
 const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
 const LOAD_FAILED_MESSAGE = 'Could not load the yearly report. Please try again.'
-
-const ATTENTION_LIMIT = 50
 
 const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
@@ -55,29 +52,6 @@ const MONTH_NAMES = [
   'November',
   'December',
 ]
-
-/** Fixed plain-words map for a warning code -- any code not listed shows
- * the raw code itself rather than nothing. */
-const WARNING_CODE_LABELS: Record<string, string> = {
-  TOTAL_MISMATCH: 'total does not match the items',
-  LINE_MISMATCH: 'a line does not add up',
-  MISSING_STORE: 'no store name',
-  FUTURE_DATE: 'date is in the future',
-}
-
-function describeWarningCode(code: string): string {
-  return WARNING_CODE_LABELS[code] ?? code
-}
-
-/** The backend only ever sends an already-normalized purchase_date here
- * (every receipt in `attention`/`possible_duplicates`/`largest` is
- * counted, which requires a valid date), so `formatDisplayDate`'s
- * "missing" case never actually happens -- this just satisfies the
- * return type without assuming so unsafely. */
-function displayDateText(value: string): string {
-  const display = formatDisplayDate(value)
-  return display.kind === 'missing' ? 'Not detected' : display.text
-}
 
 interface ReportUrlParams {
   year: string | null
@@ -107,14 +81,6 @@ function buildReportSearch(year: number, basis: ReportBasis): string {
   params.set('year', String(year))
   if (basis === 'approved') params.set('basis', 'approved')
   return `?${params.toString()}`
-}
-
-function receiptHref(receiptId: string): string {
-  return `/?receipt=${receiptId}`
-}
-
-function openReceipt(receiptId: string) {
-  navigateTo(receiptHref(receiptId).slice(1))
 }
 
 /** Renders one currency row ("€1,234.56 Β· 7 receipts" -- the amount
@@ -345,10 +311,7 @@ const EXPORT_SECONDARY_DISABLED_CLASSES =
   `${EXPORT_LINK_BASE} cursor-not-allowed border border-border bg-slate-100 text-slate-400`
 
 const EXPORT_NOTHING_TO_EXPORT_TEXT = 'Nothing to export yet.'
-const EXPORT_EXPLANATION_TEXT =
-  'The ZIP has one row per receipt and the original documents as PDF. It can take a minute when ' +
-  'there are many receipts. It contains personal data and is not encrypted: send it only to your ' +
-  'advisor.'
+const EXPORT_PRIVACY_TEXT = 'The ZIP contains personal data and is not encrypted; send it only to your tax advisor.'
 
 function exportPeriodText(year: number, basis: ReportBasis): string {
   return `${year}, ${basis === 'approved' ? 'approved receipts only' : 'all receipts'}`
@@ -369,15 +332,90 @@ export interface ExportCardProps {
   year: number | null
   basis: ReportBasis
   apartments: Apartment[] | null
+  /** What is still open for this year/basis; the short note above the
+   * buttons is built from it. Omitted (or all zero) -> no note at all. */
+  openItems?: ExportOpenItems
 }
 
-export function ExportCard({ year, basis, apartments }: ExportCardProps) {
+/** The short "check before you send" note above the export buttons: one
+ * line "N not reviewed · M with warnings" (parts that are 0 left out;
+ * "not approved" under basis=approved) with a right-aligned "Review them"
+ * link while anything is unreviewed, then one line per non-zero "not in
+ * these totals" bucket. Every line starts with the warning icon and says
+ * what it means in words. Nothing at all when everything is zero. */
+function ExportNote({ year, basis, items }: { year: number; basis: ReportBasis; items: ExportOpenItems }) {
+  const parts: string[] = []
+  if (items.notReviewed > 0) {
+    parts.push(`${items.notReviewed} ${basis === 'approved' ? 'not approved' : 'not reviewed'}`)
+  }
+  if (items.withWarnings > 0) {
+    parts.push(`${items.withWarnings} with warnings`)
+  }
+  const anything =
+    parts.length > 0 || items.undated > 0 || items.noTotal > 0 || items.noCurrency > 0 || items.noApartment > 0
+  if (!anything) {
+    return null
+  }
+
+  return (
+    <ul className="flex flex-col gap-2 text-sm text-ink">
+      {parts.length > 0 && (
+        <li className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+          <span className="flex items-start gap-2">
+            <NoteIcon />
+            {parts.join(' · ')}
+          </span>
+          {items.notReviewed > 0 && (
+            <HistoryLink search={`?view=history&year=${year}&status=needs_review`}>Review them</HistoryLink>
+          )}
+        </li>
+      )}
+      {items.undated > 0 && (
+        <li className="flex items-start gap-2">
+          <NoteIcon />
+          <HistoryLink search="?view=history&year=none">{items.undated} receipts have no valid date</HistoryLink>
+        </li>
+      )}
+      {items.noTotal > 0 && (
+        <li className="flex items-start gap-2">
+          <NoteIcon />
+          <span>
+            {items.noTotal} {items.noTotal === 1 ? 'receipt has' : 'receipts have'} no total. Open the receipt
+            and fix it with Edit.
+          </span>
+        </li>
+      )}
+      {items.noCurrency > 0 && (
+        <li className="flex items-start gap-2">
+          <NoteIcon />
+          <span>
+            {items.noCurrency} {items.noCurrency === 1 ? 'receipt has' : 'receipts have'} no currency. Open the
+            receipt and fix it with Edit.
+          </span>
+        </li>
+      )}
+      {items.noApartment > 0 && (
+        <li className="flex items-start gap-2">
+          <NoteIcon />
+          <span>
+            {items.noApartment} {items.noApartment === 1 ? 'receipt has' : 'receipts have'} no apartment. Open
+            the receipt and fix it with Edit.
+          </span>
+        </li>
+      )}
+    </ul>
+  )
+}
+
+export function ExportCard({ year, basis, apartments, openItems }: ExportCardProps) {
   const [apartmentId, setApartmentId] = useState('')
   const [style, setStyle] = useState<ExportStyle>('excel_de')
 
   return (
     <Card className="flex flex-col gap-4">
       <h2 className="text-base font-semibold text-ink">For your tax advisor</h2>
+
+      {year !== null && openItems && <ExportNote year={year} basis={basis} items={openItems} />}
 
       {exportLinks(year, basis, style, apartmentId)}
 
@@ -425,7 +463,7 @@ export function ExportCard({ year, basis, apartments }: ExportCardProps) {
       </div>
       </details>
 
-      <p className="text-sm text-ink-muted">{EXPORT_EXPLANATION_TEXT}</p>
+      <p className="text-sm text-ink-muted">{EXPORT_PRIVACY_TEXT}</p>
     </Card>
   )
 }
@@ -469,33 +507,9 @@ function exportLinks(year: number | null, basis: ReportBasis, style: ExportStyle
   )
 }
 
-const REPORT_LINK_CLASSES =
-  'font-medium text-ink underline hover:text-brand focus-visible:text-brand focus-visible:outline ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
-
 const CHECK_LINK_CLASSES =
   'font-medium text-brand underline focus-visible:outline focus-visible:outline-2 ' +
   'focus-visible:outline-offset-2 focus-visible:outline-brand'
-
-/** A link to a saved receipt; a plain click opens it in place, any
- * modified click is left to the browser (new tab). */
-function ReceiptLink({ receiptId, children }: { receiptId: string; children: ReactNode }) {
-  return (
-    <a
-      href={receiptHref(receiptId)}
-      onClick={(e) => {
-        if (!isPlainLeftClick(e)) {
-          return
-        }
-        e.preventDefault()
-        openReceipt(receiptId)
-      }}
-      className={REPORT_LINK_CLASSES}
-    >
-      {children}
-    </a>
-  )
-}
 
 /** A link to a filtered History view (e.g. `?view=history&year=none`). */
 function HistoryLink({ search, children }: { search: string; children: ReactNode }) {
@@ -516,207 +530,12 @@ function HistoryLink({ search, children }: { search: string; children: ReactNode
   )
 }
 
-function CheckIssueIcon() {
+function NoteIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" fill="none">
       <path d="M10 3.5l8 13.5H2l8-13.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
       <path d="M10 8.5v3.5M10 14.75h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
-  )
-}
-
-function CheckOkIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 flex-shrink-0 text-success" fill="none">
-      <path
-        d="M4 10.5l3.5 3.5L16 5.5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-/** One row of "Before you send it": an icon (warning triangle or check
- * mark -- the shape and the words carry the meaning, never the colour
- * alone) next to the row's text and any link/details. */
-function CheckRow({ ok, children }: { ok: boolean; children: ReactNode }) {
-  return (
-    <li className="flex items-start gap-2 text-sm text-ink">
-      {ok ? <CheckOkIcon /> : <CheckIssueIcon />}
-      <div className="flex min-w-0 flex-1 flex-col gap-2">{children}</div>
-    </li>
-  )
-}
-
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`
-}
-
-function WarningsList({ report }: { report: YearlyReport }) {
-  return (
-    <>
-      <ul className="flex flex-col gap-2">
-        {report.attention.map((receipt) => (
-          <li key={receipt.receipt_id} className="rounded-md border border-border-subtle p-3 text-sm">
-            <ReceiptLink receiptId={receipt.receipt_id}>{receipt.store_name ?? 'Not detected'}</ReceiptLink>
-            <p className="mt-1 text-ink-muted">
-              {displayDateText(receipt.purchase_date)} · {formatMoneyFromString(receipt.total, receipt.currency)}
-            </p>
-            <p className="mt-1 text-ink-muted">{receipt.warning_codes.map(describeWarningCode).join(', ')}</p>
-          </li>
-        ))}
-      </ul>
-      {report.with_warnings > ATTENTION_LIMIT && <p className="text-sm text-ink-muted">Showing the first 50.</p>}
-    </>
-  )
-}
-
-function DuplicatesList({ report }: { report: YearlyReport }) {
-  return (
-    <ul className="flex flex-col gap-2">
-      {report.possible_duplicates.map((group, index) => (
-        <li key={index} className="rounded-md border border-border-subtle p-3 text-sm">
-          <p className="font-medium text-ink">
-            {group.store_name}, {displayDateText(group.purchase_date)},{' '}
-            {formatMoneyFromString(group.total, group.currency)}
-          </p>
-          <p className="mt-1 flex flex-wrap gap-2">
-            {group.receipt_ids.map((receiptId, receiptIndex) => (
-              <ReceiptLink key={receiptId} receiptId={receiptId}>
-                Open {receiptIndex + 1}
-              </ReceiptLink>
-            ))}
-          </p>
-          <p className="mt-1 text-ink-muted">Both are counted in the totals until you delete one.</p>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-/** "Before you send it": every check the owner should go through before
- * handing the report over, one row each -- replacing the earlier "Quick
- * check", the "Receipts not in these totals" panel and the loose "N of
- * the counted receipts were not reviewed" line. A check with nothing to
- * do shows a single success row; when every check is clear the card shows
- * only one success Alert. Exported so `?view=styleguide` renders the real
- * thing. */
-export function ReportChecks({ report, year, basis }: { report: YearlyReport; year: number; basis: ReportBasis }) {
-  const { excluded } = report
-  const notReviewedCount = basis === 'approved' ? excluded.not_approved : report.counted_unreviewed
-  const notInTotalsCount = excluded.undated + excluded.no_total + excluded.no_currency + excluded.no_apartment
-  const allClear =
-    notReviewedCount === 0 &&
-    report.with_warnings === 0 &&
-    report.possible_duplicate_groups === 0 &&
-    notInTotalsCount === 0
-  const reviewSearch = `?view=history&year=${year}&status=needs_review`
-
-  return (
-    <Card className="flex flex-col gap-4">
-      <h2 className="text-base font-semibold text-ink">Before you send it</h2>
-
-      {allClear ? (
-        <Alert variant="success">Ready to send: every receipt of {year} is reviewed and counted.</Alert>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {notReviewedCount > 0 ? (
-            <CheckRow ok={false}>
-              <p>
-                {basis === 'approved'
-                  ? `${plural(notReviewedCount, 'receipt', 'receipts')} not approved, not in these totals`
-                  : `${plural(notReviewedCount, 'receipt', 'receipts')} not reviewed yet`}{' '}
-                <HistoryLink search={reviewSearch}>Review them</HistoryLink>
-              </p>
-            </CheckRow>
-          ) : (
-            <CheckRow ok>
-              <p>{basis === 'approved' ? 'Every receipt is approved' : 'Every counted receipt is reviewed'}</p>
-            </CheckRow>
-          )}
-
-          {report.with_warnings > 0 ? (
-            <CheckRow ok={false}>
-              <p>{plural(report.with_warnings, 'receipt has warnings', 'receipts have warnings')}</p>
-              <details>
-                <summary className={DETAILS_SUMMARY_CLASSES}>Show</summary>
-                <div className="mt-2 flex flex-col gap-2">
-                  <WarningsList report={report} />
-                </div>
-              </details>
-            </CheckRow>
-          ) : (
-            <CheckRow ok>
-              <p>No warnings</p>
-            </CheckRow>
-          )}
-
-          {report.possible_duplicate_groups > 0 ? (
-            <CheckRow ok={false}>
-              <p>
-                {plural(
-                  report.possible_duplicate_groups,
-                  'group of possible duplicates',
-                  'groups of possible duplicates',
-                )}
-              </p>
-              <details>
-                <summary className={DETAILS_SUMMARY_CLASSES}>Show</summary>
-                <div className="mt-2">
-                  <DuplicatesList report={report} />
-                </div>
-              </details>
-            </CheckRow>
-          ) : (
-            <CheckRow ok>
-              <p>No possible duplicates</p>
-            </CheckRow>
-          )}
-
-          {notInTotalsCount === 0 && (
-            <CheckRow ok>
-              <p>No receipts left out of these totals</p>
-            </CheckRow>
-          )}
-          {excluded.undated > 0 && (
-            <CheckRow ok={false}>
-              <p>
-                <HistoryLink search="?view=history&year=none">
-                  {excluded.undated} receipts have no valid date
-                </HistoryLink>
-              </p>
-            </CheckRow>
-          )}
-          {excluded.no_total > 0 && (
-            <CheckRow ok={false}>
-              <p>
-                {excluded.no_total} {excluded.no_total === 1 ? 'receipt has' : 'receipts have'} no total.
-                Open the receipt and fix it with Edit.
-              </p>
-            </CheckRow>
-          )}
-          {excluded.no_currency > 0 && (
-            <CheckRow ok={false}>
-              <p>
-                {excluded.no_currency} {excluded.no_currency === 1 ? 'receipt has' : 'receipts have'} no
-                currency. Open the receipt and fix it with Edit.
-              </p>
-            </CheckRow>
-          )}
-          {excluded.no_apartment > 0 && (
-            <CheckRow ok={false}>
-              <p>
-                {excluded.no_apartment} {excluded.no_apartment === 1 ? 'receipt has' : 'receipts have'} no
-                apartment. Open the receipt and fix it with Edit.
-              </p>
-            </CheckRow>
-          )}
-        </ul>
-      )}
-    </Card>
   )
 }
 
@@ -898,30 +717,33 @@ function ReceiptReport() {
         <OverallSummaryCard overall={report.overall} year={year} basis={basis} />
       </div>
 
-      <ReportChecks report={report} year={year} basis={basis} />
-
       {monthlyTables.length > 0 && (
-        <Card>
-          <details>
-            <summary className={DETAILS_SUMMARY_CLASSES}>Monthly breakdown</summary>
-            <div className="mt-4 flex flex-col gap-4">
-              {monthlyTables.map(({ currency, months, cells }) => (
-                <MonthlyCurrencyTable
-                  key={currency}
-                  currency={currency}
-                  months={months}
-                  cells={cells}
-                  apartments={report.apartments}
-                  isSmallScreen={isSmallScreen}
-                  showCurrencyHeading={monthlyTables.length > 1}
-                />
-              ))}
-            </div>
-          </details>
-        </Card>
+        // Not a card of its own: a closed <details> right under the
+        // summary cards it breaks down.
+        <details>
+          <summary className={DETAILS_SUMMARY_CLASSES}>Show by month</summary>
+          <div className="mt-4 flex flex-col gap-4">
+            {monthlyTables.map(({ currency, months, cells }) => (
+              <MonthlyCurrencyTable
+                key={currency}
+                currency={currency}
+                months={months}
+                cells={cells}
+                apartments={report.apartments}
+                isSmallScreen={isSmallScreen}
+                showCurrencyHeading={monthlyTables.length > 1}
+              />
+            ))}
+          </div>
+        </details>
       )}
 
-      <ExportCard year={year} basis={basis} apartments={exportApartments} />
+      <ExportCard
+        year={year}
+        basis={basis}
+        apartments={exportApartments}
+        openItems={exportOpenItems(report, basis)}
+      />
 
       <p className="text-sm text-ink-muted">{VAT_FOOTNOTE}</p>
     </div>
