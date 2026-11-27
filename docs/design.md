@@ -2193,6 +2193,33 @@ always worked. Each changed component has a test asserting a ctrl- and
 cmd-click are not prevented (URL unchanged) and a plain click still
 navigates (`src/test/linkClicks.ts`).
 
+## Report description, Waldglück's dot, thousands separators
+
+- **Report description follows the basis:** "Spending per apartment, from
+  every saved receipt." by default; "…from the receipts you approved."
+  only with "Only count receipts I approved" on (it used to say the
+  latter always).
+- **Waldglück's missing dot -- cause:** not a code bug. The running Vite
+  dev server had been started (10:33) before `apartment.fuchsia` was
+  added to `tailwind.config.js` (10:40) and had not picked up the config
+  change: its CSS contained the `apartment-sky` classes but no
+  `apartment-fuchsia` ones, so *every* Waldglück dot and pill (History,
+  Items, side panel, tabs, choice cards, Report) was uncoloured there.
+  A fresh `npm run build` contains all three fuchsia classes. **After
+  any change to `tailwind.config.js`, restart `npm run dev`.** A test now
+  checks both Report cards carry their dot.
+- **Thousands separators everywhere money is shown:** "€1,238.45",
+  "-€1,000.00", "USD 12,345.67" -- `groupThousands()` in
+  `formatMoney.ts`, used by both `formatMoney` and
+  `formatMoneyFromString`, inserts commas into the integer part of the
+  finished amount *string* (no parsing, no arithmetic; a non-plain string
+  is left as is). Exports unchanged.
+- **Tests:** `formatMoney.test.ts` -- 2 expectations changed
+  ("USD 1234.56" -> "USD 1,234.56", "1234.56" -> "1,234.56"; one test
+  renamed, since the digits are still as given but separators are now
+  added), plus grouping tests. `ReceiptReport.test.tsx` -- new: both
+  cards' dots, and the description per basis.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

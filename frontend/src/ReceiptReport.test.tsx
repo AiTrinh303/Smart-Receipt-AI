@@ -153,6 +153,35 @@ describe('ReceiptReport', () => {
     expect(screen.getByText('Both apartments')).toBeInTheDocument()
   })
 
+  test('both apartment cards show their colour dot (Bergblick sky, Waldglück fuchsia)', async () => {
+    // Given the default report with both apartments
+    render(<ReceiptReport />)
+    const waldglueck = await screen.findByRole('heading', { name: 'Waldglück' })
+
+    // Then each card heading carries its apartment's dot
+    expect(screen.getByRole('heading', { name: 'Bergblick' }).querySelector('[aria-hidden="true"].bg-apartment-sky')).not.toBeNull()
+    expect(waldglueck.querySelector('[aria-hidden="true"].bg-apartment-fuchsia')).not.toBeNull()
+  })
+
+  test('the page description follows "Only count receipts I approved"', async () => {
+    // Given the default basis (all receipts)
+    const { unmount } = render(<ReceiptReport />)
+    await screen.findByRole('heading', { name: 'Bergblick' })
+
+    // Then the description says every saved receipt counts
+    expect(screen.getByText('Spending per apartment, from every saved receipt.')).toBeInTheDocument()
+    expect(screen.queryByText('Spending per apartment, from the receipts you approved.')).not.toBeInTheDocument()
+    unmount()
+
+    // Given basis=approved
+    window.history.replaceState({}, '', '/?view=report&year=2026&basis=approved')
+    render(<ReceiptReport />)
+    await screen.findByRole('heading', { name: 'Bergblick' })
+
+    // Then it says only approved receipts count
+    expect(screen.getByText('Spending per apartment, from the receipts you approved.')).toBeInTheDocument()
+  })
+
   test('two currencies are never merged -- shown as separate lines', async () => {
     fetchSpy.mockImplementation(
       routeFetch({

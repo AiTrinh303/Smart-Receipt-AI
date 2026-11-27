@@ -24,7 +24,14 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo, isPlainLeftClick } from './navigation'
 import { DownloadIcon } from './ReceiptFileViewer'
 
-const REPORT_DESCRIPTION = 'Spending per apartment, from the receipts you approved.'
+/** The page description follows the "Only count receipts I approved"
+ * choice, so it never claims approved-only totals while every receipt is
+ * counted. */
+function reportDescription(basis: ReportBasis): string {
+  return basis === 'approved'
+    ? 'Spending per apartment, from the receipts you approved.'
+    : 'Spending per apartment, from every saved receipt.'
+}
 const LOADING_ROW_COUNT = 4
 
 const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
@@ -751,7 +758,7 @@ function ReceiptReport() {
   if (isLoading) {
     return (
       <div className="flex w-full flex-col gap-4">
-        <PageHeader title="Yearly report" description={REPORT_DESCRIPTION} />
+        <PageHeader title="Yearly report" description={reportDescription(basis)} />
         <div
           role="status"
           aria-busy="true"
@@ -769,7 +776,7 @@ function ReceiptReport() {
   if (error) {
     return (
       <div className="flex w-full flex-col gap-4">
-        <PageHeader title="Yearly report" description={REPORT_DESCRIPTION} />
+        <PageHeader title="Yearly report" description={reportDescription(basis)} />
         <div className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface p-6 shadow-card">
           <p role="alert" className="text-sm text-danger">
             {error}
@@ -789,7 +796,7 @@ function ReceiptReport() {
   if (!years || years.length === 0) {
     return (
       <div className="flex w-full flex-col gap-4">
-        <PageHeader title="Yearly report" description={REPORT_DESCRIPTION} />
+        <PageHeader title="Yearly report" description={reportDescription(basis)} />
         <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-6">
           <p className="text-sm text-ink-muted">
             No dated receipts yet. Upload and approve receipts to see the report.
@@ -808,7 +815,7 @@ function ReceiptReport() {
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <PageHeader title="Yearly report" description={REPORT_DESCRIPTION} />
+      <PageHeader title="Yearly report" description={reportDescription(basis)} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex flex-col gap-1">

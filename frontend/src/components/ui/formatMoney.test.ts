@@ -1,4 +1,4 @@
-import { currencySymbol, formatMoney, formatMoneyFromString } from './formatMoney'
+import { currencySymbol, formatMoney, formatMoneyFromString, groupThousands } from './formatMoney'
 
 test('formats with the currency code by default', () => {
   expect(formatMoney(79.4, 'USD')).toBe('USD 79.40')
@@ -39,15 +39,15 @@ test('never outputs "NaN", "null" or "undefined"', () => {
 
 // --- formatMoneyFromString: decimal strings, no arithmetic -----------------
 
-test('formatMoneyFromString shows the decimal string exactly as given, with its currency', () => {
+test('formatMoneyFromString shows the decimal string\'s digits as given, with its currency and thousands separators', () => {
   expect(formatMoneyFromString('0.30', 'EUR')).toBe('€0.30')
-  expect(formatMoneyFromString('1234.56', 'USD')).toBe('USD 1234.56')
+  expect(formatMoneyFromString('1234.56', 'USD')).toBe('USD 1,234.56')
   expect(formatMoneyFromString('-12.50', 'EUR')).toBe('-€12.50')
   expect(formatMoneyFromString('0.00', 'EUR')).toBe('€0.00')
 })
 
 test('formatMoneyFromString omits the currency when includeCurrency is false', () => {
-  expect(formatMoneyFromString('1234.56', 'USD', { includeCurrency: false })).toBe('1234.56')
+  expect(formatMoneyFromString('1234.56', 'USD', { includeCurrency: false })).toBe('1,234.56')
 })
 
 test('formatMoneyFromString null/undefined/blank show "Not detected"', () => {
@@ -92,4 +92,35 @@ test('without the currency prefix, EUR amounts are plain numbers', () => {
 test('currencySymbol labels EUR as € and leaves other codes alone', () => {
   expect(currencySymbol('EUR')).toBe('€')
   expect(currencySymbol('USD')).toBe('USD')
+})
+
+// --- Thousands separators (string formatting only) -------------------------
+
+test('groupThousands adds a comma every three integer digits, never touching the digits or sign', () => {
+  expect(groupThousands('1238.45')).toBe('1,238.45')
+  expect(groupThousands('-1000.00')).toBe('-1,000.00')
+  expect(groupThousands('12345.67')).toBe('12,345.67')
+  expect(groupThousands('1234567.89')).toBe('1,234,567.89')
+  expect(groupThousands('999.99')).toBe('999.99')
+  expect(groupThousands('0.30')).toBe('0.30')
+  expect(groupThousands('12345')).toBe('12,345') // no fraction (e.g. JPY)
+})
+
+test('groupThousands leaves anything that is not a plain decimal string unchanged', () => {
+  expect(groupThousands('1e21')).toBe('1e21')
+  expect(groupThousands('abc')).toBe('abc')
+  expect(groupThousands('1,234.56')).toBe('1,234.56')
+})
+
+test('amounts in every currency get thousands separators', () => {
+  // Given amounts as numbers and as the backend's decimal strings
+  // Then they read "€1,238.45", "-€1,000.00", "USD 12,345.67"
+  expect(formatMoneyFromString('1238.45', 'EUR')).toBe('€1,238.45')
+  expect(formatMoneyFromString('-1000.00', 'EUR')).toBe('-€1,000.00')
+  expect(formatMoneyFromString('12345.67', 'USD')).toBe('USD 12,345.67')
+  expect(formatMoney(1238.45, 'EUR')).toBe('€1,238.45')
+  expect(formatMoney(-1000, 'EUR')).toBe('-€1,000.00')
+  expect(formatMoney(12345.67, 'USD')).toBe('USD 12,345.67')
+  expect(formatMoney(1238.45, 'EUR', { includeCurrency: false })).toBe('1,238.45')
+  expect(formatMoney(1500000, 'JPY')).toBe('JPY 1,500,000')
 })

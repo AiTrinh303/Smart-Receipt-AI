@@ -641,8 +641,14 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   **No arithmetic on money in the frontend:** the backend's amounts are
   already-rounded decimal strings (e.g. `"1234.56"`, `"-12.50"`).
   `formatMoneyFromString()` (`components/ui/formatMoney.ts`) displays
-  one exactly as given, with its currency prefix — never parsed into a
-  number and re-formatted. **Currency display (both helpers):** EUR
+  one with its digits exactly as given, with its currency prefix — never
+  parsed into a number and re-formatted. **Thousands separators (both
+  helpers):** `groupThousands()` inserts a comma every three digits of
+  the integer part of the finished amount string (`"1238.45"` ->
+  "€1,238.45", `"-1000.00"` -> "-€1,000.00", "USD 12,345.67") — string
+  handling only, never a number; anything that isn't a plain decimal
+  string is left unchanged. The CSV/ZIP exports are unaffected (backend).
+  **Currency display (both helpers):** EUR
   shows as "€8.49"/"-€0.12" (minus before the symbol; matched
   case-insensitively), any other currency keeps its code ("USD 4.99",
   "USD -0.12") — pure string placement around the finished amount.
