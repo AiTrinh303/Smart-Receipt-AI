@@ -87,13 +87,23 @@ function buildReportSearch(year: number, basis: ReportBasis): string {
 
 /** Renders one currency row ("€1,234.56 Β· 7 receipts" -- the amount
  * large/tabular/right-aligned, as the summary cards call for). */
-function CurrencyRow({ entry }: { entry: ReportCurrencyTotal }) {
+/** The two text colours of a summary card: `strong` for the name and
+ * amount, `muted` for the receipt count -- complete static class strings. */
+interface SummaryCardText {
+  strong: string
+  muted: string
+}
+
+/** Text on the solid slate-700 "Both apartments" card. */
+const BOTH_CARD_TEXT: SummaryCardText = { strong: 'text-white', muted: 'text-white/90' }
+
+function CurrencyRow({ entry, text }: { entry: ReportCurrencyTotal; text: SummaryCardText }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="text-sm text-ink-muted">
+      <span className={`text-sm ${text.muted}`}>
         {entry.receipt_count} {entry.receipt_count === 1 ? 'receipt' : 'receipts'}
       </span>
-      <span className="text-right text-xl font-semibold tabular-nums text-ink">
+      <span className={`text-right text-xl font-semibold tabular-nums ${text.strong}`}>
         {formatMoneyFromString(entry.total, entry.currency)}
       </span>
     </div>
@@ -113,23 +123,22 @@ function ApartmentSummaryCard({
   year: number
   basis: ReportBasis
 }) {
+  // The apartment's tone as the whole card's surface (solid, the same
+  // colour as its dot) with white text; an unknown apartment gets the plain
+  // card with ink text.
+  const tone = apartmentToneClasses(apartment.apartment_id)
+  const text: SummaryCardText = { strong: tone.cardText, muted: tone.cardMutedText }
   return (
-    // The apartment's tone as the whole card's surface (soft fill + faint
-    // tone border); an unknown apartment gets the plain card.
-    <Card
-      surface={apartmentToneClasses(apartment.apartment_id).card}
-      className="flex flex-col gap-3"
-      title={apartment.apartment_name}
-    >
-      <h2 className="text-base font-semibold text-ink" title={apartment.apartment_name}>
+    <Card surface={tone.card} className="flex flex-col gap-3" title={apartment.apartment_name}>
+      <h2 className={`text-base font-semibold ${text.strong}`} title={apartment.apartment_name}>
         {apartmentShortName(apartment.apartment_name) ?? apartment.apartment_name}
       </h2>
       {apartment.by_currency.length === 0 ? (
-        <p className="text-sm text-ink-muted">{emptyApartmentText(year, basis)}</p>
+        <p className={`text-sm ${text.muted}`}>{emptyApartmentText(year, basis)}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {apartment.by_currency.map((entry) => (
-            <CurrencyRow key={entry.currency} entry={entry} />
+            <CurrencyRow key={entry.currency} entry={entry} text={text} />
           ))}
         </div>
       )}
@@ -148,13 +157,13 @@ function OverallSummaryCard({
 }) {
   return (
     <Card variant="emphasis" className="flex flex-col gap-3">
-      <h2 className="text-base font-semibold text-ink">Both apartments</h2>
+      <h2 className={`text-base font-semibold ${BOTH_CARD_TEXT.strong}`}>Both apartments</h2>
       {overall.length === 0 ? (
-        <p className="text-sm text-ink-muted">{emptyApartmentText(year, basis)}</p>
+        <p className={`text-sm ${BOTH_CARD_TEXT.muted}`}>{emptyApartmentText(year, basis)}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {overall.map((entry) => (
-            <CurrencyRow key={entry.currency} entry={entry} />
+            <CurrencyRow key={entry.currency} entry={entry} text={BOTH_CARD_TEXT} />
           ))}
         </div>
       )}

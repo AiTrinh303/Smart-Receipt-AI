@@ -153,21 +153,30 @@ describe('ReceiptReport', () => {
     expect(screen.getByText('Both apartments')).toBeInTheDocument()
   })
 
-  test('each apartment card takes its tone\'s stronger tint and border (no dot); Both apartments is a neutral slate-100 card', async () => {
-    // Given the default report with both apartments
+  test('apartment cards are solid in their tone with white text; Both apartments is solid slate-700 with white text', async () => {
+    // Given the default report (Bergblick with receipts, Waldglück empty)
     render(<ReceiptReport />)
     const waldglueck = await screen.findByRole('heading', { name: 'Waldglück' })
     const bergblick = screen.getByRole('heading', { name: 'Bergblick' })
+    const both = screen.getByRole('heading', { name: 'Both apartments' })
 
-    // Then each card has its tone's soft fill and faint border, and no dot
-    expect(bergblick.parentElement).toHaveClass('bg-apartment-sky-tint', 'border-apartment-sky-border')
-    expect(waldglueck.parentElement).toHaveClass('bg-apartment-fuchsia-tint', 'border-apartment-fuchsia-border')
+    // Then each card is its tone's main colour, with no border and no dot
+    const bergblickCard = bergblick.parentElement as HTMLElement
+    expect(bergblickCard).toHaveClass('bg-apartment-sky')
+    expect(bergblickCard).not.toHaveClass('border')
+    expect(waldglueck.parentElement).toHaveClass('bg-apartment-fuchsia')
     expect(bergblick.querySelector('[aria-hidden="true"]')).toBeNull()
-    expect(waldglueck.querySelector('[aria-hidden="true"]')).toBeNull()
-    // And "Both apartments" is neutral: slate-100 with the decorative border, no brand border
-    const both = screen.getByRole('heading', { name: 'Both apartments' }).parentElement as HTMLElement
-    expect(both).toHaveClass('bg-slate-100', 'border-border-subtle')
-    expect(both).not.toHaveClass('border-brand')
+    // And the name and amount are white, the receipt count white at 90%
+    expect(bergblick).toHaveClass('text-white')
+    expect(within(bergblickCard).getAllByText('€25.00')[0]).toHaveClass('text-white')
+    expect(within(bergblickCard).getByText('2 receipts')).toHaveClass('text-white/90')
+    // (an empty apartment's message is muted white too)
+    expect(within(waldglueck.parentElement as HTMLElement).getByText('No receipts in 2026.')).toHaveClass('text-white/90')
+    // And "Both apartments" is solid slate-700 with the same white text
+    const bothCard = both.parentElement as HTMLElement
+    expect(bothCard).toHaveClass('bg-slate-700')
+    expect(both).toHaveClass('text-white')
+    expect(within(bothCard).getByText('2 receipts')).toHaveClass('text-white/90')
   })
 
   test('an apartment id with no tone gets the plain card', async () => {
@@ -185,9 +194,10 @@ describe('ReceiptReport', () => {
     )
     render(<ReceiptReport />)
 
-    // Then its card is the plain white one
+    // Then its card is the plain white one, with ink text
     const heading = await screen.findByRole('heading', { name: 'Elsewhere' })
     expect(heading.parentElement).toHaveClass('bg-surface', 'border-border-subtle')
+    expect(heading).toHaveClass('text-ink')
   })
 
   test('the page description follows "Only count receipts I approved"', async () => {

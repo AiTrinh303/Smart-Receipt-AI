@@ -668,17 +668,18 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   the VAT note.
   **Summary**: one `Card` per apartment (`apartmentShortName` visible,
   full name in `title`) whose whole surface is the apartment's tone —
-  `Card`'s `surface` prop with `apartmentToneClasses(id).card` (the
-  tone's `tint`, the -100 shade, with a `border` one step stronger, the
-  -300 shade — deliberately stronger than the pills' `soft` -50 fill; an
-  unknown apartment gets the plain card; ink ≥ 15.3:1, ink-muted ≥
-  6.5:1 on either tint) — with a right-aligned, tabular-nums amount per
-  currency plus "N receipts", then a combined "Both apartments" card
-  built straight from the backend's own `overall` (never summed from the
-  apartment cards), neutral: `Card variant="emphasis"` is now
-  `bg-slate-100` with the normal decorative border (ink 16.30:1,
-  ink-muted 6.92:1), amount still bold, so it reads as the sum of the
-  two, not as a third apartment or a focused control. An apartment with no data shows "No
+  `Card`'s `surface` prop with `apartmentToneClasses(id).card` — solid
+  in the tone's main colour, the same as its dot (`bg-apartment-sky` /
+  `bg-apartment-fuchsia`), no border — with white text: the helper's
+  `cardText` (`text-white`) for the name and amount and `cardMutedText`
+  (`text-white/90`) for "N receipts" and the empty message (an unknown
+  apartment gets the plain card with ink text) — a right-aligned,
+  tabular-nums amount per currency plus "N receipts", then a combined
+  "Both apartments" card built straight from the backend's own `overall`
+  (never summed from the apartment cards): `Card variant="emphasis"`,
+  solid `bg-slate-700` with the same white text, so the three cards read
+  as one set. Contrast (asserted and printed): white ≥ 5.93:1 and
+  white/90 ≥ 5.13:1 on all three. An apartment with no data shows "No
   approved receipts in `<year>`." (`basis=approved`) or "No receipts in
   `<year>`." (`basis=all`).
   **Show by month**: a closed `<details>` directly under the summary

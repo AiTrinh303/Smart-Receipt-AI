@@ -262,41 +262,41 @@ describe.each(['oberaudorf-bergblick', 'sankt-englmar-waldglueck'])('apartment i
   })
 })
 
-// --- Text on an apartment-toned card (the Report's summary cards) ----------
+// --- Text on the Report's solid summary cards -------------------------------
 //
-// The name and amount are `ink`, the receipt count `ink-muted`, both on the
-// tone's `tint` (-100). Ratios printed so a run shows the measured values.
-// The -200 shades are printed too (not used, no assertion), to compare if a
-// darker card is wanted later; the "Both apartments" card (slate-100) is
-// checked as well.
+// Bergblick (apartment-sky), Waldglück (apartment-fuchsia) and "Both
+// apartments" (slate-700) are solid cards with white text: `text-white` for
+// the name and amount, `text-white/90` for the receipt count. White at 90%
+// is measured as what the eye actually sees -- white blended 90/10 onto the
+// card -- not as plain white. Ratios printed so a run shows the values.
 
-const SHADES_200: Record<string, string> = { sky: '#bae6fd', fuchsia: '#f5d0fe' }
+/** `fg` drawn at `alpha` opacity on `bg`, as the resulting opaque colour. */
+function blendHex(fg: string, bg: string, alpha: number): string {
+  const [fr, fgG, fb] = hexToRgb(fg)
+  const [br, bgG, bb] = hexToRgb(bg)
+  const mix = (f: number, b: number) =>
+    Math.round(alpha * f + (1 - alpha) * b)
+      .toString(16)
+      .padStart(2, '0')
+  return `#${mix(fr, br)}${mix(fgG, bgG)}${mix(fb, bb)}`
+}
 
-describe.each(['sky', 'fuchsia'])('text on the "%s" summary card', (tone) => {
-  test('ink and ink-muted meet 4.5:1 on the tint -- measured ratios (and the -200 shade for comparison) shown below', () => {
-    const tintHex = resolveToken(`apartment-${tone}-tint`) as string
-    const inkHex = resolveToken('ink') as string
-    const inkMutedHex = resolveToken('ink-muted') as string
-    const ink = contrastRatio(inkHex, tintHex)
-    const inkMuted = contrastRatio(inkMutedHex, tintHex)
-    const shade200 = SHADES_200[tone]
+const SUMMARY_CARD_BACKGROUNDS: [string, string][] = [
+  ['Bergblick (apartment-sky)', resolveToken('apartment-sky') as string],
+  ['Waldglück (apartment-fuchsia)', resolveToken('apartment-fuchsia') as string],
+  ['Both apartments (slate-700)', '#334155'],
+]
+
+describe.each(SUMMARY_CARD_BACKGROUNDS)('text on the %s summary card', (_label, backgroundHex) => {
+  test('white and white/90 both meet 4.5:1 -- measured ratios shown below', () => {
+    const white = resolveToken('white') as string
+    const onWhite = contrastRatio(white, backgroundHex)
+    const onWhite90 = contrastRatio(blendHex(white, backgroundHex, 0.9), backgroundHex)
     // eslint-disable-next-line no-console
     console.log(
-      `${tone} card tint ${tintHex}: ink ${ink.toFixed(2)}:1, ink-muted ${inkMuted.toFixed(2)}:1 | ` +
-        `for comparison ${tone}-200 ${shade200}: ink ${contrastRatio(inkHex, shade200).toFixed(2)}:1, ` +
-        `ink-muted ${contrastRatio(inkMutedHex, shade200).toFixed(2)}:1`,
+      `${_label} ${backgroundHex}: text-white ${onWhite.toFixed(2)}:1, text-white/90 ${onWhite90.toFixed(2)}:1`,
     )
-    expect(ink).toBeGreaterThanOrEqual(4.5)
-    expect(inkMuted).toBeGreaterThanOrEqual(4.5)
+    expect(onWhite).toBeGreaterThanOrEqual(4.5)
+    expect(onWhite90).toBeGreaterThanOrEqual(4.5)
   })
-})
-
-test('ink and ink-muted meet 4.5:1 on the "Both apartments" card (slate-100) -- measured ratios shown below', () => {
-  const slate100 = '#f1f5f9'
-  const ink = contrastRatio(resolveToken('ink') as string, slate100)
-  const inkMuted = contrastRatio(resolveToken('ink-muted') as string, slate100)
-  // eslint-disable-next-line no-console
-  console.log(`Both apartments card slate-100 ${slate100}: ink ${ink.toFixed(2)}:1, ink-muted ${inkMuted.toFixed(2)}:1`)
-  expect(ink).toBeGreaterThanOrEqual(4.5)
-  expect(inkMuted).toBeGreaterThanOrEqual(4.5)
 })

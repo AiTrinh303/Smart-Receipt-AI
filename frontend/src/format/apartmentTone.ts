@@ -23,28 +23,38 @@ export interface ApartmentToneClasses {
   /** A small dot before a name (tabs, choice cards, side panel). */
   dot: string
   /** A whole card in the apartment's tone (the Report's summary cards):
-   * the stronger `tint` fill (-100) with a `border` one step stronger
-   * (-300), as one complete border-and-background string for `Card`'s
-   * `surface` prop -- deliberately stronger than the pills' `soft` fill.
-   * Neutral is the plain card (white, decorative `border-subtle`). */
+   * solid in the tone's main colour (the same as its dot), no border, as
+   * one complete surface string for `Card`'s `surface` prop. Neutral is the
+   * plain card (white, decorative `border-subtle`). */
   card: string
+  /** Text on that card: `cardText` for the name and amount, `cardMutedText`
+   * for the receipt count. White / white at 90% on a solid tone (>= 5.13:1,
+   * measured in Button.contrast.test.ts); ink / ink-muted on the plain card. */
+  cardText: string
+  cardMutedText: string
 }
 
 export const APARTMENT_TONE_CLASSES: Readonly<Record<ApartmentTone, ApartmentToneClasses>> = {
   sky: {
     pill: 'bg-apartment-sky-soft text-apartment-sky',
     dot: 'bg-apartment-sky',
-    card: 'border border-apartment-sky-border bg-apartment-sky-tint',
+    card: 'bg-apartment-sky',
+    cardText: 'text-white',
+    cardMutedText: 'text-white/90',
   },
   fuchsia: {
     pill: 'bg-apartment-fuchsia-soft text-apartment-fuchsia',
     dot: 'bg-apartment-fuchsia',
-    card: 'border border-apartment-fuchsia-border bg-apartment-fuchsia-tint',
+    card: 'bg-apartment-fuchsia',
+    cardText: 'text-white',
+    cardMutedText: 'text-white/90',
   },
   neutral: {
     pill: 'bg-slate-100 text-ink-muted',
     dot: 'bg-ink-muted',
     card: 'border border-border-subtle bg-surface',
+    cardText: 'text-ink',
+    cardMutedText: 'text-ink-muted',
   },
 }
 

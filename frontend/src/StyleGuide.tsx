@@ -1447,30 +1447,40 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Yearly report (ReceiptReport -- apartment cards in their tone (stronger tint), Both apartments a neutral slate-100 card, Show by month, export card with its short note, VAT note)">
+      <Section title="Yearly report (ReceiptReport -- solid apartment cards in their tone and a solid slate-700 Both apartments card, all with white text; Show by month, export card with its short note, VAT note)">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card surface={apartmentToneClasses('oberaudorf-bergblick').card} className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Oberaudorf - Bergblick">
+            <h2
+              className={`text-base font-semibold ${apartmentToneClasses('oberaudorf-bergblick').cardText}`}
+              title="Fewo JoJo - Oberaudorf - Bergblick"
+            >
               Bergblick
             </h2>
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm text-ink-muted">7 receipts</span>
-              <span className="text-right text-xl font-semibold tabular-nums text-ink">
+              <span className={`text-sm ${apartmentToneClasses('oberaudorf-bergblick').cardMutedText}`}>7 receipts</span>
+              <span
+                className={`text-right text-xl font-semibold tabular-nums ${apartmentToneClasses('oberaudorf-bergblick').cardText}`}
+              >
                 {formatMoneyFromString('1234.56', 'EUR')}
               </span>
             </div>
           </Card>
           <Card surface={apartmentToneClasses('sankt-englmar-waldglueck').card} className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold text-ink" title="Fewo JoJo - Sankt Englmar - Waldglück">
+            <h2
+              className={`text-base font-semibold ${apartmentToneClasses('sankt-englmar-waldglueck').cardText}`}
+              title="Fewo JoJo - Sankt Englmar - Waldglück"
+            >
               Waldglück
             </h2>
-            <p className="text-sm text-ink-muted">No receipts in 2026.</p>
+            <p className={`text-sm ${apartmentToneClasses('sankt-englmar-waldglueck').cardMutedText}`}>
+              No receipts in 2026.
+            </p>
           </Card>
           <Card variant="emphasis" className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold text-ink">Both apartments</h2>
+            <h2 className="text-base font-semibold text-white">Both apartments</h2>
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm text-ink-muted">7 receipts</span>
-              <span className="text-right text-xl font-semibold tabular-nums text-ink">
+              <span className="text-sm text-white/90">7 receipts</span>
+              <span className="text-right text-xl font-semibold tabular-nums text-white">
                 {formatMoneyFromString('1234.56', 'EUR')}
               </span>
             </div>

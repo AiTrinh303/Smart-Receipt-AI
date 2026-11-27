@@ -42,14 +42,10 @@ export default {
           sky: {
             DEFAULT: '#0369a1', // sky-700
             soft: '#f0f9ff', // sky-50 -- pills
-            tint: '#e0f2fe', // sky-100 -- the Report's summary card
-            border: '#7dd3fc', // sky-300 -- that card's border
           },
           fuchsia: {
             DEFAULT: '#a21caf', // fuchsia-700
             soft: '#fdf4ff', // fuchsia-50 -- pills
-            tint: '#fae8ff', // fuchsia-100 -- the Report's summary card
-            border: '#f0abfc', // fuchsia-300 -- that card's border
           },
         },
       },

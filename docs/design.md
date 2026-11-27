@@ -44,14 +44,10 @@ CSS" below -- jsdom's 100+ passing tests say nothing about layout or color.
 | `warning-soft`   | `#fefce8` | Warning background            | — (background)      |
 | `danger`         | `#b91c1c` | Error text/icons              | 6.1:1              |
 | `danger-soft`    | `#fef2f2` | Error background              | — (background)      |
-| `apartment-sky`  | `#0369a1` | Bergblick's tone: pill text, dot (sky-700) | 5.93:1; 5.57:1 on `apartment-sky-soft` |
+| `apartment-sky`  | `#0369a1` | Bergblick's tone: pill text, dot, solid Report card (sky-700; white on it 5.93:1, white/90 5.13:1) | 5.93:1; 5.57:1 on `apartment-sky-soft` |
 | `apartment-sky-soft` | `#f0f9ff` | Bergblick's pill background (sky-50) | — (background) |
-| `apartment-sky-tint` | `#e0f2fe` | Bergblick's Report card background (sky-100) | ink 15.56:1, ink-muted 6.60:1 on it |
-| `apartment-sky-border` | `#7dd3fc` | Bergblick's Report card border (sky-300) | — (decorative) |
-| `apartment-fuchsia` | `#a21caf` | Waldglück's tone: pill text, dot (fuchsia-700) | 6.32:1; 5.89:1 on `apartment-fuchsia-soft` |
+| `apartment-fuchsia` | `#a21caf` | Waldglück's tone: pill text, dot, solid Report card (fuchsia-700; white on it 6.32:1, white/90 5.36:1) | 6.32:1; 5.89:1 on `apartment-fuchsia-soft` |
 | `apartment-fuchsia-soft` | `#fdf4ff` | Waldglück's pill background (fuchsia-50) | — (background) |
-| `apartment-fuchsia-tint` | `#fae8ff` | Waldglück's Report card background (fuchsia-100) | ink 15.35:1, ink-muted 6.51:1 on it |
-| `apartment-fuchsia-border` | `#f0abfc` | Waldglück's Report card border (fuchsia-300) | — (decorative) |
 
 All text-on-background combinations above meet WCAG AA (4.5:1 for normal
 text). A disabled `Button` uses `slate-300`/`slate-600` text, which still
@@ -2403,6 +2399,33 @@ line, closed list, group line, both "Open" hrefs, the muted line; the
 warnings list and checks card still gone) -- it had asserted the
 duplicates list was gone, which this reverses. New: plural wording and
 an "Open" link's modified-click behaviour; no part and no list at 0.
+
+## Solid apartment colours on the Report summary cards
+
+- **Apartment cards solid:** `apartmentToneClasses(id).card` is now just
+  the tone's main colour, the same as its dot (`bg-apartment-sky` /
+  `bg-apartment-fuchsia`), no border; the helper also returns the card's
+  text colours, `cardText` (`text-white`: name, amount) and
+  `cardMutedText` (`text-white/90`: receipt count, empty message);
+  neutral keeps the plain card with `text-ink`/`text-ink-muted`.
+- **"Both apartments":** `Card variant="emphasis"` is now a solid
+  `bg-slate-700`, no border, same white text, so the three read as one
+  set.
+- **Measured** (`Button.contrast.test.ts` asserts >= 4.5:1 and prints;
+  white/90 is measured as its real blend onto the card): sky `#0369a1`
+  white 5.93:1, white/90 5.13:1; fuchsia `#a21caf` white 6.32:1,
+  white/90 5.36:1; slate-700 `#334155` white 10.35:1, white/90 8.76:1.
+  (white/80 would fail on sky: 4.40:1.)
+- **Removed:** the `tint`/`border` tokens from BK (nothing else used
+  them). Pills and dots elsewhere unchanged.
+- **Tests changed:** `ReceiptReport.test.tsx` (the summary card test
+  now checks the solid backgrounds, no border, and white/white-90 text
+  on all three cards; the unknown-apartment test also checks `text-ink`),
+  `apartmentTone.test.ts` (new `card` strings plus `cardText`/
+  `cardMutedText`), `Card.test.tsx` (emphasis is `bg-slate-700` with no
+  border; the `surface` sample), `Button.contrast.test.ts` (the tint
+  checks replaced by white and white/90 on the three solid backgrounds)
+  -- each because the colours it asserted changed.
 
 ## Changelog
 
