@@ -449,8 +449,11 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   **Items view (`ReceiptItems.tsx`, `ReceiptFilters.tsx`,
   `src/api/listItems.ts`):** `?view=items` lists every *purchased line
   item* (not receipt) via `GET /items`, reusing `ReceiptFilters` for the
-  identical apartment-tab UI — its tabs are built as plain
-  `{id, label: a.name}`, deliberately with **no count suffix**, since
+  identical apartment-tab UI — its tabs are built like History's
+  (`label: apartmentShortName(a.name) ?? a.name`, `accessibleName:
+  a.name`, so the tab shows the short name with its tone dot and is named
+  and titled with the full name) but deliberately with **no count
+  suffix**, since
   `GET /receipts/facets`'s counts are receipt counts, not item counts,
   and would misrepresent how many rows that tab actually has. State:
   `?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>&sort=<v>`. A search
@@ -486,13 +489,25 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   guard and `limit`/`offset` "Show more" pagination are unchanged, with
   `sort` simply threaded through to both `listItems()` call sites.
   **Table (`sm` and up) vs. a card list below it**, via `useMediaQuery`,
-  same pattern as `ReceiptResult.tsx` — never both mounted. The table is
+  same pattern as `ReceiptResult.tsx` — never both mounted. Both are
+  exported presentational components, `ItemsTable` and `ItemCardList`
+  (`{items, showApartment, hrefFor, onOpen}`), so `?view=styleguide`
+  renders the real thing. The table is
   `table-fixed` with an explicit width on every column except Item
-  (`w-24` Date, `w-16` Qty, `w-24` Unit price, `w-24` Line total, `w-40`
-  Store, `w-28` Apartment, `w-28` Status — Item absorbs whatever's left),
+  (`w-24` Date, `w-16` Qty, `w-24` Unit price, `w-24` Line total, `w-44`
+  Store with `pl-4` so it never runs into the right-aligned Line total,
+  `w-32` Apartment, `w-32` Status — Item absorbs whatever's left),
   so Date and the numeric columns stay `whitespace-nowrap` and never
-  wrap; rows are `py-2` with a light `border-border/40` divider and
-  `hover:bg-slate-50`, no zebra striping. Columns: Date, Item, Qty, Unit
+  wrap. Status (header and cell) is right-aligned, like History.
+  **Dividers and receipt grouping:** rows use `border-t
+  border-border-subtle` (History's divider token; Items used
+  `border-border/40` before); when a row's `receipt_id` differs from the
+  row above it (in whatever sort order), it gets the slightly stronger
+  `border-t border-border/40` instead, so one receipt's lines read as a
+  group — decorative only (`rowDividerClass`). The first row has no top
+  divider (the header's own border is there); `tbody` closes with a
+  `border-border-subtle` bottom line. `hover:bg-slate-50`, no zebra
+  striping. Columns: Date, Item, Qty, Unit
   price, Line total, Store, Apartment (only in the "All apartments" tab,
   via `showApartmentColumn = effectiveApartmentId === null`), and
   Status. Each cell is its own small exported component (`DateCell`,
@@ -507,22 +522,26 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   hidden "Date not recognized"; `"missing"` renders `MissingValue`.
   `ApartmentCell` renders `apartmentShortName(name)` inside a small
   outlined pill with the full name in `title`. `StoreCell` wraps its text
-  in `ClampedText` (1 line); the item name (via `ItemNameLink`, still not
-  exported) wraps in `ClampedText` (2 lines) when non-null, else renders
-  `MissingValue` as the link's own content — the link itself is
-  **dark `text-ink` with an always-visible underline**, turning
-  `hover:text-brand`/`focus-visible:text-brand` only on
-  hover/focus (changed from the original brand-colored-always-underlined
-  style, which read as noisy at table scale). `StatusCell` renders the
+  in `ClampedText` (1 line). **Whole-row link (`ItemRowLink`):** the item
+  name is the row's one real `<a>` — plain `font-medium text-ink`, no
+  underline (it used to be an underlined link) — wrapping `ClampedText`
+  (2 lines) when non-null, else `MissingValue`. Its `::after`
+  (`after:absolute after:inset-0`) is stretched over the whole `<tr>`
+  (which is `relative`), so a click anywhere on the row follows it, and
+  the row's focus ring is that `::after`'s inset outline
+  (`focus-visible:after:outline … -outline-offset-2`). Its `href` is the
+  full receipt URL including `&from=` (`receiptHref`, same as History's),
+  so a new tab keeps the way back; a plain click calls `navigateTo` with
+  that same URL, while ctrl/cmd/shift/alt-click or a non-primary button
+  is left to the browser. `StatusCell` renders the
   existing `StatusBadge` for a recognized status, else `MissingValue`.
   Amounts use `formatMoney` **with** `includeCurrency` (its default)
   rather than `false`, since — unlike `ReceiptResult.tsx`'s
   one-currency-per-receipt table — rows here can carry different
   currencies, so each amount must say which one (e.g. "€4.99" or
-  "USD 4.99"). The
-  item link attaches the same `&from=`
-  mechanism as History's rows (`e.preventDefault()` + `navigateTo`).
-  **Cards** (below `sm`) show the same name link (2 lines), a muted
+  "USD 4.99").
+  **Cards** (below `sm`) are whole-card links the same way (`relative`
+  `li`, `hover:bg-slate-50`, the same `ItemRowLink`) and show the name (2 lines), a muted
   "`DateCell` · store" line, an amount line that keeps "Qty"/"Unit
   price"/"Line total" as plain text next to each value, and a badge row
   (`ApartmentCell` in "All apartments", `StatusCell` always).

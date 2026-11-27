@@ -3,8 +3,6 @@ import type { ReactNode } from 'react'
 import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
-import ClampedText from './components/ui/ClampedText'
-import MissingValue from './components/ui/MissingValue'
 import PageHeader from './components/ui/PageHeader'
 import { ApartmentDot, ApartmentPill } from './components/ui/ApartmentTone'
 import RadioCardGroup from './components/ui/RadioCardGroup'
@@ -14,19 +12,12 @@ import BatchQueue from './batch/BatchQueue'
 import { MAX_BATCH } from './batch/batchReducer'
 import type { BatchItem, RejectedFile } from './batch/batchReducer'
 import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_ERROR_MESSAGE } from './errorMessages'
-import {
-  ApartmentCell,
-  DateCell,
-  MoneyCell,
-  QuantityCell,
-  StatusCell,
-  StoreCell,
-} from './ReceiptItems'
+import { ItemCardList, ItemsTable } from './ReceiptItems'
 import { HistoryHeaderRow, HistoryRow, HistoryRowList } from './ReceiptHistory'
 import ReceiptFileViewer from './ReceiptFileViewer'
 import { ExportCard } from './ReceiptReport'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
-import type { ReceiptFacets, ReceiptSummary } from './api/types'
+import type { ItemRow, ReceiptFacets, ReceiptSummary } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
@@ -174,7 +165,7 @@ const SAMPLE_BATCH_ITEMS: BatchItem[] = [
   },
 ]
 
-const SAMPLE_ITEM_ROWS = [
+const SAMPLE_ITEM_ROWS: ItemRow[] = [
   {
     receipt_id: 'sample-normal',
     line_index: 0,
@@ -182,6 +173,22 @@ const SAMPLE_ITEM_ROWS = [
     quantity: 2,
     unit_price: 1.5,
     line_total: 3.0,
+    currency: 'EUR',
+    purchase_date: '2026-01-15',
+    store_name: 'Corner Store',
+    apartment_id: 'oberaudorf-bergblick',
+    apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
+    status: 'needs_review' as const,
+  },
+  {
+    // A second line of the same receipt: shares the light divider with the
+    // row above; the next row (another receipt) starts with a stronger one.
+    receipt_id: 'sample-normal',
+    line_index: 1,
+    name: 'Bread',
+    quantity: 1,
+    unit_price: 2.29,
+    line_total: 2.29,
     currency: 'EUR',
     purchase_date: '2026-01-15',
     store_name: 'Corner Store',
@@ -215,7 +222,9 @@ const SAMPLE_ITEM_ROWS = [
     store_name: null,
     apartment_id: null,
     apartment_name: null,
-    status: null,
+    // Deliberately not a valid status, to show StatusCell's MissingValue
+    // fallback (the API type never allows this; the sample does on purpose).
+    status: null as unknown as ItemRow['status'],
   },
   {
     receipt_id: 'sample-long-title',
@@ -1361,70 +1370,13 @@ function StyleGuide() {
           )}
 
           {itemsViewState === 'table' && (
-            <div className="overflow-x-auto">
-              <table className="w-full table-fixed text-left text-sm">
-                <caption className="sr-only">Purchased items</caption>
-                <thead>
-                  <tr className="border-b border-border text-ink-muted">
-                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 font-medium">
-                      Date
-                    </th>
-                    <th scope="col" className="py-2 pr-2 font-medium">
-                      Item
-                    </th>
-                    <th scope="col" className="w-16 py-2 pr-2 text-right font-medium">
-                      Qty
-                    </th>
-                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
-                      Unit price
-                    </th>
-                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
-                      Line total
-                    </th>
-                    <th scope="col" className="w-40 py-2 pr-2 font-medium">
-                      Store
-                    </th>
-                    <th scope="col" className="w-28 py-2 pr-2 font-medium">
-                      Apartment
-                    </th>
-                    <th scope="col" className="w-28 py-2 font-medium">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {SAMPLE_ITEM_ROWS.map((row) => (
-                    <tr key={row.receipt_id} className="border-b border-border/40 hover:bg-slate-50">
-                      <td className="whitespace-nowrap py-2 pr-2">
-                        <DateCell value={row.purchase_date} />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <a href="#" onClick={(e) => e.preventDefault()} className="inline-block font-medium text-ink underline hover:text-brand">
-                          {row.name ? <ClampedText text={row.name} lines={2} /> : <MissingValue />}
-                        </a>
-                      </td>
-                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
-                        <QuantityCell value={row.quantity} />
-                      </td>
-                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
-                        <MoneyCell value={row.unit_price} currency={row.currency} />
-                      </td>
-                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
-                        <MoneyCell value={row.line_total} currency={row.currency} />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <StoreCell value={row.store_name} />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />
-                      </td>
-                      <td className="py-2">
-                        <StatusCell status={row.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div>
+              <ItemsTable
+                items={SAMPLE_ITEM_ROWS}
+                showApartment
+                hrefFor={(id) => `/?receipt=${id}`}
+                onOpen={() => {}}
+              />
               <p role="status" className="mt-3 text-sm text-ink-muted">
                 2 of 5 items
               </p>
@@ -1435,40 +1387,12 @@ function StyleGuide() {
           )}
 
           {itemsViewState === 'cards' && (
-            <ul className="flex flex-col gap-2">
-              {SAMPLE_ITEM_ROWS.map((row) => (
-                <li key={row.receipt_id} className="rounded-md border border-border p-3">
-                  <a href="#" onClick={(e) => e.preventDefault()} className="inline-block font-medium text-ink underline hover:text-brand">
-                    {row.name ? <ClampedText text={row.name} lines={2} /> : <MissingValue />}
-                  </a>
-                  <p className="mt-1 flex items-center gap-1 text-sm text-ink-muted">
-                    <DateCell value={row.purchase_date} /> <span aria-hidden="true">·</span>{' '}
-                    {row.store_name ? row.store_name : <MissingValue />}
-                  </p>
-                  <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    <span>
-                      Qty <span className="tabular-nums"><QuantityCell value={row.quantity} /></span>
-                    </span>
-                    <span className="whitespace-nowrap">
-                      Unit price{' '}
-                      <span className="tabular-nums">
-                        <MoneyCell value={row.unit_price} currency={row.currency} />
-                      </span>
-                    </span>
-                    <span className="whitespace-nowrap">
-                      Line total{' '}
-                      <span className="tabular-nums">
-                        <MoneyCell value={row.line_total} currency={row.currency} />
-                      </span>
-                    </span>
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />
-                    <StatusCell status={row.status} />
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <ItemCardList
+              items={SAMPLE_ITEM_ROWS}
+              showApartment
+              hrefFor={(id) => `/?receipt=${id}`}
+              onOpen={() => {}}
+            />
           )}
         </Card>
       </Section>

@@ -172,68 +172,183 @@ function effectiveSort(rawSort: string | null): ItemSort {
   return DEFAULT_ITEM_SORT
 }
 
-interface ItemRowLinkProps {
+/** The item name as the row's one real link. Plain text (no underline);
+ * its `::after` is stretched over the whole row/card (which is
+ * `relative`), so clicking anywhere on the row follows it, and the row's
+ * focus ring is drawn on that same `::after`. A plain click navigates in
+ * place via `onOpen`; ctrl/cmd/shift/alt-click or a non-primary button is
+ * left to the browser, so "open in new tab" works with the real `href`. */
+function ItemRowLink({
+  row,
+  href,
+  onOpen,
+}: {
   row: ItemRow
+  href: string
   onOpen: (receiptId: string) => void
-}
-
-const ITEM_LINK_CLASSES =
-  'inline-block font-medium text-ink underline hover:text-brand focus-visible:text-brand ' +
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
-
-function ItemNameLink({ row, onOpen }: ItemRowLinkProps) {
+}) {
   return (
     <a
-      href={`/?receipt=${row.receipt_id}`}
+      href={href}
       onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+          return
+        }
         e.preventDefault()
         onOpen(row.receipt_id)
       }}
-      className={ITEM_LINK_CLASSES}
+      className={ITEM_ROW_LINK_CLASSES}
     >
       {row.name ? <ClampedText text={row.name} lines={2} /> : <MissingValue />}
     </a>
   )
 }
 
-interface ItemCardProps {
-  row: ItemRow
+const ITEM_ROW_LINK_CLASSES =
+  'block font-medium text-ink focus-visible:outline-none ' +
+  "after:absolute after:inset-0 after:content-[''] " +
+  'focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 ' +
+  'focus-visible:after:outline-brand'
+
+export interface ItemListProps {
+  items: ItemRow[]
   showApartment: boolean
+  /** The receipt link for a row (with `&from=` when a tab/filter is active). */
+  hrefFor: (receiptId: string) => string
   onOpen: (receiptId: string) => void
 }
 
-function ItemCard({ row, showApartment, onOpen }: ItemCardProps) {
+/** Rows of one receipt share a light divider; the first row of the next
+ * receipt (in whatever order the list is sorted) gets a slightly stronger
+ * one, so a receipt's lines read as a group. Decorative only. */
+function rowDividerClass(items: ItemRow[], index: number): string {
+  if (index === 0) {
+    return ''
+  }
+  return items[index - 1].receipt_id !== items[index].receipt_id
+    ? 'border-t border-border/40'
+    : 'border-t border-border-subtle'
+}
+
+/** The Items table (from `sm` up). Each row is one whole-row link (see
+ * `ItemRowLink`); `relative` on the `<tr>` anchors the link's stretched
+ * `::after`. Exported so `?view=styleguide` renders the real thing. */
+export function ItemsTable({ items, showApartment, hrefFor, onOpen }: ItemListProps) {
   return (
-    <li className="rounded-md border border-border p-3">
-      <ItemNameLink row={row} onOpen={onOpen} />
-      <p className="mt-1 flex items-center gap-1 text-sm text-ink-muted">
-        <DateCell value={row.purchase_date} /> <span aria-hidden="true">·</span>{' '}
-        {row.store_name ? row.store_name : <MissingValue />}
-      </p>
-      <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        <span>
-          Qty <span className="tabular-nums">
-            <QuantityCell value={row.quantity} />
-          </span>
-        </span>
-        <span className="whitespace-nowrap">
-          Unit price{' '}
-          <span className="tabular-nums">
-            <MoneyCell value={row.unit_price} currency={row.currency} />
-          </span>
-        </span>
-        <span className="whitespace-nowrap">
-          Line total{' '}
-          <span className="tabular-nums">
-            <MoneyCell value={row.line_total} currency={row.currency} />
-          </span>
-        </span>
-      </p>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {showApartment && <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />}
-        <StatusCell status={row.status} />
-      </div>
-    </li>
+    <div className="overflow-x-auto">
+      <table className="w-full table-fixed text-left text-sm">
+        <caption className="sr-only">Purchased items</caption>
+        <thead>
+          <tr className="border-b border-border text-ink-muted">
+            <th scope="col" className="w-24 whitespace-nowrap py-2 pl-2 pr-2 font-medium">
+              Date
+            </th>
+            <th scope="col" className="py-2 pr-2 font-medium">
+              Item
+            </th>
+            <th scope="col" className="w-16 py-2 pr-2 text-right font-medium">
+              Qty
+            </th>
+            <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
+              Unit price
+            </th>
+            <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
+              Line total
+            </th>
+            <th scope="col" className="w-44 py-2 pl-4 pr-2 font-medium">
+              Store
+            </th>
+            {showApartment && (
+              <th scope="col" className="w-32 py-2 pr-2 font-medium">
+                Apartment
+              </th>
+            )}
+            <th scope="col" className="w-32 py-2 pr-2 text-right font-medium">
+              Status
+            </th>
+          </tr>
+        </thead>
+        <tbody className="border-b border-border-subtle">
+          {items.map((row, index) => (
+            <tr
+              key={`${row.receipt_id}-${row.line_index}`}
+              className={`relative hover:bg-slate-50 ${rowDividerClass(items, index)}`}
+            >
+              <td className="whitespace-nowrap py-2 pl-2 pr-2 align-top">
+                <DateCell value={row.purchase_date} />
+              </td>
+              <td className="py-2 pr-2 align-top">
+                <ItemRowLink row={row} href={hrefFor(row.receipt_id)} onOpen={onOpen} />
+              </td>
+              <td className="whitespace-nowrap py-2 pr-2 text-right align-top tabular-nums">
+                <QuantityCell value={row.quantity} />
+              </td>
+              <td className="whitespace-nowrap py-2 pr-2 text-right align-top tabular-nums">
+                <MoneyCell value={row.unit_price} currency={row.currency} />
+              </td>
+              <td className="whitespace-nowrap py-2 pr-2 text-right align-top tabular-nums">
+                <MoneyCell value={row.line_total} currency={row.currency} />
+              </td>
+              <td className="py-2 pl-4 pr-2 align-top">
+                <StoreCell value={row.store_name} />
+              </td>
+              {showApartment && (
+                <td className="py-2 pr-2 align-top">
+                  <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />
+                </td>
+              )}
+              <td className="py-2 pr-2 text-right align-top">
+                <StatusCell status={row.status} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** The Items list below `sm`: one card per row, each card one whole-card
+ * link (same `ItemRowLink`). */
+export function ItemCardList({ items, showApartment, hrefFor, onOpen }: ItemListProps) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.map((row) => (
+        <li
+          key={`${row.receipt_id}-${row.line_index}`}
+          className="relative rounded-md border border-border p-3 hover:bg-slate-50"
+        >
+          <ItemRowLink row={row} href={hrefFor(row.receipt_id)} onOpen={onOpen} />
+          <p className="mt-1 flex items-center gap-1 text-sm text-ink-muted">
+            <DateCell value={row.purchase_date} /> <span aria-hidden="true">·</span>{' '}
+            {row.store_name ? row.store_name : <MissingValue />}
+          </p>
+          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span>
+              Qty <span className="tabular-nums">
+                <QuantityCell value={row.quantity} />
+              </span>
+            </span>
+            <span className="whitespace-nowrap">
+              Unit price{' '}
+              <span className="tabular-nums">
+                <MoneyCell value={row.unit_price} currency={row.currency} />
+              </span>
+            </span>
+            <span className="whitespace-nowrap">
+              Line total{' '}
+              <span className="tabular-nums">
+                <MoneyCell value={row.line_total} currency={row.currency} />
+              </span>
+            </span>
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {showApartment && <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />}
+            <StatusCell status={row.status} />
+          </div>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -364,13 +479,18 @@ function ReceiptItems() {
     }
   }
 
-  const openItem = (receiptId: string) => {
-    // Only carry a `from` param when a tab or filter is actually active --
-    // the plain, unfiltered items view needs no round trip, matching
-    // ReceiptHistory's own openReceipt.
+  // Only carry a `from` param when a tab or filter is actually active --
+  // the plain, unfiltered items view needs no round trip, matching
+  // ReceiptHistory's own receiptHref. The same href is the link's real
+  // `href` (so a new tab keeps the way back) and what a plain click opens.
+  const receiptHref = (receiptId: string): string => {
     const hasActiveFilterOrTab = effectiveApartmentId !== null || anyFilterActive
     const from = hasActiveFilterOrTab ? `&from=${encodeURIComponent(window.location.search)}` : ''
-    navigateTo(`?receipt=${receiptId}${from}`)
+    return `/?receipt=${receiptId}${from}`
+  }
+
+  const openItem = (receiptId: string) => {
+    navigateTo(receiptHref(receiptId).slice(1))
   }
 
   const goToUpload = (e: React.MouseEvent) => {
@@ -411,9 +531,16 @@ function ReceiptItems() {
     )
   }
 
-  const tabs: { id: string | null; label: string }[] = [
+  const tabs: { id: string | null; label: string; accessibleName?: string }[] = [
     { id: null, label: 'All apartments' },
-    ...(apartments ?? []).map((a) => ({ id: a.id, label: a.name })),
+    // Short name visible (with the tone dot ReceiptFilters adds), full name
+    // as the tab's accessible name and tooltip -- like History's tabs, but
+    // without counts (facets count receipts, not items).
+    ...(apartments ?? []).map((a) => ({
+      id: a.id,
+      label: apartmentShortName(a.name) ?? a.name,
+      accessibleName: a.name,
+    })),
   ]
 
   const anyFilterActive = year !== null || status !== null || q !== null
@@ -574,87 +701,19 @@ function ReceiptItems() {
           </div>
 
           {isSmallScreen ? (
-            <ul className="flex flex-col gap-2">
-              {items?.map((row) => (
-                <ItemCard
-                  key={`${row.receipt_id}-${row.line_index}`}
-                  row={row}
-                  showApartment={showApartmentColumn}
-                  onOpen={openItem}
-                />
-              ))}
-            </ul>
+            <ItemCardList
+              items={items ?? []}
+              showApartment={showApartmentColumn}
+              hrefFor={receiptHref}
+              onOpen={openItem}
+            />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full table-fixed text-left text-sm">
-                <caption className="sr-only">Purchased items</caption>
-                <thead>
-                  <tr className="border-b border-border text-ink-muted">
-                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 font-medium">
-                      Date
-                    </th>
-                    <th scope="col" className="py-2 pr-2 font-medium">
-                      Item
-                    </th>
-                    <th scope="col" className="w-16 py-2 pr-2 text-right font-medium">
-                      Qty
-                    </th>
-                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
-                      Unit price
-                    </th>
-                    <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
-                      Line total
-                    </th>
-                    <th scope="col" className="w-40 py-2 pr-2 font-medium">
-                      Store
-                    </th>
-                    {showApartmentColumn && (
-                      <th scope="col" className="w-28 py-2 pr-2 font-medium">
-                        Apartment
-                      </th>
-                    )}
-                    <th scope="col" className="w-28 py-2 font-medium">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items?.map((row) => (
-                    <tr
-                      key={`${row.receipt_id}-${row.line_index}`}
-                      className="border-b border-border/40 hover:bg-slate-50"
-                    >
-                      <td className="whitespace-nowrap py-2 pr-2">
-                        <DateCell value={row.purchase_date} />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <ItemNameLink row={row} onOpen={openItem} />
-                      </td>
-                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
-                        <QuantityCell value={row.quantity} />
-                      </td>
-                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
-                        <MoneyCell value={row.unit_price} currency={row.currency} />
-                      </td>
-                      <td className="whitespace-nowrap py-2 pr-2 text-right tabular-nums">
-                        <MoneyCell value={row.line_total} currency={row.currency} />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <StoreCell value={row.store_name} />
-                      </td>
-                      {showApartmentColumn && (
-                        <td className="py-2 pr-2">
-                          <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />
-                        </td>
-                      )}
-                      <td className="py-2">
-                        <StatusCell status={row.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ItemsTable
+              items={items ?? []}
+              showApartment={showApartmentColumn}
+              hrefFor={receiptHref}
+              onOpen={openItem}
+            />
           )}
 
           <div className="flex flex-col gap-2">

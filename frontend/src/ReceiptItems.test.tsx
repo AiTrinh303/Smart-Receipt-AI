@@ -806,6 +806,99 @@ describe('ReceiptItems', () => {
     )
   })
 
+  // --- Tabs like History, whole-row links, alignment, receipt grouping ----
+
+  test('apartment tabs show the short name with a tone dot and no count; the full name is the accessible name and title', async () => {
+    // Given facets with a three-segment apartment name
+    const threeSegment = { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick', count: 5 }
+    fetchSpy.mockImplementation(
+      routeFetch({
+        facets: () =>
+          Promise.resolve(jsonResponse(200, { ...DEFAULT_FACETS, apartments: [threeSegment], total: 5 })),
+        items: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })),
+      }),
+    )
+    render(<ReceiptItems />)
+
+    // Then the tab reads just "Bergblick", named and titled with the full name, with the sky dot
+    const tab = await screen.findByRole('tab', { name: threeSegment.name })
+    expect(tab).toHaveTextContent(/^Bergblick$/)
+    expect(tab).toHaveAttribute('title', threeSegment.name)
+    expect(tab.querySelector('[aria-hidden="true"].bg-apartment-sky')).not.toBeNull()
+  })
+
+  test('each row is one whole-row link: plain item text, the from href, a plain click navigates, ctrl-click is left to the browser', async () => {
+    // Given an apartment tab is active (so the link carries `from`)
+    window.history.replaceState({}, '', `/?view=items&apartment=${OBERAUDORF.id}`)
+    const row = makeRow()
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [row], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptItems />)
+    const link = await screen.findByRole('link', { name: 'Milk' })
+
+    // Then it's the row's only link, not underlined, with the full href including `from`
+    const tableRow = link.closest('tr') as HTMLElement
+    expect(tableRow).toHaveClass('relative')
+    expect(tableRow.querySelectorAll('a')).toHaveLength(1)
+    expect(link.className).not.toMatch(/\bunderline\b/)
+    expect(link.className).toContain("after:absolute")
+    expect(link).toHaveAttribute(
+      'href',
+      `/?receipt=${row.receipt_id}&from=${encodeURIComponent(`?view=items&apartment=${OBERAUDORF.id}`)}`,
+    )
+
+    // When ctrl-clicked, the browser's own handling is not prevented (new tab)
+    const ctrlClick = new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true })
+    link.dispatchEvent(ctrlClick)
+    expect(ctrlClick.defaultPrevented).toBe(false)
+
+    // When plainly clicked, it navigates in place to the same receipt URL
+    const plainClick = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link.dispatchEvent(plainClick)
+    expect(plainClick.defaultPrevented).toBe(true)
+    expect(window.location.search).toBe(link.getAttribute('href')?.slice(1))
+  })
+
+  test('Store is set apart from Line total, and Status (header and cell) is right-aligned', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptItems />)
+    const link = await screen.findByRole('link', { name: 'Milk' })
+
+    // Then Store has extra left padding, and Status is right-aligned in the header and the row
+    expect(screen.getByRole('columnheader', { name: 'Store' })).toHaveClass('pl-4')
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toHaveClass('text-right')
+    const cells = (link.closest('tr') as HTMLElement).querySelectorAll('td')
+    expect(cells[cells.length - 1]).toHaveClass('text-right')
+    expect(cells[cells.length - 1]).toHaveTextContent('Needs review')
+  })
+
+  test('rows of the same receipt share the light divider; a new receipt starts with a stronger one, in any sort order', async () => {
+    // Given rows sorted so one receipt's lines are split up: A0, A1, B0, A2
+    const A = '11111111-1111-1111-1111-111111111111'
+    const B = '22222222-2222-2222-2222-222222222222'
+    const rows = [
+      makeRow({ receipt_id: A, line_index: 0, name: 'A0' }),
+      makeRow({ receipt_id: A, line_index: 1, name: 'A1' }),
+      makeRow({ receipt_id: B, line_index: 0, name: 'B0' }),
+      makeRow({ receipt_id: A, line_index: 2, name: 'A2' }),
+    ]
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: rows, count: 4, total: 4 })) }),
+    )
+    render(<ReceiptItems />)
+    await screen.findByRole('link', { name: 'A0' })
+    const tr = (name: string) => screen.getByRole('link', { name }).closest('tr') as HTMLElement
+
+    // Then the first row has no top divider, a same-receipt row the light one, and each change of receipt the stronger one
+    expect(tr('A0').className).not.toMatch(/border-t/)
+    expect(tr('A1')).toHaveClass('border-border-subtle')
+    expect(tr('B0')).toHaveClass('border-border/40')
+    expect(tr('A2')).toHaveClass('border-border/40')
+  })
+
   // --- Sorting --------------------------------------------------------------
 
   test('the default sort is not sent and not shown in the URL', async () => {

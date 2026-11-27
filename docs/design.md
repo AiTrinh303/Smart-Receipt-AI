@@ -2142,6 +2142,40 @@ height while every other control was a `Button` (`font-medium`).
   headings and "Total: €8.14" on an EUR receipt, and the right-aligned
   Status / spaced Apartment header in History.
 
+## Items table: like History, grouped by receipt
+
+- **Tabs:** the apartment short name with its tone dot, the full name as
+  the tab's accessible name and `title`, no counts (facets count receipts,
+  not items) -- History's tabs minus the counts.
+- **Whole-row link:** each row (and each card below `sm`) is one real
+  `<a>`, the item name, stretched over the row with `::after`; the row is
+  `relative`, `hover:bg-slate-50`, and its focus ring is the `::after`'s
+  inset outline (`-outline-offset-2`, checked in the built CSS). The item
+  name is plain text now (no underline). The `href` now carries `&from=`
+  when a tab/filter is active (before, only the click handler added it,
+  so a new tab lost the way back); ctrl/cmd/shift/alt-click is left to
+  the browser, so "open in new tab" works.
+- **Spacing/alignment:** Store has `pl-4` (clear of the right-aligned Line
+  total); Status, header and cell, is right-aligned like History.
+- **Dividers:** Items used `border-border/40` (the control border at 40%)
+  under every row; rows now use History's `border-border-subtle`. The
+  first row of each new receipt (compared with the row above, in any sort
+  order) gets the slightly stronger `border-border/40` instead -- a
+  decorative grouping cue.
+- **Not done here (noticed while checking "like History"):** History's
+  own row links (`HistoryRow`) still call `preventDefault()` on every
+  click, so ctrl/cmd-click there opens the receipt in the *same* tab;
+  only middle-click opens a new one. The upload side panel's `AppLink`
+  and now Items handle modifier keys correctly.
+- **Tests:** no existing test changed. New: Items tabs (short name, dot,
+  full name as name/title, no count); the whole-row link (one link per
+  row, no underline, the `from` href, ctrl-click not prevented, plain
+  click navigates); Store/Status alignment; receipt grouping dividers
+  with one receipt's lines split up by the sort.
+- **`?view=styleguide`:** the Items table and cards are the real
+  `ItemsTable`/`ItemCardList`, with a second line of the first receipt to
+  show the grouping.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
