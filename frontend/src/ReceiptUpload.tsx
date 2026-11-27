@@ -991,9 +991,13 @@ function ReceiptUpload() {
     <div className="flex w-full flex-col gap-6">
       <PageHeader title="Upload receipts" description={UPLOAD_DESCRIPTION} />
 
-      <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
+      {/* From lg up both columns stretch to the taller one (the grid's
+          default `items-stretch`), and the form card's dropzone grows to
+          fill any spare height, so the form and the side panel always end
+          on the same line. Below lg: one stacked column, unchanged. */}
+      <div className="grid gap-6 lg:grid-cols-12">
         <div className="flex flex-col gap-4 lg:col-span-7">
-          <Card className="flex flex-col gap-6">
+          <Card className="flex flex-col gap-6 lg:flex-1">
             <div className="flex flex-col gap-3">
               <SectionHeading number={1} required>
                 Apartment
@@ -1046,7 +1050,7 @@ function ReceiptUpload() {
               )}
             </div>
 
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 lg:flex-1">
               <SectionHeading number={2}>
                 Receipts
                 {selectedApartment && (
@@ -1119,7 +1123,7 @@ function ReceiptUpload() {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`flex flex-col items-center gap-2 rounded-control border-2 border-dashed bg-brand-soft p-8 text-center transition-colors duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                  className={`flex flex-col items-center justify-center gap-2 rounded-control border-2 border-dashed bg-brand-soft p-8 text-center transition-colors lg:flex-1 duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
                     isInputDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand hover:bg-brand-subtle'
                   } ${isDragOver ? 'border-brand bg-brand-subtle' : 'border-border'}`}
                 >
@@ -1407,7 +1411,7 @@ function ReceiptUpload() {
         </div>
 
         {isWideScreen && (
-          <div className="lg:col-span-5">
+          <div className="flex flex-col lg:col-span-5">
             <UploadSidePanel refreshKey={sidePanelRefreshKey} />
           </div>
         )}

@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
-import { getReceiptFacets } from './api/getReceiptFacets'
 import { listReceipts } from './api/listReceipts'
-import type { ReceiptFacets, ReceiptSummary } from './api/types'
+import type { ReceiptSummary } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
 import { navigateTo, isPlainLeftClick } from './navigation'
 import { DateCell } from './ReceiptItems'
-import { ApartmentDot, ApartmentPill } from './components/ui/ApartmentTone'
+import { ApartmentPill } from './components/ui/ApartmentTone'
 import Card from './components/ui/Card'
 import ClampedText from './components/ui/ClampedText'
 import MissingValue from './components/ui/MissingValue'
@@ -30,9 +29,10 @@ export const HOW_IT_WORKS_STEPS = [
 
 // Every variant of the side panel (loading, help, overview) shares the
 // same outer Card classes, so swapping one for another never changes the
-// column's position or stickiness. `top-20` (80px) clears the shell's
-// `h-16` (64px) header with 16px to spare.
-const PANEL_CLASSES = 'flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start'
+// column's layout. From lg up the card fills its (stretched) grid column,
+// so it ends on the same line as the upload form; its content stays at
+// the top. Not sticky: the two cards are meant to read as one row.
+const PANEL_CLASSES = 'flex flex-col gap-4 lg:flex-1'
 
 const LINK_CLASSES =
   'rounded-sm font-medium text-brand underline hover:text-brand-hover focus-visible:outline focus-visible:outline-2 ' +
@@ -159,55 +159,14 @@ function LatestUploadRow({ receipt }: { receipt: ReceiptSummary }) {
   )
 }
 
-/** "Your receipts": totals per apartment, the latest uploads, links on to
- * History and the yearly Report, and the help content collapsed below.
- * Presentational (exported for the style guide and tests). */
-export function ReceiptsOverview({ facets, latest }: { facets: ReceiptFacets; latest: ReceiptSummary[] }) {
+/** The panel for a returning user: "How it works and tips" (closed) at
+ * the top, then "Latest uploads" (the panel's heading) with the 5 newest
+ * uploads, then links on to History and the yearly Report. Presentational
+ * (exported for the style guide and tests). */
+export function ReceiptsOverview({ latest }: { latest: ReceiptSummary[] }) {
   return (
     <Card className={PANEL_CLASSES}>
-      <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-ink">Your receipts</h2>
-        <p className="text-sm text-ink-muted">
-          {facets.total} {facets.total === 1 ? 'receipt' : 'receipts'} saved
-        </p>
-      </div>
-
-      {facets.apartments.length > 0 && (
-        <ul className="flex flex-col gap-1 text-sm">
-          {facets.apartments.map((apartment) => (
-            <li key={apartment.id}>
-              <AppLink
-                search={`?view=history&apartment=${encodeURIComponent(apartment.id)}`}
-                className={LINK_CLASSES}
-                title={apartment.name}
-              >
-                <ApartmentDot apartmentId={apartment.id} />{' '}
-                {apartmentShortName(apartment.name) ?? apartment.name}: {apartment.count}
-              </AppLink>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
-        <h3 className="text-sm font-semibold text-ink">Latest uploads</h3>
-        <ul className="-mx-2 flex flex-col">
-          {latest.map((receipt) => (
-            <LatestUploadRow key={receipt.receipt_id} receipt={receipt} />
-          ))}
-        </ul>
-      </div>
-
-      <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-        <AppLink search="?view=history" className={LINK_CLASSES}>
-          See all in History
-        </AppLink>
-        <AppLink search="?view=report" className={LINK_CLASSES}>
-          Open the yearly report
-        </AppLink>
-      </div>
-
-      <details className="group border-t border-border-subtle pt-4 text-sm">
+      <details className="group border-b border-border-subtle pb-4 text-sm">
         <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 rounded-sm font-medium text-ink [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
           <svg
             aria-hidden="true"
@@ -223,6 +182,24 @@ export function ReceiptsOverview({ facets, latest }: { facets: ReceiptFacets; la
           <HowItWorksContent />
         </div>
       </details>
+
+      <div className="flex flex-col gap-2">
+        <h2 className="text-base font-semibold text-ink">Latest uploads</h2>
+        <ul className="-mx-2 flex flex-col">
+          {latest.map((receipt) => (
+            <LatestUploadRow key={receipt.receipt_id} receipt={receipt} />
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+        <AppLink search="?view=history" className={LINK_CLASSES}>
+          See all in History
+        </AppLink>
+        <AppLink search="?view=report" className={LINK_CLASSES}>
+          Open the yearly report
+        </AppLink>
+      </div>
     </Card>
   )
 }
@@ -230,11 +207,12 @@ export function ReceiptsOverview({ facets, latest }: { facets: ReceiptFacets; la
 type PanelState =
   | { kind: 'loading' }
   | { kind: 'help' }
-  | { kind: 'overview'; facets: ReceiptFacets; latest: ReceiptSummary[] }
+  | { kind: 'overview'; latest: ReceiptSummary[] }
 
 /** The Upload page's right-hand column (from `lg` up only -- the caller
- * decides that via useMediaQuery, never CSS). Fetches the facets and the
- * latest receipts once on mount, and once more each time `refreshKey`
+ * decides that via useMediaQuery, never CSS). Fetches the latest receipts
+ * once on mount (one request; its `total` says whether there are any
+ * receipts at all), and once more each time `refreshKey`
  * changes (after a single upload's extraction or a finished batch). A
  * refresh keeps the current content on screen until the new data arrives
  * -- the skeleton only ever shows on the first load. Any failure silently
@@ -248,16 +226,13 @@ function UploadSidePanel({ refreshKey = 0 }: { refreshKey?: number }) {
 
     async function load() {
       try {
-        const [facets, latest] = await Promise.all([
-          getReceiptFacets(),
-          // "Latest uploads" means upload order, not the list's default
-          // (purchase date) -- so this asks for it explicitly.
-          listReceipts({ limit: LATEST_UPLOADS_LIMIT, sort: 'uploaded_desc' }),
-        ])
+        // "Latest uploads" means upload order, not the list's default
+        // (purchase date) -- so this asks for it explicitly.
+        const latest = await listReceipts({ limit: LATEST_UPLOADS_LIMIT, sort: 'uploaded_desc' })
         if (cancelled) {
           return
         }
-        setState(facets.total === 0 ? { kind: 'help' } : { kind: 'overview', facets, latest: latest.items })
+        setState(latest.total === 0 ? { kind: 'help' } : { kind: 'overview', latest: latest.items })
       } catch {
         if (!cancelled) {
           setState({ kind: 'help' })
@@ -277,7 +252,7 @@ function UploadSidePanel({ refreshKey = 0 }: { refreshKey?: number }) {
   if (state.kind === 'help') {
     return <HelpPanel />
   }
-  return <ReceiptsOverview facets={state.facets} latest={state.latest} />
+  return <ReceiptsOverview latest={state.latest} />
 }
 
 export default UploadSidePanel

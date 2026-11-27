@@ -2455,6 +2455,40 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   request params incl. "Show more", fallback, Clear filters, `from`), two
   review-mode snapshot tests, and the side panel's `uploaded_desc`.
 
+## Upload page: balanced columns, simpler side panel
+
+- **Equal height from `lg` up:** the grid stretches both columns (no more
+  `lg:items-start`); the side panel is no longer sticky -- its card fills
+  its column (`lg:flex-1`, content at the top) -- and the form card, its
+  "Receipts" section and the full dropzone are `lg:flex-1`, so the
+  dropzone takes up the spare height and both cards end on one line.
+  With a long batch queue the form grows and the panel stretches with it.
+  Below `lg`: unchanged (no panel, `TipsDetails` under the dropzone).
+- **Side panel:** "How it works and tips" (closed) at the top, then
+  "Latest uploads" as the panel's `<h2>` with the same 5 rows, then the
+  History and yearly-report links. Removed: "Your receipts", "N receipts
+  saved", the per-apartment count links, and with them the
+  `getReceiptFacets` request -- the panel makes one request,
+  `listReceipts`, whose `total` decides "no receipts yet" (`HelpPanel`);
+  same silent failure fallback and `refreshKey` behaviour.
+- **Tests:** `UploadSidePanel.test.tsx` rewritten around the single
+  request -- changed: the skeleton (`lg:flex-1`, not sticky), the mount
+  request (one call, `uploaded_desc`, no facets), total 0 -> help (now
+  from the list's `total`), the failure fallbacks (the facets-failure case
+  removed), "Latest uploads" rows and missing values (now an `h2`), the
+  plain-click test (now "See all in History"; the count link it clicked
+  is gone), the `refreshKey` test (detects the refresh by a new latest
+  row, not a new total), the modified-click test (heading level).
+  Removed: "the overview shows the total and one link per apartment…",
+  'a total of exactly 1 reads "1 receipt saved"', and the old "links +
+  collapsed help" test (merged into a new top-to-bottom order test).
+  New: the order test, and `ReceiptsOverview` with just `latest`.
+  `ReceiptUpload.sidePanel.test.tsx`: facets mock and "N receipts saved"
+  checks replaced by the latest list (refresh detected by a new store
+  name). `ReceiptUpload.layout.test.tsx`: the help-panel test now expects
+  `lg:flex-1`, not `lg:sticky`; new: the equal-height classes.
+- **`?view=styleguide`:** the side panel sample renders the new overview.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

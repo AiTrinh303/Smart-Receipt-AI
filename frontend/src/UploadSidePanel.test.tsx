@@ -1,19 +1,9 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import UploadSidePanel, { ReceiptsOverview } from './UploadSidePanel'
-import type { ReceiptFacets, ReceiptSummary } from './api/types'
+import type { ReceiptSummary } from './api/types'
 import { jsonResponse } from './test/apartmentsFetch'
 import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
-
-const FACETS: ReceiptFacets = {
-  apartments: [
-    { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick', count: 12 },
-    { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück', count: 30 },
-  ],
-  total: 42,
-  years: [2026],
-  has_undated: true,
-}
 
 function summary(overrides: Partial<ReceiptSummary>): ReceiptSummary {
   return {
@@ -50,12 +40,11 @@ let fetchSpy: jest.Mock
 
 type Route = () => Promise<unknown>
 
-function routeFetch({ facets, receipts }: { facets: Route; receipts: Route }) {
+/** The panel makes exactly one kind of request now (GET /receipts); any
+ * other call -- e.g. the removed facets request -- fails the test. */
+function routeFetch({ receipts }: { receipts: Route }) {
   fetchSpy = jest.fn().mockImplementation((url: unknown) => {
     const urlString = String(url)
-    if (urlString.includes('/receipts/facets')) {
-      return facets()
-    }
     if (urlString.includes('/receipts?')) {
       return receipts()
     }
@@ -64,12 +53,14 @@ function routeFetch({ facets, receipts }: { facets: Route; receipts: Route }) {
   global.fetch = fetchSpy as unknown as typeof fetch
 }
 
-function okFacets(body: ReceiptFacets = FACETS): Route {
-  return () => Promise.resolve(jsonResponse(200, body))
+function okReceipts(items: ReceiptSummary[] = LATEST, total = 42): Route {
+  return () => Promise.resolve(jsonResponse(200, { items, count: items.length, total }))
 }
 
-function okReceipts(items: ReceiptSummary[] = LATEST): Route {
-  return () => Promise.resolve(jsonResponse(200, { items, count: items.length, total: 42 }))
+/** The "Latest uploads" list (the <ul> right after its h2). */
+async function latestList(): Promise<HTMLElement> {
+  const heading = await screen.findByRole('heading', { level: 2, name: 'Latest uploads' })
+  return heading.nextElementSibling as HTMLElement
 }
 
 beforeEach(() => {
@@ -86,44 +77,44 @@ function callsTo(fragment: string): string[] {
   return fetchSpy.mock.calls.map(([url]) => String(url)).filter((url) => url.includes(fragment))
 }
 
-test('while loading, a role="status" aria-busy skeleton card is shown', async () => {
-  // Given requests that have not answered yet
-  routeFetch({ facets: () => new Promise(() => {}), receipts: () => new Promise(() => {}) })
+test('while loading, a role="status" aria-busy skeleton card is shown, filling its column (not sticky)', async () => {
+  // Given a request that has not answered yet
+  routeFetch({ receipts: () => new Promise(() => {}) })
 
   // When the panel mounts
   render(<UploadSidePanel />)
 
-  // Then a busy status region with the loading text is shown, inside a
-  // sticky card (same outer classes as the loaded variants -- no jump)
+  // Then a busy status region with the loading text is shown, inside a card
+  // with the same outer classes as the loaded variants (no jump): it fills
+  // its stretched column from lg up and is no longer sticky
   const status = screen.getByRole('status')
   expect(status).toHaveAttribute('aria-busy', 'true')
   expect(within(status).getByText('Loading your receipts...')).toBeInTheDocument()
-  expect((status.parentElement as HTMLElement).className).toContain('lg:sticky')
+  const card = status.parentElement as HTMLElement
+  expect(card).toHaveClass('lg:flex-1')
+  expect(card.className).not.toContain('lg:sticky')
 })
 
-test('on mount it fetches the unscoped facets and the 5 latest receipts, once each', async () => {
-  // Given both requests succeed
-  routeFetch({ facets: okFacets(), receipts: okReceipts() })
+test('on mount it fetches only the 5 latest uploads, once, in upload order (no facets request)', async () => {
+  // Given saved receipts
+  routeFetch({ receipts: okReceipts() })
 
   // When the panel mounts
   render(<UploadSidePanel />)
-  await screen.findByRole('heading', { level: 2, name: 'Your receipts' })
+  await latestList()
 
-  // Then exactly one request each was made
-  expect(callsTo('/receipts/facets')).toEqual([expect.stringMatching(/\/receipts\/facets$/)])
+  // Then exactly one request was made: 5 receipts, sorted by upload time
+  expect(fetchSpy).toHaveBeenCalledTimes(1)
   const listCalls = callsTo('/receipts?')
   expect(listCalls).toHaveLength(1)
   expect(new URL(listCalls[0], 'http://x').searchParams.get('limit')).toBe('5')
-  // And "Latest uploads" asks for upload order explicitly, not the list's date default
   expect(new URL(listCalls[0], 'http://x').searchParams.get('sort')).toBe('uploaded_desc')
+  expect(callsTo('/receipts/facets')).toHaveLength(0)
 })
 
 test('with a total of 0, the help content is shown expanded (no <details>) and no overview', async () => {
-  // Given no saved receipts
-  routeFetch({
-    facets: okFacets({ apartments: [], total: 0, years: [], has_undated: false }),
-    receipts: okReceipts([]),
-  })
+  // Given no saved receipts (the list's own total says so)
+  routeFetch({ receipts: okReceipts([], 0) })
 
   // When the panel loads
   render(<UploadSidePanel />)
@@ -133,14 +124,13 @@ test('with a total of 0, the help content is shown expanded (no <details>) and n
   expect(screen.getByText('Choose the apartment.')).toBeVisible()
   expect(screen.getByText('Lay the receipt flat.')).toBeVisible()
   expect(document.querySelector('details')).not.toBeInTheDocument()
-  expect(screen.queryByText('Your receipts')).not.toBeInTheDocument()
+  expect(screen.queryByText('Latest uploads')).not.toBeInTheDocument()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
 })
 
 test.each([
-  ['the facets request fails', { facets: () => Promise.resolve(jsonResponse(500, {})), receipts: okReceipts() }],
-  ['the receipts request fails', { facets: okFacets(), receipts: () => Promise.resolve(jsonResponse(500, {})) }],
-  ['the network is down', { facets: () => Promise.reject(new TypeError('offline')), receipts: okReceipts() }],
+  ['the receipts request fails', { receipts: () => Promise.resolve(jsonResponse(500, {})) }],
+  ['the network is down', { receipts: () => Promise.reject(new TypeError('offline')) }],
 ])('when %s, it silently falls back to the help (no error shown)', async (_label, routes) => {
   // Given a failing request
   routeFetch(routes)
@@ -151,47 +141,47 @@ test.each([
   // Then the help is shown and nothing looks like an error
   expect(await screen.findByRole('heading', { level: 2, name: 'How it works' })).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  expect(screen.queryByText('Your receipts')).not.toBeInTheDocument()
+  expect(screen.queryByText('Latest uploads')).not.toBeInTheDocument()
 })
 
-test('the overview shows the total and one link per apartment to its History tab', async () => {
+test('the overview reads top to bottom: closed "How it works and tips", the "Latest uploads" heading and rows, then the two links', async () => {
   // Given saved receipts
-  routeFetch({ facets: okFacets(), receipts: okReceipts() })
-
-  // When the panel loads
+  routeFetch({ receipts: okReceipts() })
   render(<UploadSidePanel />)
-  await screen.findByRole('heading', { level: 2, name: 'Your receipts' })
+  const list = await latestList()
 
-  // Then the total and per-apartment counts are shown, short name visible,
-  // full name in title, linking to that apartment's History tab
-  expect(screen.getByText('42 receipts saved')).toBeInTheDocument()
-  const bergblick = screen.getByRole('link', { name: 'Bergblick: 12' })
-  expect(bergblick).toHaveAttribute('href', '/?view=history&apartment=oberaudorf-bergblick')
-  expect(bergblick).toHaveAttribute('title', 'Fewo JoJo - Oberaudorf - Bergblick')
-  expect(screen.getByRole('link', { name: 'Waldglück: 30' })).toHaveAttribute(
-    'href',
-    '/?view=history&apartment=sankt-englmar-waldglueck',
-  )
-})
+  // Then the help is a closed <details> at the top, its text present exactly once
+  const details = screen.getByText('How it works and tips').closest('details') as HTMLDetailsElement
+  expect(details.open).toBe(false)
+  expect(screen.getAllByText('Lay the receipt flat.')).toHaveLength(1)
+  expect(within(details).getByText('Choose the apartment.')).toBeInTheDocument()
 
-test('a total of exactly 1 reads "1 receipt saved"', () => {
-  // Given a one-receipt overview
-  render(<ReceiptsOverview facets={{ ...FACETS, total: 1 }} latest={[summary({})]} />)
+  // And "Latest uploads" is the panel's heading (h2), after the help
+  const heading = screen.getByRole('heading', { level: 2, name: 'Latest uploads' })
+  expect(details.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
-  // Then the singular is used
-  expect(screen.getByText('1 receipt saved')).toBeInTheDocument()
+  // And the two links come last, after the rows
+  const history = screen.getByRole('link', { name: 'See all in History' })
+  const report = screen.getByRole('link', { name: 'Open the yearly report' })
+  expect(history).toHaveAttribute('href', '/?view=history')
+  expect(report).toHaveAttribute('href', '/?view=report')
+  expect(list.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+  // And the removed parts are gone: no "Your receipts", no count, no per-apartment links
+  expect(screen.queryByText('Your receipts')).not.toBeInTheDocument()
+  expect(screen.queryByText(/receipts? saved/)).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: /^(Bergblick|Waldglück): \d+$/ })).not.toBeInTheDocument()
 })
 
 test('"Latest uploads" lists the 5 receipts, each linking to ?receipt=<id>, with store, date, amount and apartment', async () => {
   // Given saved receipts
-  routeFetch({ facets: okFacets(), receipts: okReceipts() })
+  routeFetch({ receipts: okReceipts() })
 
   // When the panel loads
   render(<UploadSidePanel />)
-  await screen.findByRole('heading', { level: 3, name: 'Latest uploads' })
+  const list = await latestList()
 
   // Then 5 rows link to their receipts
-  const list = screen.getByRole('heading', { level: 3, name: 'Latest uploads' }).nextElementSibling as HTMLElement
   const rows = within(list).getAllByRole('link')
   expect(rows).toHaveLength(5)
   expect(rows.map((row) => row.getAttribute('href'))).toEqual(LATEST.map((r) => `/?receipt=${r.receipt_id}`))
@@ -209,11 +199,11 @@ test('"Latest uploads" lists the 5 receipts, each linking to ?receipt=<id>, with
 
 test('a latest row with missing values shows MissingValue, and an unrecognized date shows the marker', async () => {
   // Given a receipt with no store/total/apartment and a non-ISO date
-  routeFetch({ facets: okFacets(), receipts: okReceipts() })
+  routeFetch({ receipts: okReceipts() })
 
   // When the panel loads
   render(<UploadSidePanel />)
-  await screen.findByRole('heading', { level: 3, name: 'Latest uploads' })
+  await latestList()
 
   // Then that row shows "Not detected" (hidden) for store, amount and
   // apartment, and the raw date with the "Date not recognized" marker
@@ -227,75 +217,61 @@ test('a latest row with missing values shows MissingValue, and an unrecognized d
   expect(within(third).getByText('Not detected')).toBeInTheDocument()
 })
 
-test('the overview links to History and the yearly report, with the help collapsed in a <details>', async () => {
-  // Given saved receipts
-  routeFetch({ facets: okFacets(), receipts: okReceipts() })
-
-  // When the panel loads
-  render(<UploadSidePanel />)
-  await screen.findByRole('heading', { level: 2, name: 'Your receipts' })
-
-  // Then both links are there
-  expect(screen.getByRole('link', { name: 'See all in History' })).toHaveAttribute('href', '/?view=history')
-  expect(screen.getByRole('link', { name: 'Open the yearly report' })).toHaveAttribute('href', '/?view=report')
-
-  // And the help sits in a closed <details>, text present exactly once
-  const summaryEl = screen.getByText('How it works and tips').closest('summary') as HTMLElement
-  const details = summaryEl.closest('details') as HTMLDetailsElement
-  expect(details.open).toBe(false)
-  expect(screen.getAllByText('Lay the receipt flat.')).toHaveLength(1)
-  expect(within(details).getByText('Choose the apartment.')).toBeInTheDocument()
-})
-
 test('a plain click on an overview link navigates in-app via the URL', async () => {
   const user = userEvent.setup()
   // Given the loaded overview
-  routeFetch({ facets: okFacets(), receipts: okReceipts() })
+  routeFetch({ receipts: okReceipts() })
   render(<UploadSidePanel />)
-  await screen.findByRole('heading', { level: 2, name: 'Your receipts' })
+  await latestList()
 
-  // When the owner clicks the Waldglück count
-  await user.click(screen.getByRole('link', { name: 'Waldglück: 30' }))
+  // When the owner clicks "See all in History"
+  await user.click(screen.getByRole('link', { name: 'See all in History' }))
 
-  // Then the address bar points at that History tab
-  expect(window.location.search).toBe('?view=history&apartment=sankt-englmar-waldglueck')
+  // Then the address bar points at History
+  expect(window.location.search).toBe('?view=history')
 })
 
 test('changing refreshKey refetches once, keeping the current content (no skeleton) until new data arrives', async () => {
   // Given a loaded overview
-  routeFetch({ facets: okFacets(), receipts: okReceipts() })
+  routeFetch({ receipts: okReceipts() })
   const { rerender } = render(<UploadSidePanel refreshKey={0} />)
-  await screen.findByText('42 receipts saved')
+  await screen.findByText('Edeka')
 
-  // When the refresh key changes and the new data has 43 receipts
-  let resolveFacets!: (value: unknown) => void
-  routeFetch({
-    facets: () => new Promise((resolve) => (resolveFacets = resolve)),
-    receipts: okReceipts(),
-  })
+  // When the refresh key changes and the new latest upload is "Netto"
+  let resolveReceipts!: (value: unknown) => void
+  routeFetch({ receipts: () => new Promise((resolve) => (resolveReceipts = resolve)) })
   rerender(<UploadSidePanel refreshKey={1} />)
 
   // Then the old content stays while loading -- no skeleton
-  expect(screen.getByText('42 receipts saved')).toBeInTheDocument()
+  expect(screen.getByText('Edeka')).toBeInTheDocument()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
 
-  // And once the request answers, the new total is shown
-  resolveFacets(jsonResponse(200, { ...FACETS, total: 43 }))
-  expect(await screen.findByText('43 receipts saved')).toBeInTheDocument()
-  expect(callsTo('/receipts/facets')).toHaveLength(1)
+  // And once the request answers, the new row is shown
+  const fresh = [summary({ receipt_id: '66666666-6666-4666-8666-666666666666', store_name: 'Netto' }), ...LATEST.slice(0, 4)]
+  resolveReceipts(jsonResponse(200, { items: fresh, count: 5, total: 43 }))
+  expect(await screen.findByText('Netto')).toBeInTheDocument()
+  expect(callsTo('/receipts?')).toHaveLength(1)
 
   // And re-rendering with the same key fetches nothing more
   rerender(<UploadSidePanel refreshKey={1} />)
-  await waitFor(() => expect(callsTo('/receipts/facets')).toHaveLength(1))
+  await waitFor(() => expect(callsTo('/receipts?')).toHaveLength(1))
 })
 
 test('a latest-upload link leaves ctrl/cmd-click to the browser; a plain click still opens it in place', async () => {
   // Given the panel with saved receipts
-  routeFetch({ facets: okFacets(), receipts: okReceipts() })
+  routeFetch({ receipts: okReceipts() })
   render(<UploadSidePanel />)
-  const list = (await screen.findByRole('heading', { level: 3, name: 'Latest uploads' })).nextElementSibling as HTMLElement
-  const first = within(list).getAllByRole('link')[0]
+  const first = within(await latestList()).getAllByRole('link')[0]
 
   // Then modified clicks are not prevented, and a plain click navigates
   expectBrowserHandlesModifiedClicks(first, `?receipt=${LATEST[0].receipt_id}`)
+})
+
+test('ReceiptsOverview renders with just the latest uploads (no facets prop)', () => {
+  // Given the presentational overview with one receipt
+  render(<ReceiptsOverview latest={[summary({})]} />)
+
+  // Then its heading and row are there
+  expect(screen.getByRole('heading', { level: 2, name: 'Latest uploads' })).toBeInTheDocument()
+  expect(screen.getByText('Edeka')).toBeInTheDocument()
 })

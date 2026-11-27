@@ -62,7 +62,7 @@ test('the form has two numbered sections, "Apartment" and "Receipts", with aria-
   expect(screen.getByRole('radiogroup', { name: 'Which apartment is this receipt for?' })).toBeInTheDocument()
 })
 
-test('the help panel uses the standard Card elevation (never a stronger one) and is sticky from lg', async () => {
+test('the help panel uses the standard Card elevation (never a stronger one) and fills its column from lg (not sticky)', async () => {
   mockMatchMedia(true)
   render(<ReceiptUpload />)
   await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
@@ -73,7 +73,29 @@ test('the help panel uses the standard Card elevation (never a stronger one) and
   const panelCard = panelHeading.closest('div') as HTMLElement
   expect(panelCard.className).not.toContain('shadow-popover')
   expect(panelCard.className).toContain('shadow-card')
-  expect(panelCard.className).toContain('lg:sticky')
+  expect(panelCard.className).toContain('lg:flex-1')
+  expect(panelCard.className).not.toContain('lg:sticky')
+})
+
+test('from lg up the two columns stretch to equal height and the dropzone grows to fill the form card', async () => {
+  // Given a wide screen
+  mockMatchMedia(true)
+  render(<ReceiptUpload />)
+  await screen.findByRole('radio', { name: SAMPLE_APARTMENTS[0].name })
+  const panelHeading = await screen.findByRole('heading', { level: 2, name: 'How it works' })
+
+  // Then the grid no longer aligns items to the top (it stretches both columns)
+  const dropzone = screen.getByText('Drag receipts here, or').closest('[role="button"]') as HTMLElement
+  const grid = (panelHeading.closest('.lg\\:col-span-5') as HTMLElement).parentElement as HTMLElement
+  expect(grid.className).toContain('lg:grid-cols-12')
+  expect(grid.className).not.toContain('lg:items-start')
+  // And the panel's column is a flex column, so the panel card can fill it
+  expect(panelHeading.closest('.lg\\:col-span-5')).toHaveClass('flex', 'flex-col')
+  // And the form card, its Receipts section and the dropzone all grow (flex-1) from lg
+  const formCard = dropzone.closest('.lg\\:col-span-7')?.firstElementChild as HTMLElement
+  expect(formCard).toHaveClass('lg:flex-1')
+  expect(dropzone.parentElement).toHaveClass('lg:flex-1')
+  expect(dropzone).toHaveClass('lg:flex-1')
 })
 
 test('at a wide (lg) screen, the static help panel is shown and the collapsible tips are not', async () => {

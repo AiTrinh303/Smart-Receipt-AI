@@ -18,7 +18,7 @@ import ReceiptFileViewer from './ReceiptFileViewer'
 import { ExportCard, VAT_FOOTNOTE } from './ReceiptReport'
 import { exportOpenItems } from './reportOpenItems'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
-import type { ItemRow, ReceiptFacets, ReceiptSummary, YearlyReport } from './api/types'
+import type { ItemRow, ReceiptSummary, YearlyReport } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
 import { apartmentToneClasses } from './format/apartmentTone'
 
@@ -85,16 +85,6 @@ const SAMPLE_EXISTING_RECEIPT: ReceiptSummary = {
   apartment_id: 'oberaudorf-bergblick',
   apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
   status: 'needs_review',
-}
-
-const SAMPLE_SIDE_PANEL_FACETS: ReceiptFacets = {
-  apartments: [
-    { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick', count: 18 },
-    { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück', count: 24 },
-  ],
-  total: 42,
-  years: [2026, 2025],
-  has_undated: true,
 }
 
 function sampleLatest(id: string, overrides: Partial<ReceiptSummary>): ReceiptSummary {
@@ -477,7 +467,7 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Upload side panel (from lg up only -- loading / help, shown for 0 receipts or any load failure / overview for returning users)">
+      <Section title="Upload side panel (from lg up only, stretched to the form's height -- loading / help, shown for 0 receipts or any load failure / overview for returning users: tips at the top, Latest uploads, links)">
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="flex flex-col gap-2">
             <h3 className="text-sm font-semibold text-ink">Loading</h3>
@@ -488,8 +478,8 @@ function StyleGuide() {
             <HelpPanel />
           </div>
           <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-ink">Your receipts (missing values, unrecognized date)</h3>
-            <ReceiptsOverview facets={SAMPLE_SIDE_PANEL_FACETS} latest={SAMPLE_SIDE_PANEL_LATEST} />
+            <h3 className="text-sm font-semibold text-ink">Returning user (missing values, unrecognized date)</h3>
+            <ReceiptsOverview latest={SAMPLE_SIDE_PANEL_LATEST} />
           </div>
         </div>
       </Section>

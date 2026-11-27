@@ -160,7 +160,8 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   the same. `App.tsx`'s `mainSize` gives Upload the wider `xl` `Container`
   (previously `lg`, now matching Items/receipt-detail — only History
   stays at `lg`), and the page wraps its content in `grid gap-6
-  lg:grid-cols-12 lg:items-start` with the form `lg:col-span-7` and a
+  lg:grid-cols-12` (the default `items-stretch`: both columns as tall as
+  the taller one) with the form `lg:col-span-7` and a
   help-panel column `lg:col-span-5` — plain CSS, collapsing to one
   stacked column below `lg`. Whether that second column actually renders
   anything is decided in JS, not CSS: `isWideScreen =
@@ -178,30 +179,37 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   show/hide-one-of-two approach would leave that text in the DOM twice at
   once. `HelpPanel` uses the plain `Card` elevation (`shadow-card`, no
   override — it originally added `shadow-popover` on top, which read as
-  a floating popup rather than a panel beside the form) and, from `lg`
-  up, `lg:sticky lg:top-20 lg:self-start` (80px clears the shell's `h-16`
-  header with 16px to spare), so it stays in view while the (usually
-  taller) form scrolls.
+  a floating popup rather than a panel beside the form). **Equal-height
+  columns from `lg` up:** the panel's column is a flex column and every
+  panel variant's card is `lg:flex-1` (`PANEL_CLASSES`), so it fills the
+  stretched column with its content at the top — no longer sticky. On
+  the left, the form `Card`, its "Receipts" section and the full
+  dropzone are `lg:flex-1` (the dropzone also `justify-center`), so the
+  dropzone takes up any spare height and both cards end on the same
+  line; with a long batch queue the form grows and the panel stretches
+  with it. The compact "Add more files" bar never grows. Below `lg`:
+  unchanged (one stacked column).
   **Side panel for returning users (`UploadSidePanel.tsx`):** on mount it
-  fetches `getReceiptFacets()` (unscoped) and `listReceipts({limit: 5})`
-  once, in parallel, showing `UploadSidePanelSkeleton` (a `Card` with a
-  `role="status" aria-busy="true"` region, "Loading your receipts..."
-  `sr-only`, same outer `PANEL_CLASSES` as every other variant so nothing
-  jumps). `facets.total === 0` → `HelpPanel` (the help above, expanded);
-  any failure of either request → the same `HelpPanel`, silently (no
-  `Alert`); otherwise `ReceiptsOverview` (exported, presentational): an
-  `<h2>` "Your receipts", "N receipts saved" ("1 receipt saved"), one
-  link per facet apartment "`<short>`: `<count>`" (full name in `title`)
-  to `?view=history&apartment=<id>`, an `<h3>` "Latest uploads" with one
-  link per receipt to `?receipt=<id>` (store via `ClampedText` 1 line or
-  `MissingValue`; `DateCell` from `ReceiptItems.tsx` for the date and its
-  "Date not recognized" marker; `formatMoney(total, currency)` or
-  `MissingValue`; apartment short name or `MissingValue`), links "See
-  all in History" (`?view=history`) and "Open the yearly report"
-  (`?view=report`), and a closed `<details>` "How it works and tips"
-  holding `HowItWorksContent` (the same steps/tips `HelpPanel` shows —
-  `TIPS_ITEMS`/`HOW_IT_WORKS_STEPS` now live in this file, and
-  `ReceiptUpload.tsx`'s `TipsDetails` imports `TIPS_ITEMS` from it). Every
+  makes **one** request, `listReceipts({limit: 5, sort: 'uploaded_desc'})`
+  (no facets request any more), showing `UploadSidePanelSkeleton` (a
+  `Card` with a `role="status" aria-busy="true"` region, "Loading your
+  receipts..." `sr-only`, same outer `PANEL_CLASSES` as every other
+  variant so nothing jumps). The response's `total === 0` → `HelpPanel`
+  (the help above, expanded); a failed request → the same `HelpPanel`,
+  silently (no `Alert`); otherwise `ReceiptsOverview` (exported,
+  presentational, props `{latest}`), top to bottom: a closed
+  `<details>` "How it works and tips" holding `HowItWorksContent` (the
+  same steps/tips `HelpPanel` shows — `TIPS_ITEMS`/`HOW_IT_WORKS_STEPS`
+  live in this file, and `ReceiptUpload.tsx`'s `TipsDetails` imports
+  `TIPS_ITEMS` from it); the panel's heading, an `<h2>` "Latest uploads",
+  with one link per receipt to `?receipt=<id>` (store via `ClampedText`
+  1 line or `MissingValue`; `DateCell` from `ReceiptItems.tsx` for the
+  date and its "Date not recognized" marker; `formatMoney(total,
+  currency)` or `MissingValue`; the apartment as an `ApartmentPill` or
+  `MissingValue`); then the links "See all in History"
+  (`?view=history`) and "Open the yearly report" (`?view=report`). The
+  former "Your receipts" heading, "N receipts saved" and the
+  per-apartment count links are gone. Every
   link is a real `href` whose plain click goes through `navigateTo`. A
   `refreshKey` prop refetches once whenever it changes, keeping the
   current content on screen (no skeleton) until the answer arrives — a
