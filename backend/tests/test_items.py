@@ -385,6 +385,73 @@ def test_blank_q_is_ignored(temp_repository):
     assert item_names(response) == ["Milk"]
 
 
+@pytest.mark.parametrize("q", ["gluck", "glueck", "GLÜCK"])
+def test_q_without_umlaut_finds_waldglueck(temp_repository, q):
+    # Given an item with an umlaut and one without
+    seed(temp_repository, items=[item(name="Waldglück Honig"), item(name="Bread")])
+
+    # When searching with or without the umlaut, in any case
+    response = client.get("/items", params={"q": q})
+
+    # Then the umlaut item is found
+    assert response.status_code == 200
+    assert item_names(response) == ["Waldglück Honig"]
+
+
+@pytest.mark.parametrize(
+    "q, expected",
+    [("musli", "Müsli"), ("muesli", "Müsli"), ("strasse", "Straße"), ("cafe", "Café")],
+)
+def test_q_is_accent_and_eszett_insensitive(temp_repository, q, expected):
+    # Given items spelled with umlauts, ß and accents
+    seed(temp_repository, items=[item(name="Müsli"), item(name="Straße"), item(name="Café"), item(name="Tee")])
+
+    # When searching with the plain spelling
+    response = client.get("/items", params={"q": q})
+
+    # Then exactly the matching item is found
+    assert response.status_code == 200
+    assert item_names(response) == [expected]
+
+
+def test_q_folding_also_applies_to_the_store_name(temp_repository):
+    # Given an item with no name at a store with an umlaut
+    seed(temp_repository, store_name="Bäckerei Müller", items=[item(name=None, line_total=2.5)])
+
+    # When searching for the store without umlauts
+    response = client.get("/items", params={"q": "baeckerei muller"})
+
+    # Then the row is found through its store name
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+
+
+def test_limit_offset_and_total_are_correct_with_an_accent_insensitive_q(temp_repository):
+    # Given five Müsli rows (spelled two ways) among non-matching ones
+    seed(
+        temp_repository,
+        items=[
+            item(name="Müsli 1"),
+            item(name="Bread"),
+            item(name="Muesli 2"),
+            item(name="Müsli 3"),
+            item(name="Milk"),
+            item(name="MÜSLI 4"),
+            item(name="Müsli 5"),
+        ],
+    )
+
+    # When paging through a folded search
+    response = client.get("/items", params={"q": "musli", "limit": 2, "offset": 2})
+
+    # Then total counts every match, and the page is the right slice of them
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 5
+    assert body["count"] == 2
+    assert item_names(response) == ["Müsli 3", "MÜSLI 4"]
+
+
 # --- limit/offset/total ------------------------------------------------
 
 

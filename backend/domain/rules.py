@@ -480,19 +480,45 @@ def archive_filename(
     return f"{name}{_ARCHIVE_EXTENSION}"
 
 
+_GERMAN_DIGRAPHS = (("ae", "a"), ("oe", "o"), ("ue", "u"))
+
+
+def fold_for_search(text: str) -> str:
+    """Folds `text` for accent-insensitive substring search, so a query
+    typed without umlauts or accents still finds the stored spelling (and
+    the other way round): "gluck", "glueck" and "GLÜCK" all fold to the
+    same thing as "Waldglück"'s "gluck".
+
+    Steps, in order: `str.casefold()` (not `.lower()`, so non-ASCII casing
+    matches); "ß" -> "ss" (casefold already does this, kept explicit);
+    NFKD decomposition with every combining mark dropped ("é" -> "e",
+    "ü" -> "u"); then the German transliterations "ae" -> "a", "oe" -> "o",
+    "ue" -> "u", so "Muesli" and "Müsli" meet at "musli". Both the query
+    and every searched field go through this same function, so the
+    digraph step can't make a match disappear -- "blue" and "Blueberry"
+    both fold to "blu..." alike."""
+    folded = text.casefold().replace("ß", "ss")
+    folded = "".join(
+        char for char in unicodedata.normalize("NFKD", folded) if not unicodedata.combining(char)
+    )
+    for digraph, replacement in _GERMAN_DIGRAPHS:
+        folded = folded.replace(digraph, replacement)
+    return folded
+
+
 def matches_query(row: LineItemRow, q: str) -> bool:
-    """True if every whitespace-separated word in `q` appears,
-    case-insensitively (via `str.casefold()`, not `.lower()`, so non-ASCII
-    casing still matches correctly), in the item name or the store name --
-    a row with a null item name can still match through the store name
-    alone. `q` is expected already trimmed; a blank `q` matches every row,
-    though callers should simply skip calling this at all for a blank
-    query rather than relying on that."""
+    """True if every whitespace-separated word in `q` appears as a
+    substring of the item name or the store name, compared after
+    `fold_for_search` on both sides -- so case, accents, "ß"/"ss" and
+    "ü"/"ue" never decide a match. A row with a null item name can still
+    match through the store name alone. `q` is expected already trimmed;
+    a blank `q` matches every row, though callers should simply skip
+    calling this at all for a blank query rather than relying on that."""
     words = q.split()
     if not words:
         return True
-    haystack = " ".join(part for part in (row.name, row.store_name) if part).casefold()
-    return all(word.casefold() in haystack for word in words)
+    haystack = fold_for_search(" ".join(part for part in (row.name, row.store_name) if part))
+    return all(fold_for_search(word) in haystack for word in words)
 
 
 DEFAULT_ITEM_SORT = "date_desc"

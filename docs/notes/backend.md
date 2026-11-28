@@ -118,8 +118,12 @@ Per-feature detail for `backend/`, moved verbatim from CLAUDE.md's former "Proje
     call `get_receipt()` uses (never duplicated, never computes or converts
     money, nulls stay null); `matches_query(row, q)` — pure — splits `q`
     (assumed already trimmed) on whitespace and requires every word to
-    appear, via `str.casefold()` (not `.lower()`), in the row's item name
-    or store name; a null item name can still match through the store
+    appear as a substring of the row's item name or store name, with both
+    sides passed through `fold_for_search(text)` — pure: `casefold()`,
+    `ß`→`ss`, NFKD with combining marks dropped, then `ae`→`a`, `oe`→`o`,
+    `ue`→`u` — so "gluck"/"glueck"/"GLÜCK" find "Waldglück", "muesli"
+    finds "Müsli", "strasse" finds "Straße", "cafe" finds "Café"
+    (search-only: stored data is never changed); a null item name can still match through the store
     name; an empty `q` matches every row, though `api/routes.py` simply
     skips calling this at all for a blank query); `sort_line_items(rows,
     sort)` — pure, no I/O — `DEFAULT_ITEM_SORT = "date_desc"`,
