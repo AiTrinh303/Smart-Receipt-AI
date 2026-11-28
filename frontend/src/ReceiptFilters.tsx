@@ -88,6 +88,7 @@ function ReceiptFilters({
       id={yearSelectId}
       label="Year"
       value={yearValue ?? ''}
+      active={yearValue !== null}
       onChange={onYearChange}
       options={[
         { value: '', label: 'All years' },
@@ -101,6 +102,7 @@ function ReceiptFilters({
       id={statusSelectId}
       label="Status"
       value={statusValue ?? ''}
+      active={statusValue !== null}
       onChange={onStatusChange}
       options={[{ value: '', label: 'All' }, ...STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))]}
     />

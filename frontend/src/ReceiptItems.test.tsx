@@ -337,18 +337,135 @@ describe('ReceiptItems', () => {
     }
   })
 
-  test('with several pages and no filter there is no empty bar: the table follows the filter row directly, as on History', async () => {
+  test('one line between the filter row and the table: "N items" (also with several pages), no Clear filters without a filter -- as on History', async () => {
+    // Given 60 items (three pages) and no filter or search
     fetchSpy.mockImplementation(
       routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 60 })) }),
     )
     render(<ReceiptItems />)
     await screen.findByText('Showing 1–20 of 60')
 
-    // Then after the filter grid comes only the (empty) scroll anchor, then the table
+    // Then right after the filter grid comes the count line, then the (empty) scroll anchor, then the table
     const row = selectControl('Year').closest('.grid') as HTMLElement
-    const anchor = row.nextElementSibling as HTMLElement
+    const line = row.nextElementSibling as HTMLElement
+    expect(line).toContainElement(screen.getByText('60 items'))
+    expect(screen.getByText('60 items')).toHaveAttribute('role', 'status')
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+    const anchor = line.nextElementSibling as HTMLElement
     expect(anchor.childElementCount).toBe(0)
     expect((anchor.nextElementSibling as HTMLElement).querySelector('table')).not.toBeNull()
+  })
+
+  test('the magnifier paints above the input: z-20, above the input\'s own (focus) stacking', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
+    )
+    render(<ReceiptItems />)
+    const input = await screen.findByLabelText('Search items or stores')
+
+    // Then the icon (positioned, before the positioned opaque input in DOM order) carries its own z-index;
+    // without it the input's bg-surface paints over it in a real browser (jsdom can't see that)
+    const icon = (input.parentElement as HTMLElement).querySelector('svg[aria-hidden="true"]') as SVGElement
+    expect(icon).toHaveClass('absolute', 'z-20', 'pointer-events-none')
+    expect(input).toHaveClass('relative', 'bg-surface', 'focus-visible:z-10')
+  })
+
+  test('with a search the count line reads: 12 items for "milch", with Clear filters; without one: 268 items', async () => {
+    // Given a search that matches 12 items
+    window.history.replaceState({}, '', '/?view=items&q=milch')
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 12 })) }),
+    )
+    const { unmount } = render(<ReceiptItems />)
+
+    // Then the count line names the search, and Clear filters is offered
+    expect(await screen.findByText('12 items for "milch"')).toHaveAttribute('role', 'status')
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
+    unmount()
+
+    // Given no search and 268 items
+    window.history.replaceState({}, '', '/?view=items')
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 268 })) }),
+    )
+    render(<ReceiptItems />)
+
+    // Then just the total, and no Clear filters
+    expect(await screen.findByText('268 items')).toHaveAttribute('role', 'status')
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+  })
+
+  test('the table sits inside one Card with its header row, like the History list', async () => {
+    mockMatchMedia(false)
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptItems />)
+    const table = await screen.findByRole('table')
+
+    // Then one Card (rounded-card, shadow) holds the table, header row included
+    const card = table.closest('.rounded-card') as HTMLElement
+    expect(card).toHaveClass('shadow-card', 'overflow-hidden')
+    expect(card).toContainElement(screen.getByRole('columnheader', { name: 'Date' }))
+    // And the header row uses History's header style (small muted text, a subtle divider)
+    expect(screen.getByRole('columnheader', { name: 'Date' }).closest('tr')).toHaveClass(
+      'text-xs',
+      'text-ink-muted',
+      'border-border-subtle',
+    )
+  })
+
+  test('below sm the item rows sit inside one Card as a divided list, not separate bordered cards', async () => {
+    mockMatchMedia(true)
+    fetchSpy.mockImplementation(
+      routeFetch({
+        items: () =>
+          Promise.resolve(
+            jsonResponse(200, { items: [makeRow(), makeRow({ line_index: 1, name: 'Bread' })], count: 2, total: 2 }),
+          ),
+      }),
+    )
+    render(<ReceiptItems />)
+    await screen.findByText('Bread')
+
+    // Then both rows share one list inside one Card
+    const rows = screen.getAllByRole('listitem')
+    const list = rows[0].parentElement as HTMLElement
+    expect(rows[1].parentElement).toBe(list)
+    expect(list).toHaveClass('divide-y')
+    expect(list.closest('.rounded-card')).toHaveClass('shadow-card')
+    expect(rows[0].className).not.toMatch(/\bborder\b/)
+  })
+
+  test('active filters: Year and Status get the brand border/fill when set; Sort by never does', async () => {
+    // Given Year, Status and a non-default sort in the URL
+    window.history.replaceState({}, '', '/?view=items&year=2026&status=approved&sort=amount_desc')
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptItems />)
+    await screen.findByRole('combobox', { name: 'Year' })
+
+    // Then Year and Status show as active, with their value as text (not colour alone)
+    for (const [label, text] of [['Year', '2026'], ['Status', 'Approved']]) {
+      expect(selectControl(label)).toHaveClass('border-brand', 'bg-brand-soft')
+      expect(selectControl(label)).toHaveTextContent(text)
+    }
+    // And Sort by stays the plain control
+    expect(selectControl('Sort by')).toHaveClass('border-border', 'bg-surface')
+    expect(selectControl('Sort by')).not.toHaveClass('bg-brand-soft')
+  })
+
+  test('inactive filters keep the plain border and surface', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptItems />)
+    await screen.findByRole('combobox', { name: 'Year' })
+    for (const label of ['Year', 'Status', 'Sort by']) {
+      expect(selectControl(label)).toHaveClass('border-border', 'bg-surface')
+      expect(selectControl(label)).not.toHaveClass('border-brand')
+    }
   })
 
   test('each filter sends its param and they combine', async () => {
@@ -908,7 +1025,7 @@ describe('ReceiptItems', () => {
     })
   })
 
-  test('the summary bar shows active filters and search, and Clear filters resets them', async () => {
+  test('the count line shows the total with the search, and Clear filters resets the filters and search', async () => {
     window.history.replaceState(
       {},
       '',
@@ -922,9 +1039,11 @@ describe('ReceiptItems', () => {
 
     render(<ItemsHarness />)
 
+    // Then the count line names the search (the selects themselves show the year and status)
     await waitFor(() => {
-      expect(screen.getByText(`${WALDGLUECK.name} · 2026 · Approved · "milch"`)).toBeInTheDocument()
+      expect(screen.getByText('1 item for "milch"')).toHaveAttribute('role', 'status')
     })
+    expect(screen.queryByText(`${WALDGLUECK.name} · 2026 · Approved · "milch"`)).not.toBeInTheDocument()
     const clearButtons = screen.getAllByRole('button', { name: 'Clear filters' })
     expect(clearButtons.length).toBeGreaterThan(0)
 

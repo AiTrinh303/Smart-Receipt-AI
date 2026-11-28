@@ -6,14 +6,10 @@ import { listItems } from './api/listItems'
 import type { ApartmentFacet, ItemRow, ItemSort } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
 import { formatDisplayDate } from './format/formatDisplayDate'
-import ReceiptFilters, {
-  NONE_FILTER_VALUE,
-  STATUS_OPTIONS,
-  effectiveStatus,
-  effectiveYear,
-} from './ReceiptFilters'
+import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
 import { ApartmentPill } from './components/ui/ApartmentTone'
 import Button from './components/ui/Button'
+import Card from './components/ui/Card'
 import ClampedText from './components/ui/ClampedText'
 import MissingValue from './components/ui/MissingValue'
 import PageHeader from './components/ui/PageHeader'
@@ -242,125 +238,204 @@ function rowDividerClass(items: ItemRow[], index: number): string {
     : 'border-t border-border-subtle'
 }
 
-/** The Items table (from `sm` up). Each row is one whole-row link (see
- * `ItemRowLink`); `relative` on the `<tr>` anchors the link's stretched
- * `::after`. Exported so `?view=styleguide` renders the real thing. */
-export function ItemsTable({ items, showApartment, hrefFor, onOpen }: ItemListProps) {
+export const ITEMS_SEARCH_PLACEHOLDER = 'e.g. Kaffee, Rossmann'
+
+/** The Items search input group: the visible label, a magnifier inside on
+ * the left, a "×" (aria-label "Clear search") inside on the right while
+ * there is text, and the secondary "Search" submit button attached to the
+ * input's right edge (shared border). Every control is h-11 (44px), the
+ * same as the Selects in the row below. Tab order: input -> × -> Search.
+ *
+ * Stacking: the input is `relative` (so its focus ring can be lifted with
+ * `focus-visible:z-10` over the attached button), and positioned elements
+ * with no z-index paint in DOM order -- the icon must carry its own
+ * `z-20`, or the input's opaque `bg-surface` paints over it.
+ * Exported so `?view=styleguide` renders the real thing; the caller wraps
+ * it in the <form>. */
+export function ItemsSearchField({
+  id,
+  value,
+  onChange,
+  onClear,
+}: {
+  id: string
+  value: string
+  onChange: (value: string) => void
+  onClear: () => void
+}) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full table-fixed text-left text-sm">
-        <caption className="sr-only">Purchased items</caption>
-        <thead>
-          <tr className="border-b border-border text-ink-muted">
-            <th scope="col" className="w-24 whitespace-nowrap py-2 pl-2 pr-2 font-medium">
-              Date
-            </th>
-            <th scope="col" className="py-2 pr-2 font-medium">
-              Item
-            </th>
-            <th scope="col" className="w-16 py-2 pr-2 text-right font-medium">
-              Qty
-            </th>
-            <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
-              Unit price
-            </th>
-            <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
-              Line total
-            </th>
-            <th scope="col" className="w-44 py-2 pl-4 pr-2 font-medium">
-              Store
-            </th>
-            {showApartment && (
-              <th scope="col" className="w-32 py-2 pr-2 font-medium">
-                Apartment
-              </th>
-            )}
-            <th scope="col" className="w-32 py-2 pr-2 text-right font-medium">
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody className="border-b border-border-subtle">
-          {items.map((row, index) => (
-            <tr
-              key={`${row.receipt_id}-${row.line_index}`}
-              className={`relative hover:bg-slate-50 ${rowDividerClass(items, index)}`}
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-sm font-medium text-ink">
+        Search items or stores
+      </label>
+      <div className="flex">
+        <div className="relative flex-1">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            className="pointer-events-none absolute left-3 top-1/2 z-20 h-4 w-4 -translate-y-1/2 text-ink-muted"
+            fill="none"
+          >
+            <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M12.5 12.5L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <input
+            id={id}
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            maxLength={MAX_SEARCH_LENGTH}
+            placeholder={ITEMS_SEARCH_PLACEHOLDER}
+            className="relative h-11 w-full rounded-l-md border border-border bg-surface pl-9 pr-11 text-sm text-ink placeholder:text-ink-muted focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          />
+          {value && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={onClear}
+              className="absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-md text-lg leading-none text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand"
             >
-              <td className="whitespace-nowrap py-2 pl-2 pr-2 align-top">
-                <DateCell value={row.purchase_date} />
-              </td>
-              <td className="py-2 pr-2 align-top">
-                <ItemRowLink row={row} href={hrefFor(row.receipt_id)} onOpen={onOpen} />
-              </td>
-              <td className="whitespace-nowrap py-2 pr-2 text-right align-top tabular-nums">
-                <QuantityCell value={row.quantity} />
-              </td>
-              <td className="whitespace-nowrap py-2 pr-2 text-right align-top tabular-nums">
-                <MoneyCell value={row.unit_price} currency={row.currency} />
-              </td>
-              <td className="whitespace-nowrap py-2 pr-2 text-right align-top tabular-nums">
-                <MoneyCell value={row.line_total} currency={row.currency} />
-              </td>
-              <td className="py-2 pl-4 pr-2 align-top">
-                <StoreCell value={row.store_name} />
-              </td>
-              {showApartment && (
-                <td className="py-2 pr-2 align-top">
-                  <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />
-                </td>
-              )}
-              <td className="py-2 pr-2 text-right align-top">
-                <StatusCell status={row.status} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              <span aria-hidden="true">×</span>
+            </button>
+          )}
+        </div>
+        <button
+          type="submit"
+          className="-ml-px h-11 rounded-r-md border border-border bg-white px-4 text-sm font-medium text-ink transition-colors duration-150 hover:bg-slate-50 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none"
+        >
+          Search
+        </button>
+      </div>
     </div>
   )
 }
 
-/** The Items list below `sm`: one card per row, each card one whole-card
- * link (same `ItemRowLink`). */
+/** The Items table (from `sm` up), inside one Card with its column header
+ * row -- the same card, header style and side padding as History's list.
+ * Each row is one whole-row link (see
+ * `ItemRowLink`); `relative` on the `<tr>` anchors the link's stretched
+ * `::after`. Exported so `?view=styleguide` renders the real thing. */
+export function ItemsTable({ items, showApartment, hrefFor, onOpen }: ItemListProps) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="-m-5 overflow-x-auto sm:-m-6">
+        <table className="w-full table-fixed text-left text-sm">
+          <caption className="sr-only">Purchased items</caption>
+          <thead>
+            <tr className="border-b border-border-subtle text-xs text-ink-muted">
+              <th scope="col" className="w-28 whitespace-nowrap py-2 pl-4 pr-2 font-medium">
+                Date
+              </th>
+              <th scope="col" className="py-2 pr-2 font-medium">
+                Item
+              </th>
+              <th scope="col" className="w-16 py-2 pr-2 text-right font-medium">
+                Qty
+              </th>
+              <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
+                Unit price
+              </th>
+              <th scope="col" className="w-24 whitespace-nowrap py-2 pr-2 text-right font-medium">
+                Line total
+              </th>
+              <th scope="col" className="w-44 py-2 pl-4 pr-2 font-medium">
+                Store
+              </th>
+              {showApartment && (
+                <th scope="col" className="w-32 py-2 pr-2 font-medium">
+                  Apartment
+                </th>
+              )}
+              <th scope="col" className="w-32 py-2 pl-2 pr-4 text-right font-medium">
+                Status
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((row, index) => (
+              <tr
+                key={`${row.receipt_id}-${row.line_index}`}
+                className={`relative hover:bg-slate-50 ${rowDividerClass(items, index)}`}
+              >
+                <td className="whitespace-nowrap py-2.5 pl-4 pr-2 align-top">
+                  <DateCell value={row.purchase_date} />
+                </td>
+                <td className="py-2.5 pr-2 align-top">
+                  <ItemRowLink row={row} href={hrefFor(row.receipt_id)} onOpen={onOpen} />
+                </td>
+                <td className="whitespace-nowrap py-2.5 pr-2 text-right align-top tabular-nums">
+                  <QuantityCell value={row.quantity} />
+                </td>
+                <td className="whitespace-nowrap py-2.5 pr-2 text-right align-top tabular-nums">
+                  <MoneyCell value={row.unit_price} currency={row.currency} />
+                </td>
+                <td className="whitespace-nowrap py-2.5 pr-2 text-right align-top tabular-nums">
+                  <MoneyCell value={row.line_total} currency={row.currency} />
+                </td>
+                <td className="py-2.5 pl-4 pr-2 align-top">
+                  <StoreCell value={row.store_name} />
+                </td>
+                {showApartment && (
+                  <td className="py-2.5 pr-2 align-top">
+                    <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />
+                  </td>
+                )}
+                <td className="py-2.5 pl-2 pr-4 text-right align-top">
+                  <StatusCell status={row.status} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
+/** The Items list below `sm`: one row per item inside one Card, divided
+ * like History's small rows; each row is one whole-row link (same
+ * `ItemRowLink`). */
 export function ItemCardList({ items, showApartment, hrefFor, onOpen }: ItemListProps) {
   return (
-    <ul className="flex flex-col gap-2">
-      {items.map((row) => (
-        <li
-          key={`${row.receipt_id}-${row.line_index}`}
-          className="relative rounded-md border border-border p-3 hover:bg-slate-50"
-        >
-          <ItemRowLink row={row} href={hrefFor(row.receipt_id)} onOpen={onOpen} />
-          <p className="mt-1 flex items-center gap-1 text-sm text-ink-muted">
-            <DateCell value={row.purchase_date} /> <span aria-hidden="true">·</span>{' '}
-            {row.store_name ? row.store_name : <MissingValue />}
-          </p>
-          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            <span>
-              Qty <span className="tabular-nums">
-                <QuantityCell value={row.quantity} />
+    <Card className="overflow-hidden">
+      <ul className="-m-5 divide-y divide-border-subtle sm:-m-6">
+        {items.map((row) => (
+          <li
+            key={`${row.receipt_id}-${row.line_index}`}
+            className="relative px-4 py-3 hover:bg-slate-50"
+          >
+            <ItemRowLink row={row} href={hrefFor(row.receipt_id)} onOpen={onOpen} />
+            <p className="mt-1 flex items-center gap-1 text-sm text-ink-muted">
+              <DateCell value={row.purchase_date} /> <span aria-hidden="true">·</span>{' '}
+              {row.store_name ? row.store_name : <MissingValue />}
+            </p>
+            <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span>
+                Qty <span className="tabular-nums">
+                  <QuantityCell value={row.quantity} />
+                </span>
               </span>
-            </span>
-            <span className="whitespace-nowrap">
-              Unit price{' '}
-              <span className="tabular-nums">
-                <MoneyCell value={row.unit_price} currency={row.currency} />
+              <span className="whitespace-nowrap">
+                Unit price{' '}
+                <span className="tabular-nums">
+                  <MoneyCell value={row.unit_price} currency={row.currency} />
+                </span>
               </span>
-            </span>
-            <span className="whitespace-nowrap">
-              Line total{' '}
-              <span className="tabular-nums">
-                <MoneyCell value={row.line_total} currency={row.currency} />
+              <span className="whitespace-nowrap">
+                Line total{' '}
+                <span className="tabular-nums">
+                  <MoneyCell value={row.line_total} currency={row.currency} />
+                </span>
               </span>
-            </span>
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {showApartment && <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />}
-            <StatusCell status={row.status} />
-          </div>
-        </li>
-      ))}
-    </ul>
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {showApartment && <ApartmentCell name={row.apartment_name} apartmentId={row.apartment_id} />}
+              <StatusCell status={row.status} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
   )
 }
 
@@ -588,16 +663,9 @@ function ReceiptItems() {
   const firstShown = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
   const lastShown = Math.min(currentPage * PAGE_SIZE, total)
 
-  // "Waldglück · 2026 · Approved · "milch"" -- only the parts that are
-  // actually active, in a fixed order, for the summary bar above the table.
-  const selectedApartment = apartments?.find((a) => a.id === effectiveApartmentId) ?? null
-  const filterSummaryParts = [
-    selectedApartment ? apartmentShortName(selectedApartment.name) : null,
-    year ? (year === NONE_FILTER_VALUE ? 'No valid date' : year) : null,
-    status ? (STATUS_OPTIONS.find((option) => option.value === status)?.label ?? null) : null,
-    q ? `"${q}"` : null,
-  ].filter((part): part is string => part !== null)
-  const filterSummaryText = filterSummaryParts.length > 0 ? filterSummaryParts.join(' · ') : null
+  // The count line above the table: "268 items", or with a search
+  // '12 items for "milch"' -- `total` is every matching row, not the page.
+  const countText = `${total} ${total === 1 ? 'item' : 'items'}${q ? ` for "${q}"` : ''}`
 
   if (isLoading) {
     return (
@@ -633,54 +701,15 @@ function ReceiptItems() {
     )
   }
 
-  // Row 1: the search form, full width -- an input group: a magnifier
-  // inside on the left, a "×" (clear) inside on the right while there's
-  // text, and the secondary "Search" button attached to the input's right
-  // edge (shared border). Every control here is h-11 (44px), the same as
-  // the Select controls in row 2. Tab order: input -> × -> Search.
+  // Row 1: the search form, full width (see ItemsSearchField).
   const searchBox = (
-    <form onSubmit={handleSearchSubmit} className="flex flex-col gap-1">
-      <label htmlFor="items-search-input" className="text-sm font-medium text-ink">
-        Search items or stores
-      </label>
-      <div className="flex">
-        <div className="relative flex-1">
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 20 20"
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
-            fill="none"
-          >
-            <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M12.5 12.5L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          <input
-            id="items-search-input"
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            maxLength={MAX_SEARCH_LENGTH}
-            placeholder="e.g. Kaffee, Rossmann"
-            className="relative h-11 w-full rounded-l-md border border-border bg-surface pl-9 pr-11 text-sm text-ink placeholder:text-ink-muted focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          />
-          {searchInput && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={handleClearSearch}
-              className="absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-md text-lg leading-none text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand"
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          )}
-        </div>
-        <button
-          type="submit"
-          className="-ml-px h-11 rounded-r-md border border-border bg-white px-4 text-sm font-medium text-ink transition-colors duration-150 hover:bg-slate-50 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none"
-        >
-          Search
-        </button>
-      </div>
+    <form onSubmit={handleSearchSubmit}>
+      <ItemsSearchField
+        id="items-search-input"
+        value={searchInput}
+        onChange={setSearchInput}
+        onClear={handleClearSearch}
+      />
     </form>
   )
 
@@ -731,28 +760,19 @@ function ReceiptItems() {
         )
       ) : (
         <>
-          {/* The bar above the table: "N items" (one page only), the active
-              filters and "Clear filters" -- rendered only when it has
-              something to show, so an empty bar never adds a gap. */}
-          {(totalPages <= 1 || filterSummaryText || anyFilterActive) && (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              {totalPages <= 1 ? (
-                <p role="status" className="text-sm text-ink-muted">
-                  {total} {total === 1 ? 'item' : 'items'}
-                </p>
-              ) : (
-                <span />
-              )}
-              <div className="flex flex-wrap items-center gap-2">
-                {filterSummaryText && <p className="text-sm text-ink-muted">{filterSummaryText}</p>}
-                {anyFilterActive && (
-                  <Button variant="secondary" size="sm" onClick={handleClearFilters}>
-                    Clear filters
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
+          {/* One line above the table: the count (with the search, if
+              any) on the left, "Clear filters" on the right while any
+              filter or search is active -- the same line as History's. */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p role="status" className="text-sm text-ink-muted">
+              {countText}
+            </p>
+            {anyFilterActive && (
+              <Button variant="secondary" size="sm" onClick={handleClearFilters}>
+                Clear filters
+              </Button>
+            )}
+          </div>
 
           <div ref={listTopRef} />
           {isSmallScreen ? (

@@ -14,7 +14,7 @@ import BatchQueue from './batch/BatchQueue'
 import { MAX_BATCH } from './batch/batchReducer'
 import type { BatchItem, RejectedFile } from './batch/batchReducer'
 import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_ERROR_MESSAGE } from './errorMessages'
-import { ItemCardList, ItemsTable } from './ReceiptItems'
+import { ItemCardList, ItemsSearchField, ItemsTable } from './ReceiptItems'
 import { HistoryHeaderRow, HistoryRow, HistoryRowList } from './ReceiptHistory'
 import ReceiptFileViewer from './ReceiptFileViewer'
 import { ExportCard, VAT_FOOTNOTE } from './ReceiptReport'
@@ -1003,7 +1003,7 @@ function StyleGuide() {
         <p className="text-sm text-ink-muted">One page only (no pagination): &quot;9 receipts&quot;</p>
       </Section>
 
-      <Section title="Select (ui/Select -- closed / open with the selected option checked and another highlighted / long value; native select below sm)">
+      <Section title="Select (ui/Select -- closed / open with the selected option checked and another highlighted / long value / inactive vs. active filter; native select below sm)">
         <p className="text-sm text-ink-muted">
           A select-only combobox: the button shows the value; the listbox popover (rounded-card, border-subtle,
           shadow-popover, scrolls past max height) marks the selected option with a check and medium weight,
@@ -1037,6 +1037,46 @@ function StyleGuide() {
             options={[
               { value: 'long', label: 'A very long option label that has to be truncated in the button' },
               { value: 'short', label: 'Short' },
+            ]}
+          />
+        </div>
+        <p className="text-sm text-ink-muted">
+          Filter state: while a filter's value is not its default, the closed control gets border-brand and
+          bg-brand-soft -- the value text (&quot;2026&quot;, &quot;Approved&quot;) says which filter is set, so
+          not colour alone. Sort by is an ordering, never shown as active.
+        </p>
+        <div className="grid gap-6 md:grid-cols-3">
+          <Select
+            id="styleguide-select-inactive"
+            label="Year (inactive: All years)"
+            value=""
+            onChange={() => {}}
+            options={[
+              { value: '', label: 'All years' },
+              { value: '2026', label: '2026' },
+            ]}
+          />
+          <Select
+            id="styleguide-select-active"
+            label="Year (active: 2026)"
+            value="2026"
+            active
+            onChange={() => {}}
+            options={[
+              { value: '', label: 'All years' },
+              { value: '2026', label: '2026' },
+            ]}
+          />
+          <Select
+            id="styleguide-select-active-status"
+            label="Status (active: Approved)"
+            value="approved"
+            active
+            onChange={() => {}}
+            options={[
+              { value: '', label: 'All' },
+              { value: 'needs_review', label: 'Needs review' },
+              { value: 'approved', label: 'Approved' },
             ]}
           />
         </div>
@@ -1087,6 +1127,7 @@ function StyleGuide() {
               id="styleguide-history-year"
               label="Year"
               value={sgYear}
+              active={sgYear !== ''}
               onChange={setSgYear}
               options={[
                 { value: '', label: 'All years' },
@@ -1099,6 +1140,7 @@ function StyleGuide() {
               id="styleguide-history-status"
               label="Status"
               value={sgStatus}
+              active={sgStatus !== ''}
               onChange={setSgStatus}
               options={[
                 { value: '', label: 'All' },
@@ -1403,55 +1445,23 @@ function StyleGuide() {
           <p className="text-sm text-ink-muted">
             Items' search and filter rows: row 1 the search input group (magnifier, placeholder, "×" while there
             is text, the secondary "Search" button attached), row 2 Year, Status and Sort by as three equal
-            columns -- every control 44px tall. Type to see the "×".
+            columns -- every control 44px tall. The magnifier sits above the input (z-20). Type to see the "×";
+            Year is shown as an active filter.
           </p>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="styleguide-items-search" className="text-sm font-medium text-ink">
-              Search items or stores
-            </label>
-            <div className="flex">
-              <div className="relative flex-1">
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 20 20"
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
-                  fill="none"
-                >
-                  <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M12.5 12.5L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <input
-                  id="styleguide-items-search"
-                  type="text"
-                  value={sgItemsSearch}
-                  onChange={(e) => setSgItemsSearch(e.target.value)}
-                  placeholder="e.g. Kaffee, Rossmann"
-                  className="relative h-11 w-full rounded-l-md border border-border bg-surface pl-9 pr-11 text-sm text-ink placeholder:text-ink-muted focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-                />
-                {sgItemsSearch && (
-                  <button
-                    type="button"
-                    aria-label="Clear search"
-                    onClick={() => setSgItemsSearch('')}
-                    className="absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-md text-lg leading-none text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand"
-                  >
-                    <span aria-hidden="true">×</span>
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                className="-ml-px h-11 rounded-r-md border border-border bg-white px-4 text-sm font-medium text-ink hover:bg-slate-50 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-              >
-                Search
-              </button>
-            </div>
-          </div>
+          <form onSubmit={(e) => e.preventDefault()}>
+            <ItemsSearchField
+              id="styleguide-items-search"
+              value={sgItemsSearch}
+              onChange={setSgItemsSearch}
+              onClear={() => setSgItemsSearch('')}
+            />
+          </form>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Select
               id="styleguide-items-year"
               label="Year"
-              value=""
+              value="2026"
+              active
               onChange={() => {}}
               options={[
                 { value: '', label: 'All years' },
@@ -1485,62 +1495,75 @@ function StyleGuide() {
           </div>
         </div>
 
-        <Card className="flex flex-col gap-4">
-          {itemsViewState === 'loading' && (
-            <div role="status" aria-busy="true" className="flex flex-col gap-3">
-              <span className="sr-only">Loading items...</span>
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          )}
+        {itemsViewState !== 'table' && itemsViewState !== 'cards' && (
+          <Card className="flex flex-col gap-4">
+            {itemsViewState === 'loading' && (
+              <div role="status" aria-busy="true" className="flex flex-col gap-3">
+                <span className="sr-only">Loading items...</span>
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            )}
 
-          {itemsViewState === 'error' && (
-            <>
-              <Alert variant="error">Could not load items. Please try again.</Alert>
-              <Button variant="secondary" size="sm" className="self-start">
-                Retry
-              </Button>
-            </>
-          )}
+            {itemsViewState === 'error' && (
+              <>
+                <Alert variant="error">Could not load items. Please try again.</Alert>
+                <Button variant="secondary" size="sm" className="self-start">
+                  Retry
+                </Button>
+              </>
+            )}
 
-          {itemsViewState === 'empty-unfiltered' && (
-            <p className="text-sm text-ink-muted">No items yet. Upload a receipt.</p>
-          )}
+            {itemsViewState === 'empty-unfiltered' && (
+              <p className="text-sm text-ink-muted">No items yet. Upload a receipt.</p>
+            )}
 
-          {itemsViewState === 'empty-filtered' && (
-            <>
-              <p className="text-sm text-ink-muted">No items match these filters.</p>
-              <Button variant="secondary" size="sm" className="self-start">
+            {itemsViewState === 'empty-filtered' && (
+              <>
+                <p className="text-sm text-ink-muted">No items match these filters.</p>
+                <Button variant="secondary" size="sm" className="self-start">
+                  Clear filters
+                </Button>
+              </>
+            )}
+
+          </Card>
+        )}
+
+        {(itemsViewState === 'table' || itemsViewState === 'cards') && (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p role="status" className="text-sm text-ink-muted">
+                12 items for &quot;milch&quot;
+              </p>
+              <Button variant="secondary" size="sm">
                 Clear filters
               </Button>
-            </>
-          )}
-
-          {itemsViewState === 'table' && (
-            <div>
+            </div>
+            {itemsViewState === 'table' ? (
               <ItemsTable
                 items={SAMPLE_ITEM_ROWS}
                 showApartment
                 hrefFor={(id) => `/?receipt=${id}`}
                 onOpen={() => {}}
               />
-              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            ) : (
+              <ItemCardList
+                items={SAMPLE_ITEM_ROWS}
+                showApartment
+                hrefFor={(id) => `/?receipt=${id}`}
+                onOpen={() => {}}
+              />
+            )}
+            {itemsViewState === 'table' && (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-ink-muted">Showing 21–40 of 268</p>
                 <Pagination currentPage={2} totalPages={14} hrefForPage={(n) => `#items-page-${n}`} onPageChange={() => {}} />
               </div>
-            </div>
-          )}
-
-          {itemsViewState === 'cards' && (
-            <ItemCardList
-              items={SAMPLE_ITEM_ROWS}
-              showApartment
-              hrefFor={(id) => `/?receipt=${id}`}
-              onOpen={() => {}}
-            />
-          )}
-        </Card>
+            )}
+          </div>
+        )}
       </Section>
 
       <Section title="Yearly report (ReceiptReport -- solid apartment cards in their tone and a solid slate-700 Both apartments card, all with white text; Show by month, export card with its short note, VAT note)">

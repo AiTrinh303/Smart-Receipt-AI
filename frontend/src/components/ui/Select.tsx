@@ -20,11 +20,27 @@ interface SelectProps {
   /** Only for `?view=styleguide`'s static "open" sample; the app never
    * passes it. */
   defaultOpen?: boolean
+  /** True while this filter's value is not its default ("All years",
+   * "All"): the closed control then gets `border-brand bg-brand-soft`.
+   * Not colour alone -- the value text itself says which filter is set.
+   * Never passed for "Sort by" (an ordering, not a filter). */
+  active?: boolean
 }
 
-const CONTROL_CLASSES =
-  'h-11 min-h-[44px] w-full rounded-md border border-border bg-surface px-3 text-sm text-ink ' +
+const CONTROL_BASE_CLASSES =
+  'h-11 min-h-[44px] w-full rounded-md border px-3 text-sm text-ink ' +
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
+/** Complete static strings (never built from a variable): the default
+ * look, and the active-filter look (brand border 5.62:1 on brand-soft, 6.01:1 on
+ * the page; ink text 15.97:1 and the chevron 6.78:1 on brand-soft). */
+const CONTROL_SURFACE_CLASSES = {
+  inactive: 'border-border bg-surface',
+  active: 'border-brand bg-brand-soft',
+} as const
+
+function controlClasses(active: boolean): string {
+  return `${CONTROL_BASE_CLASSES} ${active ? CONTROL_SURFACE_CLASSES.active : CONTROL_SURFACE_CLASSES.inactive}`
+}
 
 /** How long typed characters keep adding up to one type-ahead search. */
 const TYPEAHEAD_RESET_MS = 500
@@ -64,7 +80,7 @@ function CheckIcon() {
  *
  * Below `sm` the native <select> is rendered instead (same options, same
  * onChange) -- only one of the two is ever mounted. */
-function Select({ id, label, value, options, onChange, defaultOpen = false }: SelectProps) {
+function Select({ id, label, value, options, onChange, defaultOpen = false, active = false }: SelectProps) {
   const isSmallScreen = useMediaQuery('(max-width: 639px)')
   const labelId = `${id}-label`
 
@@ -74,7 +90,7 @@ function Select({ id, label, value, options, onChange, defaultOpen = false }: Se
         {label}
       </label>
       {isSmallScreen ? (
-        <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={CONTROL_CLASSES}>
+        <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={controlClasses(active)}>
           {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -89,6 +105,7 @@ function Select({ id, label, value, options, onChange, defaultOpen = false }: Se
           options={options}
           onChange={onChange}
           defaultOpen={defaultOpen}
+          active={active}
         />
       )}
     </div>
@@ -102,6 +119,7 @@ function ComboboxSelect({
   options,
   onChange,
   defaultOpen,
+  active,
 }: {
   id: string
   labelId: string
@@ -109,6 +127,7 @@ function ComboboxSelect({
   options: SelectOption[]
   onChange: (value: string) => void
   defaultOpen: boolean
+  active: boolean
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const selectedIndex = Math.max(
@@ -253,7 +272,7 @@ function ComboboxSelect({
         data-value={value}
         onClick={() => (open ? close() : openAt(selectedIndex))}
         onKeyDown={handleKeyDown}
-        className={`${CONTROL_CLASSES} flex items-center justify-between gap-2 text-left`}
+        className={`${controlClasses(active)} flex items-center justify-between gap-2 text-left`}
       >
         <span className="truncate">{selected?.label ?? ''}</span>
         <ChevronIcon open={open} />

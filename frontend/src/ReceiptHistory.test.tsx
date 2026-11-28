@@ -1218,14 +1218,15 @@ describe('ReceiptHistory', () => {
     const user = userEvent.setup()
     render(<HistoryHarness />)
 
-    // Then page 1 asks for 12 from offset 0, shows the range, and the old summary/"Show more" are gone
+    // Then page 1 asks for 12 from offset 0, shows the range, "Show more" is gone, and the
+    // count line above the list shows the full total
     const summary = await screen.findByText('Showing 1–12 of 30')
     expect(summary).toHaveAttribute('role', 'status')
     const params = new URL(calls[0], 'http://x').searchParams
     expect(params.get('limit')).toBe('12')
     expect(params.get('offset')).toBe('0')
     expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
-    expect(screen.queryByText('30 receipts')).not.toBeInTheDocument()
+    expect(screen.getByText('30 receipts')).toHaveAttribute('role', 'status')
     const nav = screen.getByRole('navigation', { name: 'Pagination' })
     expect(within(nav).getByText('1')).toHaveAttribute('aria-current', 'page')
 
@@ -1239,17 +1240,40 @@ describe('ReceiptHistory', () => {
     await waitFor(() => expect(screen.getByText('Showing 13–24 of 30')).toHaveFocus())
   })
 
-  test('with several pages and no filter there is no empty bar between the filter row and the list', async () => {
+  test('one line between the filter row and the list: "N receipts" (also with several pages), no Clear filters without a filter', async () => {
+    // Given 30 receipts (three pages) and no filter
     fetchSpy.mockImplementation(
       routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 30 })) }),
     )
     render(<ReceiptHistory />)
     await screen.findByText('Showing 1–12 of 30')
 
+    // Then right after the filter grid comes the count line, then the (empty) scroll anchor, then the list
     const row = selectControl('Year').closest('.grid') as HTMLElement
-    const anchor = row.nextElementSibling as HTMLElement
+    const line = row.nextElementSibling as HTMLElement
+    expect(line).toContainElement(screen.getByText('30 receipts'))
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+    const anchor = line.nextElementSibling as HTMLElement
     expect(anchor.childElementCount).toBe(0)
     expect(anchor.nextElementSibling).toContainElement(screen.getByRole('link', { name: /store a/i }))
+  })
+
+  test('active filters: Year and Status get the brand border/fill when set; Sort by never does', async () => {
+    // Given only a Year filter and a non-default sort
+    window.history.replaceState({}, '', '/?view=history&year=2026&sort=amount_desc')
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptHistory />)
+    await screen.findByRole('combobox', { name: 'Year' })
+
+    // Then Year is active, Status (All) and Sort by are not
+    expect(selectControl('Year')).toHaveClass('border-brand', 'bg-brand-soft')
+    expect(selectControl('Year')).toHaveTextContent('2026')
+    expect(selectControl('Status')).toHaveClass('border-border', 'bg-surface')
+    expect(selectControl('Sort by')).toHaveClass('border-border', 'bg-surface')
+    // And Clear filters sits on the count line
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
   })
 
   test('a page from the URL is fetched directly; invalid -> page 1; too large -> the last page, with the URL corrected', async () => {

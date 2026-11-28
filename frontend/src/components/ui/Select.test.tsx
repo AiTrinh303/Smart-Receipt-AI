@@ -200,3 +200,36 @@ test('below sm the native <select> is rendered instead (only one of the two), wi
   expect(onChange).toHaveBeenCalledTimes(1)
   expect(onChange).toHaveBeenCalledWith('amount_asc')
 })
+
+test('active: the closed control gets border-brand and bg-brand-soft; inactive keeps border-border and bg-surface', () => {
+  // Given an active and an inactive Select
+  render(
+    <>
+      <Select id="a" label="Active" value="amount_desc" options={OPTIONS} onChange={() => {}} active />
+      <Select id="b" label="Inactive" value="date_desc" options={OPTIONS} onChange={() => {}} />
+    </>,
+  )
+
+  // Then only the active one has the brand border/fill, each as complete static classes
+  const active = screen.getByRole('combobox', { name: 'Active' })
+  const inactive = screen.getByRole('combobox', { name: 'Inactive' })
+  expect(active).toHaveClass('border-brand', 'bg-brand-soft')
+  expect(active).not.toHaveClass('border-border', 'bg-surface')
+  expect(inactive).toHaveClass('border-border', 'bg-surface')
+  expect(inactive).not.toHaveClass('border-brand', 'bg-brand-soft')
+  // And the value text is still shown (not colour alone)
+  expect(active).toHaveTextContent('Total (high to low)')
+})
+
+test('active also applies to the native <select> below sm', () => {
+  window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+    matches: query === '(max-width: 639px)',
+    media: query,
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+  })) as unknown as typeof window.matchMedia
+  render(<Select id="a" label="Active" value="amount_desc" options={OPTIONS} onChange={() => {}} active />)
+  const control = screen.getByRole('combobox', { name: 'Active' })
+  expect(control.tagName).toBe('SELECT')
+  expect(control).toHaveClass('border-brand', 'bg-brand-soft')
+})

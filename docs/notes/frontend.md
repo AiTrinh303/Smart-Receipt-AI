@@ -381,16 +381,21 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   **Filter row and `ui/Select`:** Year, Status and "Sort by" are all the
   shared `Select` (a select-only combobox; the native `<select>` below
   `sm` — see `docs/design.md`, "Components"), in both History and Items.
-  On both pages `ReceiptFilters` lays out Year, Status and its
+  Year and Status pass `active` while their value isn't the default
+  ("All years"/"All"), which gives the closed control `border-brand
+  bg-brand-soft` (the value text says which filter is set, so not colour
+  alone); Sort by never passes it. On both pages `ReceiptFilters` lays out Year, Status and its
   `extraFilter` (Sort by) as three equal columns from `md` up (`grid
   grid-cols-1 gap-3 md:grid-cols-3`, right edge aligned with the list
   card), stacked below `md`; its optional `topRow` slot (Items: the
   search form) sits full-width between the tabs and that row. (BR's
   `equalColumns` prop and the old flex layout are gone — both pages use
-  the grid.) The bar above the list ("N receipts"/"N items" for a single
-  page, the active-filter summary, "Clear filters") is rendered only when
-  it has something to show, so with several pages and no filter the list
-  follows the filter row with the same spacing on both pages. Tests pick and read options through `src/test/select.ts`
+  the grid.) Between the filter row and the list, both pages show one
+  line: on the left the `role="status"` count of every match (History
+  "89 receipts"; Items "268 items", or with a search '12 items for
+  "milch"'), on the right "Clear filters" while a filter or search is
+  active. It is always shown (also with several pages), so the spacing
+  is the same on both pages. Tests pick and read options through `src/test/select.ts`
   (`selectControl` = the `combobox` role by name — both forms have it,
   and the custom listbox shares the label, so `getByLabelText` would
   find two elements; `chooseOption`, `selectValue`, `optionLabels`).
@@ -471,9 +476,9 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   or invalid value as page 1, and a page past the end (known once the
   first response's `total` arrives) is refetched as the last page, with
   the address bar corrected via `replaceState`. Each page fetches
-  `limit: 12, offset: (page - 1) * 12`. With one page, the line above the
-  list keeps today's `role="status"` "N receipts"; with more, that count
-  moves under the list: "Showing a–b of N" (`role="status"`,
+  `limit: 12, offset: (page - 1) * 12`. The line above the list always
+  shows the `role="status"` "N receipts" (the full total); with more than
+  one page, under the list: "Showing a–b of N" (`role="status"`,
   `tabIndex={-1}`) on the left and `Pagination` on the right. A page
   change is a full remount like every filter; a pagination click sets a
   one-shot `sessionStorage` flag (`receiptHistoryFocusPageSummary`) so
@@ -513,8 +518,12 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   `GET /receipts/facets`'s counts are receipt counts, not item counts,
   and would misrepresent how many rows that tab actually has. State:
   `?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>&sort=<v>`. A search
-  form (row 1, full width): the visible label "Search items or stores",
-  an input group — a decorative magnifier inside on the left, placeholder
+  form (row 1, full width; the exported `ItemsSearchField`, which the
+  style guide renders too): the visible label "Search items or stores",
+  an input group — a decorative magnifier inside on the left (`z-20`: the
+  input is `relative` with an opaque `bg-surface`, and positioned
+  elements without a z-index paint in DOM order, so without it the input
+  hid the icon in a real browser), placeholder
   "e.g. Kaffee, Rossmann", `maxLength={100}`, a "×" button inside on the
   right (`aria-label="Clear search"`, shown only once `searchInput` is
   non-empty; same behaviour as the former "Clear" button: empties the
@@ -552,9 +561,13 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   same pattern as `ReceiptResult.tsx` — never both mounted. Both are
   exported presentational components, `ItemsTable` and `ItemCardList`
   (`{items, showApartment, hrefFor, onOpen}`), so `?view=styleguide`
-  renders the real thing. The table is
+  renders the real thing. Each brings its own `Card` (`overflow-hidden`,
+  content pulled to the edges with `-m-5 sm:-m-6`), the same as
+  History's `HistoryRowList`: the table's header row uses History's
+  header style (`text-xs text-ink-muted`, `border-b border-border-subtle`)
+  and the first/last columns `pl-4`/`pr-4`. The table is
   `table-fixed` with an explicit width on every column except Item
-  (`w-24` Date, `w-16` Qty, `w-24` Unit price, `w-24` Line total, `w-44`
+  (`w-28` Date, `w-16` Qty, `w-24` Unit price, `w-24` Line total, `w-44`
   Store with `pl-4` so it never runs into the right-aligned Line total,
   `w-32` Apartment, `w-32` Status — Item absorbs whatever's left),
   so Date and the numeric columns stay `whitespace-nowrap` and never
@@ -565,8 +578,8 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   row above it (in whatever sort order), it gets the slightly stronger
   `border-t border-border/40` instead, so one receipt's lines read as a
   group — decorative only (`rowDividerClass`). The first row has no top
-  divider (the header's own border is there); `tbody` closes with a
-  `border-border-subtle` bottom line. `hover:bg-slate-50`, no zebra
+  divider (the header's own border is there); the Card's edge closes the
+  table (no `tbody` bottom line). `hover:bg-slate-50`, no zebra
   striping. Columns: Date, Item, Qty, Unit
   price, Line total, Store, Apartment (only in the "All apartments" tab,
   via `showApartmentColumn = effectiveApartmentId === null`), and
@@ -600,21 +613,20 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   one-currency-per-receipt table — rows here can carry different
   currencies, so each amount must say which one (e.g. "€4.99" or
   "USD 4.99").
-  **Cards** (below `sm`) are whole-card links the same way (`relative`
-  `li`, `hover:bg-slate-50`, the same `ItemRowLink`) and show the name (2 lines), a muted
+  **Cards** (below `sm`) are rows of one divided list inside one Card
+  (`divide-y divide-border-subtle`, `px-4 py-3` each, no border of their
+  own), whole-row links the same way (`relative` `li`,
+  `hover:bg-slate-50`, the same `ItemRowLink`) and show the name (2 lines), a muted
   "`DateCell` · store" line, an amount line that keeps "Qty"/"Unit
   price"/"Line total" as plain text next to each value, and a badge row
   (`ApartmentCell` in "All apartments", `StatusCell` always).
-  **A summary bar above the table**: on the left, `role="status"` "N
-  items" — only when everything fits on one page (the former "`count` of
-  `total` items" was removed: with pages, the "Showing a–b of N" line
-  under the table says the same); on the right, `filterSummaryText`
-  joins whichever of apartment short name / year (or "No valid date") /
-  the `STATUS_OPTIONS` label / `"query"` are actually active with ` · `
-  (e.g. `Waldglück · 2026 · Approved · "milch"`, omitting any inactive
-  part), next to the existing "Clear filters" button (shown under the
-  same `anyFilterActive` rule as before — the apartment tab alone never
-  shows it).
+  **The count line above the table**: on the left, `role="status"` "N
+  items" — the full `total`, also with several pages — or, with a
+  search, 'N items for "query"'; on the right the existing "Clear
+  filters" button (shown under the same `anyFilterActive` rule — the
+  apartment tab alone never shows it). The former filter summary
+  (`Waldglück · 2026 · Approved · "milch"`) is gone: the active Selects
+  and the tab already show it.
   **Pages (`PAGE_SIZE = 20`, `ui/Pagination.tsx`, `src/pageParam.ts`):**
   the same pattern as History — `&page=N` in the URL (omitted for page
   1); `parsePage()` (shared with History) maps a missing/invalid value to

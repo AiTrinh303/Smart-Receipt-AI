@@ -2603,6 +2603,43 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   empty bar with several pages.
 - **`?view=styleguide`:** the Items filter sample shows both rows.
 
+## Items: filter polish and table card
+
+- **Magnifier bug:** the icon's classes were all in the built CSS and
+  resolved correctly (`absolute`, `left-3`, `top-1/2`,
+  `-translate-y-1/2`, `h-4 w-4`, `text-ink-muted`). The cause was
+  stacking: the icon (`absolute`) comes before the input (`relative`,
+  for its `focus-visible:z-10`) in the DOM, neither had a z-index, so
+  the browser painted the input — with its opaque white `bg-surface` —
+  over the icon. Fix: `z-20` on the icon (above the input's focus
+  `z-10`; `pointer-events-none` keeps clicks going to the input). The
+  group is now the exported `ItemsSearchField`, so the style guide shows
+  the real one instead of a copy.
+- **Table card:** `ItemsTable` and `ItemCardList` each sit in one
+  `Card` with the header row, the same as History's `HistoryRowList`
+  (header `text-xs text-ink-muted border-border-subtle`, `pl-4`/`pr-4`
+  at the edges; the small-screen rows are one divided list, not separate
+  bordered cards).
+- **One line above the list on both pages:** `role="status"` "268
+  items" / '12 items for "milch"' (Items) or "89 receipts" (History) on
+  the left — always the full total, also with several pages — and
+  "Clear filters" on the right while a filter or search is active. The
+  Items filter summary ("Waldglück · 2026 · …") was removed.
+- **Active filter state** in `ui/Select` (`active`): `border-brand
+  bg-brand-soft` while Year/Status aren't at their default; Sort by
+  never.
+- **Tests changed:** History "more than 12 receipts" (the count above
+  the list is now shown with several pages: `queryByText('30 receipts')
+  …not.toBeInTheDocument()` became a `role="status"` check); History and
+  Items "no empty bar with several pages" (replaced by "one line between
+  the filter row and the list": the line is always there now); Items
+  "the summary bar shows active filters…" (the filter summary was
+  removed: now checks '1 item for "milch"' and Clear filters).
+- **`?view=styleguide`:** inactive/active Select samples, the History
+  sample's Year/Status active when set, the real Items search group
+  with text, Year active in the Items sample, the count line plus the
+  table/cards in their own Card.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
@@ -2772,6 +2809,12 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   below `sm`; visible focus ring. Below `sm` (`useMediaQuery`) the
   native `<select>` with the same options and `onChange` is rendered
   instead — never both. `defaultOpen` exists only for the style guide.
+  `active` (a filter set away from its default) gives the closed control
+  — the button, or the native select — `border-brand bg-brand-soft`
+  instead of `border-border bg-surface` (complete static strings; brand
+  border 5.62:1 on brand-soft and 6.01:1 on the page, ink text 15.97:1
+  and the chevron 6.78:1 on brand-soft). Not colour alone: the value
+  text says which filter is set. Year and Status use it; Sort by never.
 - **`Pagination`** (`Pagination.tsx`, `pageItems.ts`) — page navigation
   for a long list, inside `<nav aria-label="Pagination">`: "‹ Previous",
   the first and last page, the current page and its two neighbours ("…"
