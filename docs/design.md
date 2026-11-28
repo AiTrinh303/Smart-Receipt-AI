@@ -2548,6 +2548,30 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   selected and highlighted options, long value); the History and Items
   filter samples use the real `Select`.
 
+## Items: page numbers instead of "Show more"
+
+- Same pattern as History, reusing `ui/Pagination` unchanged: 20 items
+  per page, `&page=N` (not for page 1; invalid -> 1, too large -> last
+  with the URL corrected), "Showing a–b of N" + pagination under the
+  table/cards, focus to that summary after a page click, tab/Year/
+  Status/search/sort/"Clear filters" reset to page 1, `from=` keeps the
+  page. `parsePage` now lives in `src/pageParam.ts`, shared with History.
+- **The "N of M items" line above the table is removed** -- with pages
+  it only repeated "Showing a–b of N". With a single page the line shows
+  "N items" (it read "N of N items" before).
+- "Show more" and its error/Retry state are gone from Items. The
+  receipt-grouping divider restarts on each page.
+- **Tests (`ReceiptItems.test.tsx`):** removed 'a failed "Show more"
+  keeps the rows shown and shows an error with Retry' (state gone).
+  Rewritten: '"Show more" sends offset and appends, and disappears at
+  the end' -> "Showing 1–20 of N", the pagination, a page click (URL,
+  offset 20, focus); 'changing a filter resets to the first page' ->
+  from page 3, a filter, a search and a sort each drop the page. New:
+  one page shows "1 item" and no pagination; URL page / invalid / too
+  large; `from` with the page and the per-page grouping divider.
+- **`?view=styleguide`:** the Items table sample shows "Showing 21–40 of
+  268" with the pagination instead of "Show more".
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

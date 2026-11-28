@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptItems from './ReceiptItems'
 import ReceiptUpload from './ReceiptUpload'
@@ -332,99 +332,143 @@ describe('ReceiptItems', () => {
     expect(capturedUrl).not.toContain('status=')
   })
 
-  test('changing a filter resets to the first page', async () => {
+  test('changing a filter, the search or the sort on page 3 goes back to page 1', async () => {
+    // Given page 3 of 60 items
+    window.history.replaceState({}, '', '/?view=items&page=3')
     const calls: string[] = []
     fetchSpy.mockImplementation(
       routeFetch({
         items: (urlString) => {
           calls.push(urlString)
-          return Promise.resolve(
-            jsonResponse(200, { items: [makeRow()], count: 1, total: 5 }),
-          )
+          return Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 60 }))
         },
       }),
     )
     const user = userEvent.setup()
     render(<ItemsHarness />)
-    await waitFor(() => {
-      expect(screen.getByText('Show more')).toBeInTheDocument()
-    })
+    await screen.findByText('Showing 41–60 of 60')
 
+    // When the Status filter changes: back to page 1
     await chooseOption(user, 'Status', 'Approved')
-
     await waitFor(() => expect(window.location.search).toContain('status=approved'))
-    const lastCall = calls[calls.length - 1]
-    expect(lastCall).toContain('offset=0')
+    expect(window.location.search).not.toContain('page=')
+    await waitFor(() => expect(calls[calls.length - 1]).toContain('offset=0'))
+
+    // When on page 2 a search is submitted: back to page 1 again
+    await user.click(await screen.findByRole('link', { name: 'Page 2' }))
+    await waitFor(() => expect(window.location.search).toContain('page=2'))
+    await user.type(await screen.findByLabelText('Search items or stores'), 'milch')
+    await user.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => expect(window.location.search).toContain('q=milch'))
+    expect(window.location.search).not.toContain('page=')
+
+    // And a sort change from page 2 also starts again at page 1
+    await user.click(await screen.findByRole('link', { name: 'Page 2' }))
+    await waitFor(() => expect(window.location.search).toContain('page=2'))
+    await chooseOption(user, 'Sort by', 'Store (A-Z)')
+    await waitFor(() => expect(window.location.search).toContain('sort=store'))
+    expect(window.location.search).not.toContain('page=')
   })
 
-  test('"Show more" sends offset and appends, and disappears at the end', async () => {
-    const firstPage = Array.from({ length: 2 }, (_, i) =>
-      makeRow({ receipt_id: `page1-${i}`, name: `Item ${i}` }),
-    )
-    const secondPage = [makeRow({ receipt_id: 'page2-0', name: 'Item 2' })]
-    let callCount = 0
+  test('with more than 20 items: "Showing 1–20 of N" and the pagination under the table; a page link loads that page and focuses the summary', async () => {
+    // Given 268 items
     const calls: string[] = []
     fetchSpy.mockImplementation(
       routeFetch({
         items: (urlString) => {
           calls.push(urlString)
-          callCount += 1
-          if (callCount === 1) {
-            return Promise.resolve(jsonResponse(200, { items: firstPage, count: 2, total: 3 }))
-          }
-          return Promise.resolve(jsonResponse(200, { items: secondPage, count: 1, total: 3 }))
+          return Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 268 }))
         },
       }),
     )
     const user = userEvent.setup()
-    render(<ReceiptItems />)
+    render(<ItemsHarness />)
 
-    await waitFor(() => {
-      expect(screen.getByText('2 of 3 items')).toBeInTheDocument()
-    })
-    expect(screen.getByText('Item 0')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Show more' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('3 of 3 items')).toBeInTheDocument()
-    })
-    // The first page's rows are still shown -- appended, not replaced
-    expect(screen.getByText('Item 0')).toBeInTheDocument()
-    expect(screen.getByText('Item 2')).toBeInTheDocument()
-    expect(calls[1]).toContain('offset=2')
-    // Nothing left to show -- the button is gone
+    // Then page 1 asks for 20 from offset 0, shows the range, and neither "Show more" nor "N of M items" remain
+    const summary = await screen.findByText('Showing 1–20 of 268')
+    expect(summary).toHaveAttribute('role', 'status')
+    const first = new URL(calls[0], 'http://x').searchParams
+    expect(first.get('limit')).toBe('20')
+    expect(first.get('offset')).toBe('0')
     expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/of 268 items/)).not.toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: 'Pagination' })
+    expect(within(nav).getByText('1')).toHaveAttribute('aria-current', 'page')
+
+    // When page 2 is chosen
+    await user.click(within(nav).getByRole('link', { name: 'Page 2' }))
+
+    // Then the URL, the request offset and the range follow, and focus is on the summary
+    await waitFor(() => expect(window.location.search).toBe('?view=items&page=2'))
+    await screen.findByText('Showing 21–40 of 268')
+    expect(new URL(calls[calls.length - 1], 'http://x').searchParams.get('offset')).toBe('20')
+    await waitFor(() => expect(screen.getByText('Showing 21–40 of 268')).toHaveFocus())
   })
 
-  test('a failed "Show more" keeps the rows shown and shows an error with Retry', async () => {
-    const firstPage = [makeRow({ name: 'Item 0' })]
-    let callCount = 0
+  test('one page only: "N items" above the table and no pagination', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptItems />)
+    expect(await screen.findByText('1 item')).toHaveAttribute('role', 'status')
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument()
+  })
+
+  test('a page from the URL is fetched directly; invalid -> page 1; too large -> the last page, with the URL corrected', async () => {
+    const calls: string[] = []
     fetchSpy.mockImplementation(
       routeFetch({
-        items: () => {
-          callCount += 1
-          if (callCount === 1) {
-            return Promise.resolve(jsonResponse(200, { items: firstPage, count: 1, total: 3 }))
-          }
-          return Promise.resolve(jsonResponse(500, { detail: 'Internal error' }))
+        items: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 50 }))
         },
       }),
     )
-    const user = userEvent.setup()
+
+    window.history.replaceState({}, '', '/?view=items&page=3')
+    const first = render(<ReceiptItems />)
+    await screen.findByText('Showing 41–50 of 50')
+    expect(new URL(calls[calls.length - 1], 'http://x').searchParams.get('offset')).toBe('40')
+    first.unmount()
+
+    window.history.replaceState({}, '', '/?view=items&page=0')
+    const second = render(<ReceiptItems />)
+    await screen.findByText('Showing 1–20 of 50')
+    second.unmount()
+
+    window.history.replaceState({}, '', '/?view=items&page=7')
+    render(<ReceiptItems />)
+    await screen.findByText('Showing 41–50 of 50')
+    expect(window.location.search).toBe('?view=items&page=3')
+  })
+
+  test('on a later page the row links carry the page in `from`, and the first row of a page has no stronger divider', async () => {
+    // Given page 2 whose rows belong to two receipts
+    window.history.replaceState({}, '', '/?view=items&page=2')
+    const B = '22222222-2222-2222-2222-222222222222'
+    fetchSpy.mockImplementation(
+      routeFetch({
+        items: () =>
+          Promise.resolve(
+            jsonResponse(200, {
+              items: [makeRow({ name: 'A0' }), makeRow({ receipt_id: B, name: 'B0' })],
+              count: 2,
+              total: 30,
+            }),
+          ),
+      }),
+    )
     render(<ReceiptItems />)
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: 'Show more' }))
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Could not load items. Please try again.')
-    })
-    expect(screen.getByText('Item 0')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    // Then the link carries this page
+    const link = await screen.findByRole('link', { name: 'A0' })
+    expect(link).toHaveAttribute(
+      'href',
+      `/?receipt=11111111-1111-1111-1111-111111111111&from=${encodeURIComponent('?view=items&page=2')}`,
+    )
+    // And grouping restarts per page: no top divider on the page's first row, the stronger one at the receipt change
+    expect((link.closest('tr') as HTMLElement).className).not.toMatch(/border-t/)
+    expect(screen.getByRole('link', { name: 'B0' }).closest('tr')).toHaveClass('border-border/40')
   })
 
   test('clicking an item name navigates to ?receipt=<id> with the from mechanism, and the back link reads "Back to items" and restores tab, filters and search', async () => {

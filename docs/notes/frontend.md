@@ -597,34 +597,33 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   "`DateCell` · store" line, an amount line that keeps "Qty"/"Unit
   price"/"Line total" as plain text next to each value, and a badge row
   (`ApartmentCell` in "All apartments", `StatusCell` always).
-  **A summary bar above the table**: the existing "`count` of `total`
-  items" `role="status"` stays on the left; on the right, `filterSummaryText`
+  **A summary bar above the table**: on the left, `role="status"` "N
+  items" — only when everything fits on one page (the former "`count` of
+  `total` items" was removed: with pages, the "Showing a–b of N" line
+  under the table says the same); on the right, `filterSummaryText`
   joins whichever of apartment short name / year (or "No valid date") /
   the `STATUS_OPTIONS` label / `"query"` are actually active with ` · `
   (e.g. `Waldglück · 2026 · Approved · "milch"`, omitting any inactive
   part), next to the existing "Clear filters" button (shown under the
   same `anyFilterActive` rule as before — the apartment tab alone never
   shows it).
-  Pagination is "Show more", not infinite
-  scroll: `GET /items` is called with `limit`/`offset`, and the button
-  (shown below the table while
-  `count < total`, disabled/`loading` while a page is in flight) requests
-  `offset: count` and **appends** the response's rows via
-  `setItems((prev) => [...(prev ?? []), ...response.items])` — never
-  replacing what's already shown. A failed "Show more" leaves the
-  existing rows alone and shows its own `Alert variant="error"` + "Retry"
-  (`loadMoreError`, separate state from the main `error`). **Race
-  safety:** a single `requestIdRef`, shared by the main load effect and
-  `handleShowMore`, is incremented at the start of every fetch; each
-  `setState` call after an `await` first checks
-  `requestIdRef.current !== requestId` and bails if so, so a reply to a
-  request that's no longer the latest one issued can never overwrite
-  state a newer request already set — layered on top of the same
-  per-mount `cancelled`-closure pattern `ReceiptHistory` already uses
-  (a filter/search change is a full remount, whose cleanup already
-  discards a stale in-flight response), with the request id specifically
-  covering "Show more", the one fetch not driven by that per-mount
-  effect. Loading/error/empty states otherwise mirror `ReceiptHistory`'s
+  **Pages (`PAGE_SIZE = 20`, `ui/Pagination.tsx`, `src/pageParam.ts`):**
+  the same pattern as History — `&page=N` in the URL (omitted for page
+  1); `parsePage()` (shared with History) maps a missing/invalid value to
+  page 1, and a page past the end is refetched as the last page with the
+  URL corrected via `replaceState`. Each page fetches `limit: 20,
+  offset: (page - 1) * 20`. Under the table/cards: "Showing a–b of N"
+  (`role="status"`, `tabIndex={-1}`) and `Pagination` (its compact form
+  below `sm`), hidden when there is only one page. A pagination click
+  sets a one-shot `sessionStorage` flag (`receiptItemsFocusPageSummary`)
+  so the new page scrolls the table into view and focuses the summary.
+  Changing the tab, Year, Status, search or sort, and "Clear filters",
+  drop the page. Row links' `from=` includes the page, so "Back to items"
+  returns to it. The receipt-grouping divider restarts on every page (the
+  first row of a page has no top divider). "Show more", its append logic
+  and its error/Retry state are gone. **Race safety:** a `requestIdRef`
+  plus the per-mount `cancelled` closure guard the load (every page or
+  filter change is a full remount). Loading/error/empty states otherwise mirror `ReceiptHistory`'s
   shape exactly (`role="status" aria-busy="true"` + "Loading items...",
   `Alert variant="error"` + Retry, "No items yet. Upload a receipt." vs.
   "No items match these filters." + "Clear filters").

@@ -1376,7 +1376,7 @@ function StyleGuide() {
         </Card>
       </Section>
 
-      <Section title="Items view (ReceiptItems -- loading / table with nulls / cards / empty / error / Show more)">
+      <Section title="Items view (ReceiptItems -- loading / table with nulls and its pagination (20 per page) / cards / empty / error)">
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => setItemsViewState('loading')}>
             Show loading
@@ -1454,12 +1454,10 @@ function StyleGuide() {
                 hrefFor={(id) => `/?receipt=${id}`}
                 onOpen={() => {}}
               />
-              <p role="status" className="mt-3 text-sm text-ink-muted">
-                2 of 5 items
-              </p>
-              <Button variant="secondary" size="sm" className="mt-1 self-start">
-                Show more
-              </Button>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-ink-muted">Showing 21–40 of 268</p>
+                <Pagination currentPage={2} totalPages={14} hrefForPage={(n) => `#items-page-${n}`} onPageChange={() => {}} />
+              </div>
             </div>
           )}
 

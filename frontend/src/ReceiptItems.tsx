@@ -13,19 +13,21 @@ import ReceiptFilters, {
   effectiveYear,
 } from './ReceiptFilters'
 import { ApartmentPill } from './components/ui/ApartmentTone'
-import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import ClampedText from './components/ui/ClampedText'
 import MissingValue from './components/ui/MissingValue'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
+import Pagination from './components/ui/Pagination'
 import Select from './components/ui/Select'
 import StatusBadge from './components/ui/StatusBadge'
 import { formatMoney } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo, isPlainLeftClick } from './navigation'
+import { parsePage } from './pageParam'
 
-const PAGE_SIZE = 50
+/** Items per page (`&page=N` in the URL, omitted for page 1). */
+export const PAGE_SIZE = 20
 const MAX_SEARCH_LENGTH = 100
 const LOADING_ROW_COUNT = 4
 
@@ -35,6 +37,10 @@ export const UNRECOGNIZED_DATE_TITLE =
   'This date could not be read as a valid date. Open the receipt and fix it with Edit.'
 
 const FOCUS_TAB_INDEX_SESSION_KEY = 'receiptItemsFocusTabIndex'
+/** One-shot flag set by a pagination click, read once after the next mount
+ * (a page change is a full remount): scroll to the table and focus the
+ * summary. Never set by the browser's own Back/Forward. */
+const FOCUS_PAGE_SUMMARY_SESSION_KEY = 'receiptItemsFocusPageSummary'
 
 const ITEMS_DESCRIPTION = 'Search every purchased item across all your receipts.'
 
@@ -128,6 +134,7 @@ interface ItemsUrlParams {
   status: string | null
   q: string | null
   sort: string | null
+  page: string | null
 }
 
 function readUrlParams(): ItemsUrlParams {
@@ -138,6 +145,7 @@ function readUrlParams(): ItemsUrlParams {
     status: params.get('status'),
     q: params.get('q'),
     sort: params.get('sort'),
+    page: params.get('page'),
   }
 }
 
@@ -151,6 +159,9 @@ function buildItemsSearch(params: ItemsUrlParams): string {
   // The default sort is omitted from the URL, same spirit as every other
   // "unset" filter here.
   if (params.sort && params.sort !== DEFAULT_ITEM_SORT) usp.set('sort', params.sort)
+  // Page 1 is never written; any other valid page is.
+  const page = parsePage(params.page)
+  if (page > 1) usp.set('page', String(page))
   return `?${usp.toString()}`
 }
 
@@ -363,15 +374,15 @@ function ReceiptItems() {
   const [effectiveApartmentId, setEffectiveApartmentId] = useState<string | null>(null)
 
   const [items, setItems] = useState<ItemRow[] | null>(null)
-  const [count, setCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState(() => parsePage(urlParams.page))
   const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
 
   const requestIdRef = useRef(0)
+  const listTopRef = useRef<HTMLDivElement>(null)
+  const summaryRef = useRef<HTMLParagraphElement>(null)
   const isSmallScreen = useMediaQuery('(max-width: 639px)')
 
   const year = effectiveYear(urlParams.year)
@@ -383,13 +394,11 @@ function ReceiptItems() {
     let cancelled = false
     setIsLoading(true)
     setError(null)
-    setLoadMoreError(null)
 
     async function load() {
-      // A fresh requestId, shared with handleShowMore below: whichever
-      // request finishes last wins the id comparison, so a reply to an
-      // older request (e.g. one still in flight when the user filters
-      // again) can never overwrite a newer result.
+      // A fresh requestId: a reply to an older request (e.g. one still in
+      // flight when the user filters again) can never overwrite a newer
+      // result.
       const requestId = ++requestIdRef.current
 
       try {
@@ -421,18 +430,33 @@ function ReceiptItems() {
         setHasUndated(scopedHasUndated)
         setEffectiveApartmentId(apartmentId)
 
-        const response = await listItems({
+        const filters = {
           apartmentId: apartmentId ?? undefined,
           year: year ?? undefined,
           status: status ?? undefined,
           q: q ?? undefined,
           sort,
           limit: PAGE_SIZE,
-          offset: 0,
-        })
+        }
+        const requestedPage = parsePage(urlParams.page)
+        let page = requestedPage
+        let response = await listItems({ ...filters, offset: (page - 1) * PAGE_SIZE })
         if (cancelled || requestIdRef.current !== requestId) return
+
+        // A page past the end shows the last page instead, and the address
+        // bar is corrected in place (no remount).
+        const lastPage = Math.max(1, Math.ceil(response.total / PAGE_SIZE))
+        if (page > lastPage) {
+          page = lastPage
+          response = await listItems({ ...filters, offset: (page - 1) * PAGE_SIZE })
+          if (cancelled || requestIdRef.current !== requestId) return
+        }
+        if (page !== requestedPage || (urlParams.page !== null && String(page) !== urlParams.page)) {
+          window.history.replaceState(window.history.state, '', buildItemsSearch({ ...urlParams, page: String(page) }))
+        }
+
+        setCurrentPage(page)
         setItems(response.items)
-        setCount(response.count)
         setTotal(response.total)
       } catch (err) {
         if (cancelled || requestIdRef.current !== requestId) return
@@ -453,39 +477,30 @@ function ReceiptItems() {
 
   const retry = () => setReloadToken((n) => n + 1)
 
-  const handleShowMore = async () => {
-    const requestId = ++requestIdRef.current
-    setIsLoadingMore(true)
-    setLoadMoreError(null)
-
+  // After a pagination click (only then -- see FOCUS_PAGE_SUMMARY_SESSION_KEY),
+  // once the new page has loaded: bring the table into view and move focus
+  // to the "Showing a–b of N" summary.
+  useEffect(() => {
+    if (isLoading || items === null) return
+    let flagged = false
     try {
-      const response = await listItems({
-        apartmentId: effectiveApartmentId ?? undefined,
-        year: year ?? undefined,
-        status: status ?? undefined,
-        q: q ?? undefined,
-        sort,
-        limit: PAGE_SIZE,
-        offset: count,
-      })
-      if (requestIdRef.current !== requestId) return
-      setItems((prev) => [...(prev ?? []), ...response.items])
-      setCount((prev) => prev + response.count)
-      setTotal(response.total)
-    } catch (err) {
-      if (requestIdRef.current !== requestId) return
-      setLoadMoreError(err instanceof ApiError ? LIST_FAILED_MESSAGE : NETWORK_ERROR_MESSAGE)
-    } finally {
-      if (requestIdRef.current === requestId) setIsLoadingMore(false)
+      flagged = window.sessionStorage.getItem(FOCUS_PAGE_SUMMARY_SESSION_KEY) !== null
+      window.sessionStorage.removeItem(FOCUS_PAGE_SUMMARY_SESSION_KEY)
+    } catch {
+      flagged = false
     }
-  }
+    if (!flagged) return
+    listTopRef.current?.scrollIntoView?.({ block: 'start' })
+    summaryRef.current?.focus({ preventScroll: true })
+  }, [isLoading, items])
 
-  // Only carry a `from` param when a tab or filter is actually active --
-  // the plain, unfiltered items view needs no round trip, matching
-  // ReceiptHistory's own receiptHref. The same href is the link's real
+  // Only carry a `from` param when a tab, filter or a page past the first
+  // is active -- the plain, unfiltered first page needs no round trip,
+  // matching ReceiptHistory's own receiptHref. With the page in `from`,
+  // "Back to items" returns to the same page. The same href is the link's real
   // `href` (so a new tab keeps the way back) and what a plain click opens.
   const receiptHref = (receiptId: string): string => {
-    const hasActiveFilterOrTab = effectiveApartmentId !== null || anyFilterActive
+    const hasActiveFilterOrTab = effectiveApartmentId !== null || anyFilterActive || currentPage > 1
     const from = hasActiveFilterOrTab ? `&from=${encodeURIComponent(window.location.search)}` : ''
     return `/?receipt=${receiptId}${from}`
   }
@@ -503,35 +518,53 @@ function ReceiptItems() {
   }
 
   const goToTab = (apartmentId: string | null) => {
-    navigateTo(buildItemsSearch({ ...urlParams, apartment: apartmentId }))
+    navigateTo(buildItemsSearch({ ...urlParams, apartment: apartmentId, page: null }))
   }
 
   const handleYearChange = (value: string) => {
-    navigateTo(buildItemsSearch({ ...urlParams, year: value || null }))
+    navigateTo(buildItemsSearch({ ...urlParams, year: value || null, page: null }))
   }
 
   const handleStatusChange = (value: string) => {
-    navigateTo(buildItemsSearch({ ...urlParams, status: value || null }))
+    navigateTo(buildItemsSearch({ ...urlParams, status: value || null, page: null }))
   }
 
   const handleSortChange = (value: string) => {
-    navigateTo(buildItemsSearch({ ...urlParams, sort: value || null }))
+    navigateTo(buildItemsSearch({ ...urlParams, sort: value || null, page: null }))
   }
 
   const handleSearchSubmit = (e?: FormEvent) => {
     e?.preventDefault()
     const trimmed = searchInput.trim()
-    navigateTo(buildItemsSearch({ ...urlParams, q: trimmed || null }))
+    navigateTo(buildItemsSearch({ ...urlParams, q: trimmed || null, page: null }))
   }
 
   const handleClearSearch = () => {
     setSearchInput('')
-    navigateTo(buildItemsSearch({ ...urlParams, q: null }))
+    navigateTo(buildItemsSearch({ ...urlParams, q: null, page: null }))
+  }
+
+  const pageHref = (page: number): string => `/${buildItemsSearch({ ...urlParams, page: String(page) })}`
+
+  const goToPage = (page: number) => {
+    try {
+      window.sessionStorage.setItem(FOCUS_PAGE_SUMMARY_SESSION_KEY, '1')
+    } catch {
+      // Storage unavailable: the page still changes, just without the focus move.
+    }
+    navigateTo(buildItemsSearch({ ...urlParams, page: String(page) }))
   }
 
   const handleClearFilters = () => {
     navigateTo(
-      buildItemsSearch({ apartment: urlParams.apartment, year: null, status: null, q: null, sort: urlParams.sort }),
+      buildItemsSearch({
+        apartment: urlParams.apartment,
+        year: null,
+        status: null,
+        q: null,
+        sort: urlParams.sort,
+        page: null,
+      }),
     )
   }
 
@@ -550,6 +583,10 @@ function ReceiptItems() {
   const anyFilterActive = year !== null || status !== null || q !== null
   const isUnfiltered = effectiveApartmentId === null && !anyFilterActive
   const showApartmentColumn = effectiveApartmentId === null
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const firstShown = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
+  const lastShown = Math.min(currentPage * PAGE_SIZE, total)
 
   // "Waldglück · 2026 · Approved · "milch"" -- only the parts that are
   // actually active, in a fixed order, for the summary bar above the table.
@@ -683,9 +720,16 @@ function ReceiptItems() {
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p role="status" className="text-sm text-ink-muted">
-              {count} of {total} items
-            </p>
+            {/* One page: "N items" here. More: the count moves to the
+                "Showing a–b of N" line under the table (the old "N of M
+                items" would only repeat it). */}
+            {totalPages <= 1 ? (
+              <p role="status" className="text-sm text-ink-muted">
+                {total} {total === 1 ? 'item' : 'items'}
+              </p>
+            ) : (
+              <span />
+            )}
             <div className="flex flex-wrap items-center gap-2">
               {filterSummaryText && <p className="text-sm text-ink-muted">{filterSummaryText}</p>}
               {anyFilterActive && (
@@ -696,6 +740,7 @@ function ReceiptItems() {
             </div>
           </div>
 
+          <div ref={listTopRef} />
           {isSmallScreen ? (
             <ItemCardList
               items={items ?? []}
@@ -712,29 +757,19 @@ function ReceiptItems() {
             />
           )}
 
-          <div className="flex flex-col gap-2">
-            {loadMoreError && (
-              <>
-                <Alert variant="error">{loadMoreError}</Alert>
-                <Button variant="secondary" size="sm" className="self-start" onClick={handleShowMore}>
-                  Retry
-                </Button>
-              </>
-            )}
-            {!loadMoreError && count < total && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="self-start"
-                onClick={handleShowMore}
-                disabled={isLoadingMore}
-                loading={isLoadingMore}
-                loadingText="Loading..."
+          {totalPages > 1 && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p
+                ref={summaryRef}
+                role="status"
+                tabIndex={-1}
+                className="text-sm text-ink-muted focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-brand"
               >
-                Show more
-              </Button>
-            )}
-          </div>
+                Showing {firstShown}–{lastShown} of {total}
+              </p>
+              <Pagination currentPage={currentPage} totalPages={totalPages} hrefForPage={pageHref} onPageChange={goToPage} />
+            </div>
+          )}
         </>
       )}
     </div>

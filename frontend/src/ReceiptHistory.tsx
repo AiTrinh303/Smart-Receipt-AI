@@ -19,6 +19,7 @@ import { formatMoney } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo, isPlainLeftClick } from './navigation'
 import { DEFAULT_RECEIPT_SORT, RECEIPT_SORT_OPTIONS, effectiveReceiptSort } from './historySort'
+import { parsePage } from './pageParam'
 
 const LOADING_ROW_COUNT = 4
 /** Receipts per page (`&page=N` in the URL, omitted for page 1). */
@@ -35,15 +36,6 @@ const FOCUS_TAB_INDEX_SESSION_KEY = 'receiptHistoryFocusTabIndex'
  * full remount, like every other navigation here). Never set by the
  * browser's own Back/Forward. */
 const FOCUS_PAGE_SUMMARY_SESSION_KEY = 'receiptHistoryFocusPageSummary'
-
-/** A `page` URL value as a page number: anything that isn't a whole number
- * of 1 or more means page 1. (Too large is handled once the total is
- * known: it becomes the last page.) */
-function parsePage(raw: string | null): number {
-  if (raw === null || !/^\d+$/.test(raw)) return 1
-  const page = Number(raw)
-  return page >= 1 ? page : 1
-}
 
 /** The apartment shows the short name visibly (same convenience as the
  * Items view's ApartmentCell and the upload form's apartment choice), but
