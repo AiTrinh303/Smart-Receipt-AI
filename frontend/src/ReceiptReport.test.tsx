@@ -1082,7 +1082,7 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     expect(exportCard.nextElementSibling?.textContent).toMatch(/^Totals are the amounts printed/)
   })
 
-  test('the apartment group: All apartments, then each apartment with its dot, short name visible, full name as accessible name/title', () => {
+  test('the apartment group: All apartments / Both, then each apartment with its dot, short name and its place as a muted second line, full name as accessible name/title', () => {
     // Given the real-style apartment names
     render(
       <ExportCard
@@ -1103,17 +1103,22 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
       'Fewo JoJo - Oberaudorf - Bergblick',
       'Fewo JoJo - Sankt Englmar - Waldglück',
     ])
-    // And an apartment shows its short name and a tone dot, with the full name as title
+    // And an apartment shows its short name, its place as a muted second line and a tone dot,
+    // with the full name as title
     const bergblick = radios[1].closest('label') as HTMLElement
     expect(bergblick).toHaveTextContent('Bergblick')
+    expect(within(bergblick).getByText('Oberaudorf')).toHaveClass('text-xs', 'text-ink-muted')
     expect(bergblick).not.toHaveTextContent('Fewo JoJo')
     expect(bergblick).toHaveAttribute('title', 'Fewo JoJo - Oberaudorf - Bergblick')
     expect(bergblick.querySelector('span[aria-hidden="true"].rounded-full')).not.toBeNull()
-    // And "All apartments" has no dot
-    expect((radios[0].closest('label') as HTMLElement).querySelector('.rounded-full')).toBeNull()
-    // And the radios share one name (native arrow-key movement), with 44px targets below sm
+    const waldglueck = radios[2].closest('label') as HTMLElement
+    expect(within(waldglueck).getByText('Sankt Englmar')).toHaveClass('text-ink-muted')
+    // And "All apartments" has no dot and "Both" as its second line
+    const all = radios[0].closest('label') as HTMLElement
+    expect(all.querySelector('.rounded-full')).toBeNull()
+    expect(within(all).getByText('Both')).toHaveClass('text-xs', 'text-ink-muted')
+    // And the radios share one name (native arrow-key movement)
     expect(new Set(radios.map((radio) => radio.getAttribute('name')))).toEqual(new Set(['report-export-apartment']))
-    expect(bergblick).toHaveClass('h-11', 'sm:h-10')
   })
 
   test('the summary uses the short apartment name: "2026 · Waldglück · Plain CSV"', async () => {
@@ -1147,8 +1152,8 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     const plain = within(group).getByRole('radio', { name: 'Plain CSV' }).closest('label') as HTMLElement
     expect(within(excel).getByText('semicolon, decimal comma')).toHaveClass('text-xs', 'text-ink-muted')
     expect(within(plain).getByText('comma, decimal point')).toHaveClass('text-xs', 'text-ink-muted')
-    // And the two-line pills keep a 44px minimum below sm
-    expect(excel).toHaveClass('min-h-[44px]')
+    // And the options are the grid's fixed size (see the alignment test)
+    expect(excel).toHaveClass('h-14', 'sm:w-48')
     // And the values are the same excel_de / plain as before
     expect(within(group).getByRole('radio', { name: 'German Excel' })).toHaveAttribute('value', 'excel_de')
     expect(within(group).getByRole('radio', { name: 'Plain CSV' })).toHaveAttribute('value', 'plain')
@@ -1161,6 +1166,39 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     // Then Plain CSV is chosen, like a native radio group
     expect(within(group).getByRole('radio', { name: 'Plain CSV' })).toBeChecked()
     expect(screen.getByText('2026 · All apartments · Plain CSV')).toBeInTheDocument()
+  })
+
+  test('aligned grid: legends above their groups, every option in both groups the same width and height', () => {
+    // Given the export card with real-style apartment names
+    render(
+      <ExportCard
+        year={2026}
+        apartments={[
+          { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick' },
+          { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück' },
+        ]}
+      />,
+    )
+
+    // Then each legend is a regular label above its group (not floated beside it)
+    for (const name of ['Apartment', 'CSV format']) {
+      const legend = within(screen.getByRole('radiogroup', { name })).getByText(name)
+      expect(legend.tagName).toBe('LEGEND')
+      expect(legend).toHaveClass('text-sm', 'font-medium', 'text-ink')
+      expect(legend.className).not.toMatch(/float-left/)
+    }
+    // And all five options (3 apartment + 2 format) share one size: full width and stacked below sm,
+    // w-48 from sm, a fixed h-14 (>= 44px) everywhere -- so "All apartments" sits above "German Excel"
+    const options = screen.getAllByRole('radio').map((radio) => radio.closest('label') as HTMLElement)
+    expect(options).toHaveLength(5)
+    for (const option of options) {
+      expect(option).toHaveClass('w-full', 'sm:w-48', 'h-14')
+    }
+    for (const name of ['Apartment', 'CSV format']) {
+      const row = screen.getAllByRole('radio', { name: name === 'Apartment' ? 'All apartments' : 'German Excel' })[0]
+        .closest('label')?.parentElement as HTMLElement
+      expect(row).toHaveClass('flex-col', 'sm:flex-row', 'sm:flex-wrap', 'gap-2')
+    }
   })
 
   test('counted_unreviewed = 0 under basis all shows no "not reviewed" line', async () => {

@@ -51,3 +51,38 @@ test('inline layout with a secondary line: the label plus a muted second line, w
   // And the accessible name is still just the label
   expect(within(group).getByRole('radio', { name: 'German Excel' })).toHaveAttribute('aria-label', 'German Excel')
 })
+
+test('grid layout: the legend above as a label, every option w-48 x h-14 (full width below sm), second line muted', () => {
+  // Given a grid group with and without a second line
+  render(
+    <RadioCardGroup
+      layout="grid"
+      legend="Apartment"
+      name="apartment"
+      options={[
+        { value: '', label: 'All apartments', secondaryLabel: 'Both' },
+        { value: 'a', label: 'Bergblick', secondaryLabel: 'Oberaudorf', accessibleName: 'Fewo JoJo - Oberaudorf - Bergblick' },
+        { value: 'b', label: 'No place' },
+      ]}
+      value=""
+      onChange={() => {}}
+    />,
+  )
+
+  // Then the legend is a regular label, not floated beside the options
+  const group = screen.getByRole('radiogroup', { name: 'Apartment' })
+  const legend = within(group).getByText('Apartment')
+  expect(legend).toHaveClass('text-sm', 'font-medium', 'text-ink')
+  expect(legend.className).not.toMatch(/float-left/)
+  // And every option has the same fixed size, with or without a second line
+  for (const radio of within(group).getAllByRole('radio')) {
+    expect(radio.closest('label')).toHaveClass('h-14', 'w-full', 'sm:w-48')
+  }
+  // And the second line is muted; the accessible name is unchanged
+  expect(within(group).getByText('Oberaudorf')).toHaveClass('text-xs', 'text-ink-muted')
+  expect(within(group).getByRole('radio', { name: 'Fewo JoJo - Oberaudorf - Bergblick' })).toBeInTheDocument()
+  // And the selected option keeps the check icon and selected style
+  const selected = within(group).getByRole('radio', { name: 'All apartments' }).closest('label') as HTMLElement
+  expect(selected).toHaveClass('border-brand', 'bg-brand-subtle', 'font-semibold')
+  expect(selected.querySelector('svg')).not.toBeNull()
+})

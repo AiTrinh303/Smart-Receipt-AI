@@ -2812,6 +2812,35 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
 - **`?view=styleguide`:** both groups with each choice selected, statically,
   plus the live export cards.
 
+## Report export choices: aligned grid
+
+- **Labels above:** "Apartment" and "CSV format" are now legends above
+  their groups, styled like the other form labels (no longer floated to
+  the left of the options), so the labels, both groups and the download
+  buttons start at the same left edge.
+- **Equal options:** a new `RadioCardGroup layout="grid"` — every option
+  `w-48` × `h-14` (with or without a second line), wrapping from `sm`;
+  full width and stacked below `sm`, still the same height. The two rows
+  line up as columns: "All apartments" sits exactly above "German
+  Excel". `h-14` (56px) fits two lines and is above the 44px minimum.
+- **Second lines:** each apartment shows its place
+  (`apartmentPlace(name)`: "Oberaudorf", "Sankt Englmar") like the upload
+  form's cards; "All apartments" shows "Both". Accessible names
+  unchanged (the full apartment name; "All apartments").
+- **Unchanged:** check icon, selected style, values, the summary text and
+  the hrefs. The receipt detail keeps its `inline` group (legend on the
+  same line); CC's inline second-line support stays (tested), but the
+  export card no longer uses it.
+- **Tests changed (`ReceiptReport.test.tsx`):** the apartment-group test
+  (it asserted the inline pill's `h-11 sm:h-10`; now it checks the
+  places and "Both" as muted second lines) and the CSV-group test (it
+  asserted the inline two-line pill's `min-h-[44px]`; now `h-14
+  sm:w-48`). New: the aligned-grid test (legends above, not floated;
+  all five options `w-full sm:w-48 h-14`; the rows' wrap classes) and a
+  `RadioCardGroup` grid-layout test.
+- **`?view=styleguide`:** the static export-choice samples use the grid
+  layout with the second lines.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
@@ -3044,6 +3073,13 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   shows it as a muted `text-xs` second line inside its pill, which then
   grows from `min-h-[44px] sm:min-h-10` instead of the fixed `h-11
   sm:h-10`; without one, a pill is unchanged.
+  `layout="grid"`: the legend above the group as a regular form label
+  (`mb-1 text-sm font-medium text-ink`), then options that are all the
+  same size — `w-48` and a fixed `h-14` (56px) each, full width and
+  stacked below `sm`, wrapping from `sm` — each with its label and an
+  optional muted second line; check icon and selected style as the
+  inline pills. Two grid groups stacked one above the other line up as
+  columns (the Report's export choices).
 - **`formatFileSize`** — formats a byte count as `B`/`KB`/`MB`/`GB` for
   display next to a selected file.
 - **`PageHeader`** — `title` (rendered as the view's one `<h1>`,

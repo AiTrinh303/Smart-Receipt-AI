@@ -841,15 +841,17 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   unlike Year, since this is a one-off export choice rather than a
   saved view. The two choices are always visible, between the
   open-items note and the download buttons (the former closed "Export
-  options" `<details>` is gone): two compact one-line radio groups, the
-  same `RadioCardGroup layout="inline"` as the receipt detail's
-  apartment choice, each with its visible legend, native arrow-key
-  movement, 44px targets below `sm`, wrapping on narrow screens.
-  "Apartment" (`name="report-export-apartment"`): "All apartments"
-  (value `""`, the default), then each apartment from
+  options" `<details>` is gone): two `RadioCardGroup layout="grid"`
+  groups — the legend above each group as a regular form label, every
+  option the same `w-48` × `h-14` (full width and stacked below `sm`),
+  so the two rows line up as columns and the labels, options and
+  download buttons share one left edge; native arrow-key movement.
+  "Apartment" (`name="report-export-apartment"`): "All apartments" /
+  muted "Both" (value `""`, the default), then each apartment from
   `useApartments(true)` with its `ApartmentDot`, short name visible via
-  `apartmentShortName`, full name as the radio's accessible name and the
-  pill's `title`. "CSV format" (`EXPORT_STYLE_OPTIONS`,
+  `apartmentShortName`, its place (`apartmentPlace`, e.g. "Oberaudorf",
+  "Sankt Englmar") as a muted second line like the upload form's cards,
+  full name as the radio's accessible name and the option's `title`. "CSV format" (`EXPORT_STYLE_OPTIONS`,
   `name="report-export-style"`): "German Excel" / muted "semicolon,
   decimal comma" (`"excel_de"`, the default) and "Plain CSV" / muted
   "comma, decimal point" (`"plain"`). The Year is read from the

@@ -38,8 +38,14 @@ interface RadioCardGroupProps {
    * with a `secondaryLabel` shows it as a muted second line inside its
    * pill (the pill grows from a fixed height to a min-height for it);
    * without one, a pill is exactly as before. Same radios, same keyboard
-   * behavior, same accessible names. */
-  layout?: 'cards' | 'inline'
+   * behavior, same accessible names.
+   * `grid`: the legend above as a regular form label, then compact options
+   * that are all the same size -- `w-48` and a fixed `h-14` each (full
+   * width and stacked below `sm`) -- so two groups stacked one above the
+   * other line up as columns (the Report's export choices). Each option
+   * shows its label and, when given, a muted second line; the check icon
+   * and selected style are the inline pills'. */
+  layout?: 'cards' | 'inline' | 'grid'
 }
 
 /** Complete static strings: a one-line inline pill keeps its fixed 44px
@@ -80,6 +86,56 @@ function RadioCardGroup({
   hideLegend = false,
   layout = 'cards',
 }: RadioCardGroupProps) {
+  if (layout === 'grid') {
+    return (
+      <fieldset
+        disabled={disabled}
+        aria-describedby={describedBy}
+        role="radiogroup"
+        aria-label={legend}
+        className="min-w-0"
+      >
+        <legend className={hideLegend ? 'sr-only' : 'mb-1 text-sm font-medium text-ink'}>{legend}</legend>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {options.map((option) => {
+            const checked = value === option.value
+            const accessibleName = option.accessibleName ?? option.label
+            return (
+              <label
+                key={option.value}
+                title={accessibleName}
+                className={`inline-flex h-14 w-full items-center gap-1.5 rounded-control border px-3 text-sm transition-colors duration-150 motion-reduce:transition-none focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand sm:w-48 ${
+                  checked ? 'border-brand bg-brand-subtle font-semibold text-ink' : 'border-border font-normal text-ink'
+                } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'}`}
+              >
+                {checked && <CheckIcon />}
+                {option.leading}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate leading-5">{option.label}</span>
+                  {option.secondaryLabel && (
+                    <span className="block truncate text-xs font-normal leading-4 text-ink-muted">
+                      {option.secondaryLabel}
+                    </span>
+                  )}
+                </span>
+                <input
+                  type="radio"
+                  name={name}
+                  value={option.value}
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => onChange(option.value)}
+                  aria-label={accessibleName}
+                  className="sr-only"
+                />
+              </label>
+            )
+          })}
+        </div>
+      </fieldset>
+    )
+  }
+
   if (layout === 'inline') {
     return (
       <fieldset

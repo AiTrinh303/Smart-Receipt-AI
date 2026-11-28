@@ -12,6 +12,7 @@ import type {
   ReportMonth,
   YearlyReport,
 } from './api/types'
+import { apartmentPlace } from './format/apartmentPlace'
 import { apartmentShortName } from './format/apartmentShortName'
 import { apartmentToneClasses } from './format/apartmentTone'
 import { formatDisplayDate } from './format/formatDisplayDate'
@@ -664,19 +665,22 @@ export function ExportCard({ year, apartments, openItems }: ExportCardProps) {
       {year !== null && openItems && <ExportNote year={year} items={openItems} />}
 
       {/* The two choices, always visible, between the note and the
-          buttons: compact one-line radio groups (the receipt detail's
-          apartment choice), wrapping on narrow screens. Component state
-          only, never the URL. */}
+          buttons: two RadioCardGroup "grid" groups -- legend above, every
+          option the same w-48 x h-14, so the two rows line up as columns
+          and labels, options and buttons share one left edge (full width,
+          stacked below sm). Component state only, never the URL. */}
       <div className="flex flex-col gap-3">
         <RadioCardGroup
-          layout="inline"
+          layout="grid"
           legend="Apartment"
           name="report-export-apartment"
           options={[
-            { value: '', label: 'All apartments' },
+            { value: '', label: 'All apartments', secondaryLabel: 'Both' },
             ...(apartments ?? []).map((apartment) => ({
               value: apartment.id,
               label: apartmentShortName(apartment.name) ?? apartment.name,
+              // The place as a muted second line, like the upload form's cards.
+              secondaryLabel: apartmentPlace(apartment.name),
               accessibleName: apartment.name,
               leading: <ApartmentDot apartmentId={apartment.id} />,
             })),
@@ -685,7 +689,7 @@ export function ExportCard({ year, apartments, openItems }: ExportCardProps) {
           onChange={setApartmentId}
         />
         <RadioCardGroup
-          layout="inline"
+          layout="grid"
           legend="CSV format"
           name="report-export-style"
           options={EXPORT_STYLE_OPTIONS}
