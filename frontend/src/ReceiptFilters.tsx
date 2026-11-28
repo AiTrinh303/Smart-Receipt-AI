@@ -57,13 +57,20 @@ interface ReceiptFiltersProps {
   statusValue: ReceiptStatus | null
   onStatusChange: (value: string) => void
   statusSelectId: string
-  /** The third control of the filter row (both pages: "Sort by"). Year,
+  /** The last control of the filter row (both pages: "Sort by"). Year,
    * Status and this one are three equal columns from md up, stacked below. */
   extraFilter?: ReactNode
+  /** An optional control between Status and `extraFilter` (History: "File
+   * type"). With it the row has four controls: four equal columns from
+   * lg, 2x2 from md, stacked below md. */
+  fileTypeFilter?: ReactNode
   /** A full-width row between the tabs and the filter row (Items: the
    * search form). */
   topRow?: ReactNode
 }
+
+const THREE_FILTER_GRID_CLASSES = 'grid grid-cols-1 gap-3 md:grid-cols-3'
+const FOUR_FILTER_GRID_CLASSES = 'grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4'
 
 function ReceiptFilters({
   tabs,
@@ -79,6 +86,7 @@ function ReceiptFilters({
   onStatusChange,
   statusSelectId,
   extraFilter,
+  fileTypeFilter,
   topRow,
 }: ReceiptFiltersProps) {
   const tabListRef = useRef<HTMLDivElement>(null)
@@ -173,12 +181,14 @@ function ReceiptFilters({
 
       {topRow}
 
-      {/* Year, Status and the extra control (Sort by) as three equal
-          columns from md up, filling the row to the list's right edge;
-          stacked below md. The same row on History and Items. */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      {/* Year, Status (File type) and the extra control (Sort by) as equal
+          columns filling the row to the list's right edge: three from md
+          (Items), or four from lg and 2x2 from md (History, with File
+          type); stacked below md. Complete static class strings. */}
+      <div className={fileTypeFilter ? FOUR_FILTER_GRID_CLASSES : THREE_FILTER_GRID_CLASSES}>
         {yearSelect}
         {statusSelect}
+        {fileTypeFilter}
         {extraFilter}
       </div>
     </>

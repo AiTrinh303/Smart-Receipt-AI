@@ -38,6 +38,7 @@ from domain.report_export import (
     to_csv,
 )
 from domain.rules import (
+    ALLOWED_FILE_TYPES,
     ALLOWED_ITEM_SORT_VALUES,
     ALLOWED_RECEIPT_SORT_VALUES,
     ALLOWED_REPORT_BASIS,
@@ -263,6 +264,7 @@ def list_receipts(
     year: str | None = Query(default=None),
     status: str | None = Query(default=None),
     sort: str = Query(default=DEFAULT_RECEIPT_SORT),
+    file_type: str | None = Query(default=None),
     repository: ReceiptRepository = Depends(get_repository),
 ):
     filters = _validate_receipt_filters(repository, apartment_id, year, status)
@@ -271,7 +273,16 @@ def list_receipts(
             status_code=422,
             detail=f"sort must be one of: {', '.join(ALLOWED_RECEIPT_SORT_VALUES)}.",
         )
-    items, total = repository.list_receipts(limit, offset, sort=sort, **filters)
+    # History only (GET /items doesn't take it). Exactly pdf/jpg/png -- a
+    # JPEG file counts as "jpg"; any other value (also "jpeg") is a 422.
+    if file_type is not None and file_type not in ALLOWED_FILE_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"file_type must be one of: {', '.join(ALLOWED_FILE_TYPES)}.",
+        )
+    # Filtered with the other filters, before sort and limit/offset, so
+    # `total` and paging stay correct.
+    items, total = repository.list_receipts(limit, offset, sort=sort, file_type=file_type, **filters)
     return {"items": [item.model_dump() for item in items], "count": len(items), "total": total}
 
 

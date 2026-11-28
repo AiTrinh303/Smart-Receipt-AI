@@ -20,7 +20,7 @@ from domain.models import (
     SavedUpload,
     Tax,
 )
-from domain.rules import DEFAULT_RECEIPT_SORT, normalize_purchase_date, sort_receipts
+from domain.rules import DEFAULT_RECEIPT_SORT, normalize_purchase_date, receipt_file_type, sort_receipts
 
 logger = logging.getLogger(__name__)
 
@@ -516,6 +516,7 @@ class SqliteReceiptRepository:
         year: int | None = None,
         undated: bool = False,
         status: str | None = None,
+        file_type: str | None = None,
     ) -> list[tuple]:
         """Shared by list_receipts() and list_matching_receipts(): every
         receipt matching the given filters, each as a tuple of
@@ -527,7 +528,11 @@ class SqliteReceiptRepository:
         equality, so they are filtered in SQL (parameterized); year/undated
         need normalize_purchase_date -- the same shared domain rule used
         everywhere else, never duplicated as a SQL date regex -- so those
-        are filtered in Python on every row returned by the query."""
+        are filtered in Python on every row returned by the query.
+        `file_type` ("pdf"/"jpg"/"png") is filtered in Python too, with the
+        shared domain rule `receipt_file_type(content_type,
+        stored_filename)`; `stored_filename` is selected only for that and
+        is not part of the returned tuple."""
         where_clauses: list[str] = []
         params: list[str] = []
         if apartment_id is not None:
@@ -543,7 +548,7 @@ class SqliteReceiptRepository:
             f"""
             SELECT r.receipt_id, r.extracted_json, r.created_at, r.updated_at,
                    u.original_filename, u.content_type, r.edited_at,
-                   r.apartment_id, ap.name, r.status
+                   r.apartment_id, ap.name, r.status, u.stored_filename
             FROM receipts r
             LEFT JOIN uploads u ON u.receipt_id = r.receipt_id
             LEFT JOIN apartments ap ON ap.id = r.apartment_id
@@ -565,7 +570,10 @@ class SqliteReceiptRepository:
             apartment_id_value,
             apartment_name,
             status_value,
+            stored_filename,
         ) in rows:
+            if file_type is not None and receipt_file_type(content_type, stored_filename) != file_type:
+                continue
             try:
                 # Same source (extracted_json) as get_receipt(), so `total`
                 # carries the same JSON type here as in the extract/GET
@@ -612,6 +620,7 @@ class SqliteReceiptRepository:
         undated: bool = False,
         status: str | None = None,
         sort: str = DEFAULT_RECEIPT_SORT,
+        file_type: str | None = None,
     ) -> tuple[list[ReceiptSummary], int]:
         """Returns (summaries, total): `total` is the count of every
         receipt matching the given filters -- ignoring `limit`/`offset`
@@ -624,7 +633,7 @@ class SqliteReceiptRepository:
         excluded from `total` the same way it has always been excluded
         from `count` -- consistent, not a new special case."""
         with self._connect() as conn:
-            rows = self._filtered_receipt_rows(conn, apartment_id, year, undated, status)
+            rows = self._filtered_receipt_rows(conn, apartment_id, year, undated, status, file_type)
 
         # Each row is (receipt_id, extracted, created_at, ...): the raw date
         # and total come from the parsed extracted_json (`extracted`).

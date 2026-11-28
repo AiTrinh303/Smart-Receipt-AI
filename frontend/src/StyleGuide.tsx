@@ -26,6 +26,7 @@ import { formatMoneyFromString } from './components/ui/formatMoney'
 import { apartmentPlace } from './format/apartmentPlace'
 import { apartmentShortName } from './format/apartmentShortName'
 import { apartmentToneClasses } from './format/apartmentTone'
+import { FILE_TYPE_OPTIONS } from './historyFileType'
 import { RECEIPT_SORT_OPTIONS } from './historySort'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
@@ -439,6 +440,7 @@ function StyleGuide() {
   const [sgItemsSearch, setSgItemsSearch] = useState('Kaffee')
   const [sgYear, setSgYear] = useState('')
   const [sgStatus, setSgStatus] = useState('')
+  const [sgFileType, setSgFileType] = useState('')
   const [sgSort, setSgSort] = useState('date_desc')
   const [sgSelectClosed, setSgSelectClosed] = useState('date_desc')
 
@@ -1163,7 +1165,9 @@ function StyleGuide() {
             })}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {/* History's row: Year, Status, File type, Sort by -- four equal
+              columns from lg, 2x2 from md, stacked below md. */}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
             <Select
               id="styleguide-history-year"
               label="Year"
@@ -1188,6 +1192,14 @@ function StyleGuide() {
                 { value: 'needs_review', label: 'Needs review' },
                 { value: 'approved', label: 'Approved' },
               ]}
+            />
+            <Select
+              id="styleguide-history-file-type"
+              label="File type"
+              value={sgFileType}
+              active={sgFileType !== ''}
+              onChange={setSgFileType}
+              options={FILE_TYPE_OPTIONS}
             />
             <Select
               id="styleguide-history-sort"

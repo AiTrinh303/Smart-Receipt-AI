@@ -1050,7 +1050,7 @@ describe('ReceiptHistory', () => {
 
   // --- Filter row composition (Commit 2) ----------------------------------
 
-  test('Year, Status and Sort by fill one row as three equal columns from md up', async () => {
+  test('Year, Status, File type and Sort by fill one row: four equal columns from lg, 2x2 from md, stacked below', async () => {
     fetchSpy.mockImplementation(
       routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
@@ -1059,13 +1059,142 @@ describe('ReceiptHistory', () => {
     await waitFor(() => {
       expect(selectControl('Year')).toBeInTheDocument()
     })
-    // Year, Status and Sort by sit in one grid row of three equal columns
-    // from md up (stacked below md), filling the row like the list card
+    // Then the four controls sit in one grid, in this order, filling the row like the list card
     const row = selectControl('Year').closest('.grid') as HTMLElement
-    expect(row).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-3')
-    expect(row).toContainElement(selectControl('Status'))
-    expect(row).toContainElement(selectControl('Sort by'))
-    expect(row.children).toHaveLength(3)
+    expect(row).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'lg:grid-cols-4')
+    expect(row.children).toHaveLength(4)
+    const order = ['Year', 'Status', 'File type', 'Sort by'].map((label) => selectControl(label))
+    order.forEach((control, index) => expect(row.children[index]).toContainElement(control))
+  })
+
+  // --- File type ------------------------------------------------------------
+
+  function fileTypeParam(url: string): string | null {
+    return new URL(url, 'http://x').searchParams.get('file_type')
+  }
+
+  test('File type: "All types", PDF, JPG, PNG; without &type= no file_type is sent and the control is not active', async () => {
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (url) => {
+          calls.push(url)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 }))
+        },
+      }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    // Then the options are exactly these, "All types" is chosen and nothing is sent
+    const control = await waitFor(() => selectControl('File type'))
+    expect(optionLabels(control)).toEqual(['All types', 'PDF', 'JPG', 'PNG'])
+    expect(selectValue(control)).toBe('')
+    expect(control).not.toHaveClass('bg-brand-soft')
+    expect(fileTypeParam(calls[0])).toBeNull()
+  })
+
+  test('&type=pdf in the URL is sent as file_type=pdf; the control shows PDF in the active style; Clear filters appears', async () => {
+    window.history.replaceState({}, '', '/?view=history&type=pdf')
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (url) => {
+          calls.push(url)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 }))
+        },
+      }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    // Then the request filters by PDF and the control is active with its value as text
+    expect(fileTypeParam(calls[0])).toBe('pdf')
+    const control = await waitFor(() => selectControl('File type'))
+    expect(selectValue(control)).toBe('pdf')
+    expect(control).toHaveTextContent('PDF')
+    expect(control).toHaveClass('border-brand', 'bg-brand-soft')
+    // And the file type alone counts as an active filter
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
+  })
+
+  test('an invalid &type= is ignored: no file_type is sent and the control shows All types', async () => {
+    window.history.replaceState({}, '', '/?view=history&type=gif')
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (url) => {
+          calls.push(url)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 }))
+        },
+      }),
+    )
+    render(<ReceiptHistory />)
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    expect(fileTypeParam(calls[0])).toBeNull()
+    expect(selectValue(await waitFor(() => selectControl('File type')))).toBe('')
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+  })
+
+  test('choosing a file type writes &type=, resets to page 1 and refetches; "All types" drops it again', async () => {
+    // Given page 2 of a filtered, sorted list
+    window.history.replaceState({}, '', '/?view=history&year=2026&sort=amount_desc&page=2')
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (url) => {
+          calls.push(url)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 30 }))
+        },
+      }),
+    )
+    const user = userEvent.setup()
+    render(<HistoryHarness />)
+    await waitFor(() => expect(selectControl('File type')).toBeInTheDocument())
+
+    // When JPG is chosen
+    await chooseOption(user, 'File type', 'JPG')
+
+    // Then the URL has type=jpg, keeps year and sort, drops the page, and the request asks for jpg from offset 0
+    await waitFor(() => expect(window.location.search).toBe('?view=history&year=2026&type=jpg&sort=amount_desc'))
+    await waitFor(() => expect(fileTypeParam(calls[calls.length - 1])).toBe('jpg'))
+    expect(new URL(calls[calls.length - 1], 'http://x').searchParams.get('offset')).toBe('0')
+    expect(new URL(calls[calls.length - 1], 'http://x').searchParams.get('year')).toBe('2026')
+
+    // When "All types" is chosen
+    await waitFor(() => expect(selectValue(selectControl('File type'))).toBe('jpg'))
+    await chooseOption(user, 'File type', 'All types')
+
+    // Then type is gone from the URL and the request
+    await waitFor(() => expect(window.location.search).toBe('?view=history&year=2026&sort=amount_desc'))
+    await waitFor(() => expect(fileTypeParam(calls[calls.length - 1])).toBeNull())
+  })
+
+  test('Clear filters clears the file type too, keeping the apartment tab and the sort', async () => {
+    window.history.replaceState({}, '', `/?view=history&apartment=${OBERAUDORF.id}&year=2026&type=png&sort=amount_desc`)
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
+    )
+    const user = userEvent.setup()
+    render(<HistoryHarness />)
+
+    await user.click(await screen.findByRole('button', { name: 'Clear filters' }))
+
+    await waitFor(() =>
+      expect(window.location.search).toBe(`?view=history&apartment=${OBERAUDORF.id}&sort=amount_desc`),
+    )
+  })
+
+  test('a receipt opened from a file-type-filtered list carries the type in its from= link (for review mode)', async () => {
+    window.history.replaceState({}, '', '/?view=history&type=pdf')
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 1 })) }),
+    )
+    render(<ReceiptHistory />)
+
+    const link = await screen.findByRole('link', { name: /store a/i })
+    expect(link).toHaveAttribute('href', expect.stringContaining(`&from=${encodeURIComponent('?view=history&type=pdf')}`))
   })
 
   // --- Sort by ------------------------------------------------------------

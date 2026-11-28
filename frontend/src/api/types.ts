@@ -24,6 +24,9 @@ export interface ReceiptWarning {
 
 export type ReceiptStatus = 'needs_review' | 'approved'
 
+/** GET /receipts' `file_type` filter: a JPEG (.jpg or .jpeg) is "jpg". */
+export type ReceiptFileType = 'pdf' | 'jpg' | 'png'
+
 /** GET /receipts' `sort` values (the backend's ALLOWED_RECEIPT_SORT_VALUES). */
 export type ReceiptSort = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'uploaded_desc'
 

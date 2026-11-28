@@ -272,6 +272,37 @@ test('the snapshot uses the sort of the list the receipt came from, so "N of M" 
   )
 })
 
+test('the snapshot uses the file type of the list the receipt came from; an invalid type is not sent', async () => {
+  // Given a receipt opened from History filtered to PDFs
+  const fromPdf = `?view=history&apartment=${APARTMENT_ID}&type=pdf`
+  await open(ID_A, fromPdf, {
+    get: (id) => jsonResponse(200, savedReceipt(id)),
+    list: () => listOf([ID_A, ID_B]),
+  })
+
+  // Then the snapshot request asked for PDFs only, and Next stays in that list
+  await screen.findByText('1 of 2')
+  const listCall = fetchSpy.mock.calls.map(([url]) => String(url)).find((url) => url.includes('/receipts?'))
+  expect(new URL(listCall as string, 'http://x').searchParams.get('file_type')).toBe('pdf')
+  expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute(
+    'href',
+    `/?receipt=${ID_B}&from=${encodeURIComponent(fromPdf)}`,
+  )
+})
+
+test('an invalid type in the from= list is not sent with the snapshot request', async () => {
+  // Given a hand-edited from= with an unknown type
+  await open(ID_A, `?view=history&apartment=${APARTMENT_ID}&type=gif`, {
+    get: (id) => jsonResponse(200, savedReceipt(id)),
+    list: () => listOf([ID_A, ID_B]),
+  })
+
+  // Then no file_type is sent (all types)
+  await screen.findByText('1 of 2')
+  const listCall = fetchSpy.mock.calls.map(([url]) => String(url)).find((url) => url.includes('/receipts?'))
+  expect(new URL(listCall as string, 'http://x').searchParams.get('file_type')).toBeNull()
+})
+
 test('opened from an unsorted (default) list, the snapshot sends the default date_desc', async () => {
   await open(ID_B, FROM_HISTORY, {
     get: (id) => jsonResponse(200, savedReceipt(id)),

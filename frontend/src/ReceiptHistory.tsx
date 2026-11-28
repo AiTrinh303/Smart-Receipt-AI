@@ -6,6 +6,7 @@ import type { ApartmentFacet, ReceiptSummary } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
 import { DateCell } from './ReceiptItems'
 import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
+import { FILE_TYPE_OPTIONS, effectiveFileType } from './historyFileType'
 import Button from './components/ui/Button'
 import { ApartmentPill } from './components/ui/ApartmentTone'
 import Card from './components/ui/Card'
@@ -216,6 +217,8 @@ interface HistoryUrlParams {
   apartment: string | null
   year: string | null
   status: string | null
+  /** File type: "pdf" | "jpg" | "png"; omitted for all types. */
+  type: string | null
   sort: string | null
   page: string | null
 }
@@ -226,6 +229,7 @@ function readUrlParams(): HistoryUrlParams {
     apartment: params.get('apartment'),
     year: params.get('year'),
     status: params.get('status'),
+    type: params.get('type'),
     sort: params.get('sort'),
     page: params.get('page'),
   }
@@ -237,6 +241,9 @@ function buildHistorySearch(params: HistoryUrlParams): string {
   if (params.apartment) usp.set('apartment', params.apartment)
   if (params.year) usp.set('year', params.year)
   if (params.status) usp.set('status', params.status)
+  // "All types" is never written; an unknown value is dropped.
+  const fileType = effectiveFileType(params.type)
+  if (fileType) usp.set('type', fileType)
   // The default sort is never written (same "unset means default" rule as
   // the Items view); an unknown value is dropped the same way.
   const sort = effectiveReceiptSort(params.sort)
@@ -271,6 +278,7 @@ function ReceiptHistory() {
 
   const year = effectiveYear(urlParams.year)
   const status = effectiveStatus(urlParams.status)
+  const fileType = effectiveFileType(urlParams.type)
   const sort = effectiveReceiptSort(urlParams.sort)
 
   useEffect(() => {
@@ -317,6 +325,7 @@ function ReceiptHistory() {
           apartmentId: apartmentId ?? undefined,
           year: year ?? undefined,
           status: status ?? undefined,
+          fileType: fileType ?? undefined,
           sort,
           limit: PAGE_SIZE,
         }
@@ -427,6 +436,10 @@ function ReceiptHistory() {
     navigateTo(buildHistorySearch({ ...urlParams, page: String(page) }))
   }
 
+  const handleFileTypeChange = (value: string) => {
+    navigateTo(buildHistorySearch({ ...urlParams, type: value || null, page: null }))
+  }
+
   const handleSortChange = (value: string) => {
     navigateTo(buildHistorySearch({ ...urlParams, sort: value, page: null }))
   }
@@ -435,7 +448,14 @@ function ReceiptHistory() {
   // preference, not a filter) stay.
   const handleClearFilters = () => {
     navigateTo(
-      buildHistorySearch({ apartment: urlParams.apartment, year: null, status: null, sort: urlParams.sort, page: null }),
+      buildHistorySearch({
+        apartment: urlParams.apartment,
+        year: null,
+        status: null,
+        type: null,
+        sort: urlParams.sort,
+        page: null,
+      }),
     )
   }
 
@@ -451,7 +471,7 @@ function ReceiptHistory() {
   const yearValue = year
   const statusValue = status
 
-  const anyFilterActive = yearValue !== null || statusValue !== null
+  const anyFilterActive = yearValue !== null || statusValue !== null || fileType !== null
 
   const totalPages = Math.max(1, Math.ceil(listTotal / PAGE_SIZE))
   const firstShown = listTotal === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
@@ -514,6 +534,16 @@ function ReceiptHistory() {
         statusValue={statusValue}
         onStatusChange={handleStatusChange}
         statusSelectId="history-status-select"
+        fileTypeFilter={
+          <Select
+            id="history-file-type-select"
+            label="File type"
+            value={fileType ?? ''}
+            active={fileType !== null}
+            onChange={handleFileTypeChange}
+            options={FILE_TYPE_OPTIONS}
+          />
+        }
         extraFilter={
           <Select
             id="history-sort-select"

@@ -380,16 +380,26 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   before; `ReceiptUpload.tsx` adds a "Back to history" link when showing
   a result. `?view=styleguide`'s "History rows" section renders the real
   `HistoryRowList`/`HistoryHeaderRow`/`HistoryRow` for both layouts.
-  **Filter row and `ui/Select`:** Year, Status and "Sort by" are all the
-  shared `Select` (a select-only combobox; the native `<select>` below
+  **Filter row and `ui/Select`:** Year, Status, (History only) "File
+  type" and "Sort by" are all the shared `Select` (a select-only combobox; the native `<select>` below
   `sm` — see `docs/design.md`, "Components"), in both History and Items.
   Year and Status pass `active` while their value isn't the default
   ("All years"/"All"), which gives the closed control `border-brand
   bg-brand-soft` (the value text says which filter is set, so not colour
-  alone); Sort by never passes it. On both pages `ReceiptFilters` lays out Year, Status and its
+  alone); Sort by never passes it. On Items `ReceiptFilters` lays out Year, Status and its
   `extraFilter` (Sort by) as three equal columns from `md` up (`grid
   grid-cols-1 gap-3 md:grid-cols-3`, right edge aligned with the list
-  card), stacked below `md`; its optional `topRow` slot (Items: the
+  card), stacked below `md`. History also passes `fileTypeFilter`
+  ("File type": "All types", "PDF", "JPG", "PNG" — `FILE_TYPE_OPTIONS`/
+  `effectiveFileType` in `src/historyFileType.ts`), placed between Status
+  and Sort by, and the row becomes four equal columns from `lg`, 2×2
+  from `md`, stacked below (`grid-cols-1 md:grid-cols-2 lg:grid-cols-4`).
+  It is `&type=pdf|jpg|png` in the URL (omitted for "All types"; an
+  invalid value is ignored), sent as `listReceipts({fileType})` →
+  `file_type=`; changing it resets to page 1, it gets the `active` style
+  when set, it counts as an active filter (so it shows "Clear filters",
+  which clears it with Year/Status, keeping the tab and the sort), and it
+  travels in a receipt's `from=` link; its optional `topRow` slot (Items: the
   search form) sits full-width between the tabs and that row. (BR's
   `equalColumns` prop and the old flex layout are gone — both pages use
   the grid.) Between the filter row and the list, both pages show one
@@ -963,10 +973,11 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   with `?view=history` — read once at mount via `getHistoryFromParam()`;
   `?view=items` or a missing `from` both mean no review mode at all) does
   `ReceiptUpload.tsx` fetch one snapshot —
-  `listReceipts({apartmentId, year, status, sort, limit: 200})` using that same
-  `from` value's own filters **and sort** (so "N of M" and Previous/Next
-  follow the order the owner saw), parsed with the exact `effectiveYear`/
-  `effectiveStatus`/`effectiveReceiptSort` helpers `ReceiptFilters.tsx` already validates its own
+  `listReceipts({apartmentId, year, status, fileType, sort, limit: 200})` using that same
+  `from` value's own filters (including History's file `type`) **and
+  sort** (so "N of M" and Previous/Next follow the list the owner saw),
+  parsed with the exact `effectiveYear`/
+  `effectiveStatus`/`effectiveFileType`/`effectiveReceiptSort` helpers `ReceiptFilters.tsx` already validates its own
   URL params with (`parseHistoryFilters()`) — kept in `reviewSnapshot`
   state. A failed request, or this receipt not being among the (up to)
   200 returned, leaves `reviewSnapshot` without this receipt and

@@ -461,6 +461,25 @@ Per-feature detail for `backend/`, moved verbatim from CLAUDE.md's former "Proje
     `\d{4}` regex check happens *before* `int()` + range, so `"2025x"`/
     `"25"`/`"20255"` are rejected the same way a too-small/too-large year
     is, all `422`), `status` (`"needs_review"`/`"approved"` else `422`).
+    **`file_type`** (`GET /receipts` only — History's "File type"; not in
+    the shared helper, so `GET /items` simply ignores it like any unknown
+    param): exactly `pdf`/`jpg`/`png` (`ALLOWED_FILE_TYPES`), anything
+    else — `jpeg`, `PDF`, empty — `422` "file_type must be one of: …". A
+    receipt's type comes from the pure `domain.rules.receipt_file_type(
+    content_type, stored_filename)`: the stored `uploads.content_type`
+    first (`application/pdf`/`image/jpeg`/`image/png`, case-insensitive,
+    parameters ignored), else the stored file's extension
+    (`uploads.stored_filename`, `.pdf`/`.jpg`/`.jpeg`/`.png`) — a JPEG
+    (`.jpeg` or `.jpg`) counts as `jpg`; the original filename is never
+    consulted. Both columns already existed (written and validated against
+    the allowed types at upload), so no column or migration was added; a
+    receipt with no upload row or neither value matches no file type (it
+    is still listed without the filter). `_filtered_receipt_rows(…,
+    file_type)` applies it in Python with the other filters, before sort
+    and `limit`/`offset`, so `total` and paging stay correct;
+    `stored_filename` is selected only for this and is not part of the
+    returned tuple. `GET /receipts/facets` takes only `apartment_id`, so
+    it is unchanged.
     (A `category_id` filter existed here too; it was removed along with the
     rest of the expense-category feature — see
     [docs/adr/0004-remove-categories.md](docs/adr/0004-remove-categories.md)

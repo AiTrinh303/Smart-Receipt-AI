@@ -66,6 +66,7 @@ class ReceiptRepository(Protocol):
         undated: bool = False,
         status: str | None = None,
         sort: str = "date_desc",
+        file_type: str | None = None,
     ) -> tuple[list[ReceiptSummary], int]: ...
 
     def update_receipt(self, receipt_id: str, update: ReceiptUpdate) -> SavedReceipt | None: ...

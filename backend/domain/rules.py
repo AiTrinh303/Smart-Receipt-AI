@@ -49,6 +49,43 @@ EXTENSION_MEDIA_TYPES = {
 }
 
 
+# --- File type of a stored receipt (History's "File type" filter) ---------
+
+ALLOWED_FILE_TYPES = ("pdf", "jpg", "png")
+
+_CONTENT_TYPE_FILE_TYPES = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+}
+
+_EXTENSION_FILE_TYPES = {
+    ".pdf": "pdf",
+    ".jpg": "jpg",
+    ".jpeg": "jpg",
+    ".png": "png",
+}
+
+
+def receipt_file_type(content_type: str | None, stored_filename: str | None) -> str | None:
+    """A saved receipt's file type -- "pdf", "jpg" or "png" (a JPEG,
+    whether .jpeg or .jpg / image/jpeg, counts as "jpg") -- or None when it
+    can't be told. The stored content type wins (validated against the
+    allowed types at upload); when it is missing or not one of the three,
+    the stored file's extension (also validated at upload, and the name the
+    file has on disk) is used. The original filename is never consulted:
+    it is the client's own name, not what was stored. Pure, never raises."""
+    if content_type:
+        media_type = content_type.split(";", 1)[0].strip().lower()
+        if media_type in _CONTENT_TYPE_FILE_TYPES:
+            return _CONTENT_TYPE_FILE_TYPES[media_type]
+    if stored_filename:
+        suffix = stored_filename[stored_filename.rfind(".") :].lower() if "." in stored_filename else ""
+        if suffix in _EXTENSION_FILE_TYPES:
+            return _EXTENSION_FILE_TYPES[suffix]
+    return None
+
+
 def media_type_for_extension(extension: str) -> str | None:
     """Maps a stored file's extension to a fixed, trusted media type -- never
     the client-supplied content_type and never sniffed from the file's

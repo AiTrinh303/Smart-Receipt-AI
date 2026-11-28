@@ -2860,6 +2860,43 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   reload) is open again. `ReceiptUpload.layout.test.tsx`'s TipsDetails
   test still asserts closed (unchanged).
 
+## History: filter by file type
+
+- **Where the type comes from (no migration):** the backend already
+  stores each upload's `content_type` and its `stored_filename`
+  (`<id><ext>`), both validated against PDF/JPEG/PNG at upload. The
+  filter uses the stored content type first, then the stored extension;
+  the original filename (the client's own name) is never trusted. A JPEG
+  (`.jpeg`/`.jpg`, `image/jpeg`) counts as JPG.
+- **Backend:** `GET /receipts?file_type=pdf|jpg|png` (any other value
+  `422`), applied with the other filters before sort and `limit`/`offset`
+  so `total` and paging stay correct. `GET /receipts/facets` doesn't take
+  the list filters, so it is unchanged; `GET /items` ignores the param.
+- **History:** a fourth shared `Select`, "File type" ("All types", "PDF",
+  "JPG", "PNG"), between Status and Sort by; `&type=` in the URL (omitted
+  for All, an invalid value ignored); a change resets to page 1; the
+  active style when set; "Clear filters" clears it (keeping the apartment
+  tab and the sort); a receipt's `from=` carries it, so review mode's
+  snapshot (N of M, Previous/Next) uses it too.
+- **Layout:** with four controls the filter row is four equal columns
+  from `lg`, 2×2 from `md`, stacked below `md` (`ReceiptFilters`'
+  `fileTypeFilter` slot; Items keeps its three columns).
+- **Out of scope:** Items, Report, upload.
+- **`?view=styleguide`:** the History filter sample has the File type
+  Select and the four-column row.
+- **Tests changed:** `ReceiptHistory.test.tsx` "Year, Status and Sort by
+  fill one row as three equal columns from md up" asserted three
+  controls and `md:grid-cols-3`; it now asserts the four controls in
+  order and `md:grid-cols-2 lg:grid-cols-4`. New: History file-type
+  tests (options, URL → request, active style, invalid ignored, change
+  resets the page and keeps the other params, All types drops it, Clear
+  filters, `from=`), review-mode snapshot tests (`file_type` sent; an
+  invalid type isn't), and backend `tests/test_receipt_file_type_filter.py`
+  (the domain rule, each type, `.jpeg` as jpg, the original filename
+  ignored, missing content type → extension, no upload row, combined with
+  apartment/year/status and `year=none`, paging/total with sort, `422`s,
+  `/items` unaffected).
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
