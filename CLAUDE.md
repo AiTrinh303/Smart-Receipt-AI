@@ -93,7 +93,7 @@ the tax advisor.
   - `?view=styleguide` — dev-only style guide
 - Shared UI components (`src/components/ui/`): `Button`, `Card`, `Alert`,
   `Spinner`, `Skeleton`, `Container`, `PageHeader`, `RadioCardGroup`,
-  `StatusBadge`, `MissingValue`, `ClampedText`, plus `formatFileSize` and
+  `StatusBadge`, `MissingValue`, `ClampedText`, `Pagination`, plus `formatFileSize` and
   `formatMoney`.
 
 ## Running locally

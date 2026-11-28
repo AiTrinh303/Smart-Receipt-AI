@@ -1106,14 +1106,14 @@ describe('ReceiptHistory', () => {
     expect(window.location.search).not.toContain('sort=')
   })
 
-  test('choosing a sort writes &sort= to the URL, remounts, and sends it (also for "Show more"); back to the default drops it', async () => {
+  test('choosing a sort writes &sort= to the URL, remounts, and sends it (also on page 2); back to the default drops it', async () => {
     const user = userEvent.setup()
     const calls: string[] = []
     fetchSpy.mockImplementation(
       routeFetch({
         list: (urlString) => {
           calls.push(urlString)
-          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 2 }))
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 30 }))
         },
       }),
     )
@@ -1128,9 +1128,11 @@ describe('ReceiptHistory', () => {
     await waitFor(() => expect(sortParam(calls[calls.length - 1])).toBe('amount_desc'))
     expect(screen.getByLabelText('Sort by')).toHaveValue('amount_desc')
 
-    // And "Show more" continues with the same sort
-    await user.click(await screen.findByRole('button', { name: 'Show more' }))
-    await waitFor(() => expect(calls[calls.length - 1]).toContain('offset=1'))
+    // And another page continues with the same sort (and the sort stays in the page links)
+    const page2 = await screen.findByRole('link', { name: 'Page 2' })
+    expect(page2).toHaveAttribute('href', '/?view=history&sort=amount_desc&page=2')
+    await user.click(page2)
+    await waitFor(() => expect(calls[calls.length - 1]).toContain('offset=12'))
     expect(sortParam(calls[calls.length - 1])).toBe('amount_desc')
 
     // When the default is chosen again, sort leaves the URL
@@ -1191,7 +1193,7 @@ describe('ReceiptHistory', () => {
     )
   })
 
-  // --- "Show more" paging (Commit 2) --------------------------------------
+  // --- Pages (12 per page) ---------------------------------------------------
 
   test('the summary shows "N receipts" when everything is loaded', async () => {
     fetchSpy.mockImplementation(
@@ -1205,114 +1207,123 @@ describe('ReceiptHistory', () => {
     expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
   })
 
-  test('the summary shows "X of N receipts" while more remain, and "Show more" appends and disappears at the end', async () => {
-    const firstPage = [oneItem({ receipt_id: 'p1-0', store_name: 'Page 1 Item 0' })]
-    const secondPage = [oneItem({ receipt_id: 'p2-0', store_name: 'Page 2 Item 0' })]
-    let callCount = 0
+  test('with more than 12 receipts: "Showing 1–12 of N" and the pagination under the list; a page link loads that page and focuses the summary', async () => {
+    // Given 30 receipts
     const calls: string[] = []
     fetchSpy.mockImplementation(
       routeFetch({
         list: (urlString) => {
           calls.push(urlString)
-          callCount += 1
-          if (callCount === 1) {
-            return Promise.resolve(jsonResponse(200, { items: firstPage, count: 1, total: 2 }))
-          }
-          return Promise.resolve(jsonResponse(200, { items: secondPage, count: 1, total: 2 }))
-        },
-      }),
-    )
-    const user = userEvent.setup()
-    render(<ReceiptHistory />)
-
-    await waitFor(() => {
-      expect(screen.getByText('1 of 2 receipts')).toBeInTheDocument()
-    })
-    expect(screen.getByText('Page 1 Item 0')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Show more' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('2 receipts')).toBeInTheDocument()
-    })
-    // The first page's row is still shown -- appended, not replaced
-    expect(screen.getByText('Page 1 Item 0')).toBeInTheDocument()
-    expect(screen.getByText('Page 2 Item 0')).toBeInTheDocument()
-    expect(calls[1]).toContain('offset=1')
-    // Nothing left to show -- the button is gone
-    expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
-  })
-
-  test('a failed "Show more" keeps the rows shown and shows an error with Retry', async () => {
-    const firstPage = [oneItem({ store_name: 'Page 1 Item' })]
-    let callCount = 0
-    fetchSpy.mockImplementation(
-      routeFetch({
-        list: () => {
-          callCount += 1
-          if (callCount === 1) {
-            return Promise.resolve(jsonResponse(200, { items: firstPage, count: 1, total: 3 }))
-          }
-          return Promise.resolve(jsonResponse(500, { detail: 'Internal error' }))
-        },
-      }),
-    )
-    const user = userEvent.setup()
-    render(<ReceiptHistory />)
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: 'Show more' }))
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Could not load receipt history. Please try again.')
-    })
-    expect(screen.getByText('Page 1 Item')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
-
-    // Retry re-sends the request; a success clears the error and the row stays
-    fetchSpy.mockImplementation(
-      routeFetch({
-        list: () =>
-          Promise.resolve(
-            jsonResponse(200, {
-              items: [oneItem({ receipt_id: 'page-2', store_name: 'Page 2 Item' })],
-              count: 1,
-              total: 3,
-            }),
-          ),
-      }),
-    )
-    await user.click(screen.getByRole('button', { name: 'Retry' }))
-    await waitFor(() => {
-      expect(screen.getByText('Page 2 Item')).toBeInTheDocument()
-    })
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-
-  test('changing a filter resets paging to the first page (offset=0)', async () => {
-    const calls: string[] = []
-    fetchSpy.mockImplementation(
-      routeFetch({
-        list: (urlString) => {
-          calls.push(urlString)
-          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 5 }))
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 30 }))
         },
       }),
     )
     const user = userEvent.setup()
     render(<HistoryHarness />)
-    await waitFor(() => {
-      expect(screen.getByText('Show more')).toBeInTheDocument()
-    })
 
+    // Then page 1 asks for 12 from offset 0, shows the range, and the old summary/"Show more" are gone
+    const summary = await screen.findByText('Showing 1–12 of 30')
+    expect(summary).toHaveAttribute('role', 'status')
+    const params = new URL(calls[0], 'http://x').searchParams
+    expect(params.get('limit')).toBe('12')
+    expect(params.get('offset')).toBe('0')
+    expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
+    expect(screen.queryByText('30 receipts')).not.toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: 'Pagination' })
+    expect(within(nav).getByText('1')).toHaveAttribute('aria-current', 'page')
+
+    // When page 2 is chosen
+    await user.click(within(nav).getByRole('link', { name: 'Page 2' }))
+
+    // Then the URL has page=2, the request offset is 12, the range follows, and focus is on the summary
+    await waitFor(() => expect(window.location.search).toBe('?view=history&page=2'))
+    await screen.findByText('Showing 13–24 of 30')
+    expect(new URL(calls[calls.length - 1], 'http://x').searchParams.get('offset')).toBe('12')
+    await waitFor(() => expect(screen.getByText('Showing 13–24 of 30')).toHaveFocus())
+  })
+
+  test('a page from the URL is fetched directly; invalid -> page 1; too large -> the last page, with the URL corrected', async () => {
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 30 }))
+        },
+      }),
+    )
+
+    // Given ?page=3: offset 24, "Showing 25–30 of 30"
+    window.history.replaceState({}, '', '/?view=history&page=3')
+    const first = render(<ReceiptHistory />)
+    await screen.findByText('Showing 25–30 of 30')
+    expect(new URL(calls[calls.length - 1], 'http://x').searchParams.get('offset')).toBe('24')
+    first.unmount()
+
+    // Given an invalid page: page 1
+    window.history.replaceState({}, '', '/?view=history&page=abc')
+    const second = render(<ReceiptHistory />)
+    await screen.findByText('Showing 1–12 of 30')
+    second.unmount()
+
+    // Given a page past the end: the last page is shown and the URL says so
+    window.history.replaceState({}, '', '/?view=history&page=9')
+    render(<ReceiptHistory />)
+    await screen.findByText('Showing 25–30 of 30')
+    expect(new URL(calls[calls.length - 1], 'http://x').searchParams.get('offset')).toBe('24')
+    expect(window.location.search).toBe('?view=history&page=3')
+  })
+
+  test('on a later page the row links carry the page in `from`, so "Back to history" returns there', async () => {
+    // Given page 2, no other filter
+    window.history.replaceState({}, '', '/?view=history&page=2')
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 30 })) }),
+    )
+    render(<ReceiptHistory />)
+
+    // Then the row's from= is this page
+    const link = await screen.findByRole('link', { name: /store a/i })
+    expect(link).toHaveAttribute(
+      'href',
+      `/?receipt=11111111-1111-1111-1111-111111111111&from=${encodeURIComponent('?view=history&page=2')}`,
+    )
+  })
+
+  test('a page link leaves ctrl/cmd-click to the browser; a plain click opens that page in place', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 30 })) }),
+    )
+    render(<ReceiptHistory />)
+    const page3 = await screen.findByRole('link', { name: 'Page 3' })
+
+    expect(page3).toHaveAttribute('href', '/?view=history&page=3')
+    expectBrowserHandlesModifiedClicks(page3, '?view=history&page=3')
+  })
+
+  test('changing a filter on page 3 goes back to page 1 (no page in the URL, offset=0)', async () => {
+    // Given page 3 of 30 receipts
+    window.history.replaceState({}, '', '/?view=history&page=3')
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        list: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 30 }))
+        },
+      }),
+    )
+    const user = userEvent.setup()
+    render(<HistoryHarness />)
+    await screen.findByText('Showing 25–30 of 30')
+
+    // When the Status filter changes
     await user.selectOptions(screen.getByLabelText('Status'), 'Approved')
 
+    // Then the URL drops the page and the request starts at offset 0
     await waitFor(() => expect(window.location.search).toContain('status=approved'))
-    const lastCall = calls[calls.length - 1]
-    expect(lastCall).toContain('offset=0')
+    expect(window.location.search).not.toContain('page=')
+    await waitFor(() => expect(calls[calls.length - 1]).toContain('offset=0'))
   })
 
   test('a reply to an older (stale) request never overwrites the newer result', async () => {

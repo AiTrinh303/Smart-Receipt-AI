@@ -2489,6 +2489,33 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   `lg:flex-1`, not `lg:sticky`; new: the equal-height classes.
 - **`?view=styleguide`:** the side panel sample renders the new overview.
 
+## History: page numbers instead of "Show more"
+
+- 12 receipts per page; `&page=N` in the URL (not for page 1); invalid ->
+  page 1, too large -> the last page (URL corrected). Under the list:
+  "Showing a–b of N" + the new shared `Pagination`; with one page, only
+  today's "N receipts" above the list. A pagination click scrolls to the
+  list and focuses the summary; any tab/filter/sort change resets to
+  page 1; row links carry the page in `from`. "Show more" and its
+  error/Retry state are removed from History (Items keeps its own).
+- **Ellipsis rule (a deliberate reading of the ticket):** a skipped run
+  of exactly one page shows that page number instead of "…" -- an
+  ellipsis would be no shorter. Two or more skipped pages become "…".
+- **Tests (`ReceiptHistory.test.tsx`):** removed 'a failed "Show more"
+  keeps the rows shown and shows an error with Retry' (the state is
+  gone). Rewritten: 'the summary shows "X of N receipts" while more
+  remain, and "Show more" appends…' -> "Showing 1–12 of N", the
+  pagination, a page click (URL, offset 12, focus on the summary);
+  'changing a filter resets paging to the first page (offset=0)' ->
+  from page 3, the page leaves the URL and offset is 0; the sort test's
+  "Show more" step -> a page-2 link keeps the sort. New: URL page,
+  invalid and too-large pages, `from` with the page, a page link's
+  modified clicks. `Pagination.test.tsx`: the ellipsis ranges, both
+  ends, the current page, links/hrefs, plain vs. modified clicks, the
+  small-screen form and 44px targets.
+- **`?view=styleguide`:** the "Show more" sample became a pagination
+  sample (first, a middle page, last).
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
@@ -2638,6 +2665,17 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   `#fdf4ff` 5.89:1 (6.32:1, now Waldglück's). Avoid amber/orange (reads
   as the warning colour), red/rose (danger), indigo (brand) and green/
   teal (the "Approved" badge). Remove a tone that is no longer mapped.
+- **`Pagination`** (`Pagination.tsx`, `pageItems.ts`) — page navigation
+  for a long list, inside `<nav aria-label="Pagination">`: "‹ Previous",
+  the first and last page, the current page and its two neighbours ("…"
+  for skipped runs; a single skipped page is shown instead), "Next ›".
+  Every page is a real `<a href>` (`hrefForPage`) whose plain click calls
+  `onPageChange` (via `isPlainLeftClick`; modified clicks are left to the
+  browser). The current page is a `<span aria-current="page">`, filled
+  `bg-brand` with white bold text — not a link, never colour alone.
+  Previous/Next at either end are `<span aria-disabled="true">`. 44px
+  targets below `sm`; below `sm` it shows only "‹ Previous", "Page N of
+  M", "Next ›". Used by History.
 - **`Card`** — a bordered, padded, white surface for grouping content (forms,
   dropzones, confirmation panels).
 - **`Container`** — `size` `md` (`max-w-md`), `lg` (`max-w-3xl`, History's

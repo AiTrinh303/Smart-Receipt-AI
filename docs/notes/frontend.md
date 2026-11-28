@@ -451,23 +451,24 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   this ("Tidying History filters" in
   [docs/design.md](docs/design.md) has the exact before/after classes
   and confirms the Items view's own branch is byte-identical, a no-op).
-  **Paging ("Show more"):** `PAGE_SIZE = 50`; the summary line
-  (`role="status"`) reads `` `${listCount} of ${listTotal} receipts` ``
-  while `listCount < listTotal` (matching the Items view's own "`count`
-  of `total` items" wording), or the original, unchanged `` `${listTotal}
-  ${listTotal === 1 ? 'receipt' : 'receipts'}` `` once everything is
-  shown — still exactly "N receipts" at that point. A `requestIdRef`
-  shared between the main load effect and `handleShowMore` (same pattern
-  as `ReceiptItems.tsx`) means a reply to a request that's no longer the
-  latest one issued can never overwrite newer state; "Show more" requests
-  `offset: listCount` and **appends** via `setItems((prev) =>
-  [...(prev ?? []), ...response.items])`, never replacing what's already
-  shown; a failed "Show more" leaves the existing rows alone and shows
-  its own `Alert variant="error"` + Retry (`loadMoreError`, separate from
-  the main `error`); a tab/filter change is already a full remount (the
-  same mechanism `goToTab`/`handleYearChange`/`handleStatusChange` always
-  used), so paging resets to `offset=0` for free, with no separate "reset
-  paging" state. "Clear
+  **Pages (`PAGE_SIZE = 12`, `ui/Pagination.tsx`):** the page is in the
+  URL as `&page=N` (omitted for page 1); `parsePage()` treats a missing
+  or invalid value as page 1, and a page past the end (known once the
+  first response's `total` arrives) is refetched as the last page, with
+  the address bar corrected via `replaceState`. Each page fetches
+  `limit: 12, offset: (page - 1) * 12`. With one page, the line above the
+  list keeps today's `role="status"` "N receipts"; with more, that count
+  moves under the list: "Showing a–b of N" (`role="status"`,
+  `tabIndex={-1}`) on the left and `Pagination` on the right. A page
+  change is a full remount like every filter; a pagination click sets a
+  one-shot `sessionStorage` flag (`receiptHistoryFocusPageSummary`) so
+  that, once the new page has loaded, the list's top is scrolled into
+  view and focus moves to that summary (the browser's Back/Forward never
+  sets it). Changing the tab, Year, Status or Sort, and "Clear filters",
+  drop the page (back to page 1). "Show more", its append logic and its
+  error/Retry state are gone from History (Items keeps its own "Show
+  more"; review mode keeps its own 200-receipt snapshot). A
+  `requestIdRef` still guards the main load against stale replies. "Clear
   filters" shows only when a year/status select (not just an
   apartment tab) is active, and resets both, leaving the
   apartment tab alone, per spec. The plain "No receipts yet..." empty
@@ -475,7 +476,9 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   other empty result shows "No receipts match these filters." instead,
   relying on the one "Clear filters" button above rather than a second
   copy. Opening a receipt attaches `&from=<encoded search>` to
-  `?receipt=<id>` **only** when a tab/filter is actually active (so the
+  `?receipt=<id>` **only** when a tab/filter (or a non-default sort, or a
+  page past the first — so "Back to history" returns to the same page) is
+  actually active (so the
   unfiltered case's URL shape is byte-for-byte unchanged, keeping an
   existing test's exact-URL assertion intact); `ReceiptUpload.tsx`'s
   back link reads that `from` param (`getBackNavigation()`, renamed from

@@ -6,10 +6,10 @@ import type { ApartmentFacet, ReceiptSummary } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
 import { DateCell } from './ReceiptItems'
 import ReceiptFilters, { effectiveStatus, effectiveYear } from './ReceiptFilters'
-import Alert from './components/ui/Alert'
 import Button from './components/ui/Button'
 import { ApartmentPill } from './components/ui/ApartmentTone'
 import Card from './components/ui/Card'
+import Pagination from './components/ui/Pagination'
 import ClampedText from './components/ui/ClampedText'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
@@ -20,7 +20,8 @@ import { navigateTo, isPlainLeftClick } from './navigation'
 import { DEFAULT_RECEIPT_SORT, RECEIPT_SORT_OPTIONS, effectiveReceiptSort } from './historySort'
 
 const LOADING_ROW_COUNT = 4
-const PAGE_SIZE = 50
+/** Receipts per page (`&page=N` in the URL, omitted for page 1). */
+export const PAGE_SIZE = 12
 
 const HISTORY_DESCRIPTION = 'Browse every saved receipt, filtered by apartment, year or status.'
 
@@ -28,6 +29,20 @@ const NOT_DETECTED = 'Not detected'
 const NOT_ASSIGNED = 'Not assigned'
 
 const FOCUS_TAB_INDEX_SESSION_KEY = 'receiptHistoryFocusTabIndex'
+/** One-shot flag set by a pagination click, read once after the next mount:
+ * scroll to the top of the list and focus its summary (a page change is a
+ * full remount, like every other navigation here). Never set by the
+ * browser's own Back/Forward. */
+const FOCUS_PAGE_SUMMARY_SESSION_KEY = 'receiptHistoryFocusPageSummary'
+
+/** A `page` URL value as a page number: anything that isn't a whole number
+ * of 1 or more means page 1. (Too large is handled once the total is
+ * known: it becomes the last page.) */
+function parsePage(raw: string | null): number {
+  if (raw === null || !/^\d+$/.test(raw)) return 1
+  const page = Number(raw)
+  return page >= 1 ? page : 1
+}
 
 /** The apartment shows the short name visibly (same convenience as the
  * Items view's ApartmentCell and the upload form's apartment choice), but
@@ -209,6 +224,7 @@ interface HistoryUrlParams {
   year: string | null
   status: string | null
   sort: string | null
+  page: string | null
 }
 
 function readUrlParams(): HistoryUrlParams {
@@ -218,6 +234,7 @@ function readUrlParams(): HistoryUrlParams {
     year: params.get('year'),
     status: params.get('status'),
     sort: params.get('sort'),
+    page: params.get('page'),
   }
 }
 
@@ -231,6 +248,9 @@ function buildHistorySearch(params: HistoryUrlParams): string {
   // the Items view); an unknown value is dropped the same way.
   const sort = effectiveReceiptSort(params.sort)
   if (sort !== DEFAULT_RECEIPT_SORT) usp.set('sort', sort)
+  // Page 1 is never written; any other valid page is.
+  const page = parsePage(params.page)
+  if (page > 1) usp.set('page', String(page))
   return `?${usp.toString()}`
 }
 
@@ -245,15 +265,15 @@ function ReceiptHistory() {
   const [effectiveApartmentId, setEffectiveApartmentId] = useState<string | null>(null)
 
   const [items, setItems] = useState<ReceiptSummary[] | null>(null)
-  const [listCount, setListCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState(() => parsePage(urlParams.page))
   const [listTotal, setListTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
 
   const requestIdRef = useRef(0)
+  const listTopRef = useRef<HTMLDivElement>(null)
+  const summaryRef = useRef<HTMLParagraphElement>(null)
   const isSmallScreen = useMediaQuery('(max-width: 639px)')
 
   const year = effectiveYear(urlParams.year)
@@ -264,15 +284,11 @@ function ReceiptHistory() {
     let cancelled = false
     setIsLoading(true)
     setError(null)
-    setLoadMoreError(null)
 
     async function load() {
-      // A fresh requestId, shared with handleShowMore below: whichever
-      // request finishes last wins the id comparison, so a reply to an
-      // older request (e.g. one still in flight when the user filters
-      // again, which fully remounts this component anyway, or a slow
-      // "Show more" from a previous page) can never overwrite a newer
-      // result.
+      // A fresh requestId: a reply to an older request (e.g. one still in
+      // flight when the user filters again, which fully remounts this
+      // component anyway) can never overwrite a newer result.
       const requestId = ++requestIdRef.current
 
       try {
@@ -304,17 +320,32 @@ function ReceiptHistory() {
         setHasUndated(scopedHasUndated)
         setEffectiveApartmentId(apartmentId)
 
-        const response = await listReceipts({
+        const filters = {
           apartmentId: apartmentId ?? undefined,
           year: year ?? undefined,
           status: status ?? undefined,
           sort,
           limit: PAGE_SIZE,
-          offset: 0,
-        })
+        }
+        const requestedPage = parsePage(urlParams.page)
+        let page = requestedPage
+        let response = await listReceipts({ ...filters, offset: (page - 1) * PAGE_SIZE })
         if (cancelled || requestIdRef.current !== requestId) return
+
+        // A page past the end (e.g. a stale link after deletions) shows
+        // the last page instead, and the address bar is corrected in place.
+        const lastPage = Math.max(1, Math.ceil(response.total / PAGE_SIZE))
+        if (page > lastPage) {
+          page = lastPage
+          response = await listReceipts({ ...filters, offset: (page - 1) * PAGE_SIZE })
+          if (cancelled || requestIdRef.current !== requestId) return
+        }
+        if (page !== requestedPage || (urlParams.page !== null && String(page) !== urlParams.page)) {
+          window.history.replaceState(window.history.state, '', buildHistorySearch({ ...urlParams, page: String(page) }))
+        }
+
+        setCurrentPage(page)
         setItems(response.items)
-        setListCount(response.count)
         setListTotal(response.total)
       } catch (err) {
         if (cancelled || requestIdRef.current !== requestId) return
@@ -333,44 +364,36 @@ function ReceiptHistory() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadToken])
 
+  // After a pagination click (only then -- see FOCUS_PAGE_SUMMARY_SESSION_KEY),
+  // once the new page has loaded: bring the top of the list into view and
+  // move focus to the "Showing a–b of N" summary.
+  useEffect(() => {
+    if (isLoading || items === null) return
+    let flagged = false
+    try {
+      flagged = window.sessionStorage.getItem(FOCUS_PAGE_SUMMARY_SESSION_KEY) !== null
+      window.sessionStorage.removeItem(FOCUS_PAGE_SUMMARY_SESSION_KEY)
+    } catch {
+      flagged = false
+    }
+    if (!flagged) return
+    listTopRef.current?.scrollIntoView?.({ block: 'start' })
+    summaryRef.current?.focus({ preventScroll: true })
+  }, [isLoading, items])
+
   const retry = () => {
     setReloadToken((n) => n + 1)
   }
 
-  const handleShowMore = async () => {
-    const requestId = ++requestIdRef.current
-    setIsLoadingMore(true)
-    setLoadMoreError(null)
-
-    try {
-      const response = await listReceipts({
-        apartmentId: effectiveApartmentId ?? undefined,
-        year: year ?? undefined,
-        status: status ?? undefined,
-        sort,
-        limit: PAGE_SIZE,
-        offset: listCount,
-      })
-      if (requestIdRef.current !== requestId) return
-      setItems((prev) => [...(prev ?? []), ...response.items])
-      setListCount((prev) => prev + response.count)
-      setListTotal(response.total)
-    } catch (err) {
-      if (requestIdRef.current !== requestId) return
-      setLoadMoreError(err instanceof ApiError ? LIST_FAILED_MESSAGE : NETWORK_ERROR_MESSAGE)
-    } finally {
-      if (requestIdRef.current === requestId) setIsLoadingMore(false)
-    }
-  }
-
-  // Only carry a `from` param when a tab, filter or non-default sort is
-  // active -- the plain, unfiltered, default-sorted history view needs no
+  // Only carry a `from` param when a tab, filter, non-default sort or a
+  // page past the first is active (so "Back to history" returns to the
+  // same page) -- the plain, unfiltered, default-sorted history view needs no
   // round trip, and this keeps `?receipt=<id>` exactly as it was for that
   // common case. With `from`, "Back to history" returns to the same view,
   // and review mode's Previous/Next follow its order.
   const receiptHref = (receiptId: string): string => {
     const hasActiveFilterOrTab =
-      effectiveApartmentId !== null || anyFilterActive || sort !== DEFAULT_RECEIPT_SORT
+      effectiveApartmentId !== null || anyFilterActive || sort !== DEFAULT_RECEIPT_SORT || currentPage > 1
     const from = hasActiveFilterOrTab ? `&from=${encodeURIComponent(window.location.search)}` : ''
     return `/?receipt=${receiptId}${from}`
   }
@@ -387,26 +410,40 @@ function ReceiptHistory() {
     navigateTo('')
   }
 
+  // Every tab/filter/sort change starts again at page 1.
   const goToTab = (apartmentId: string | null) => {
-    navigateTo(buildHistorySearch({ ...urlParams, apartment: apartmentId }))
+    navigateTo(buildHistorySearch({ ...urlParams, apartment: apartmentId, page: null }))
   }
 
   const handleYearChange = (value: string) => {
-    navigateTo(buildHistorySearch({ ...urlParams, year: value || null }))
+    navigateTo(buildHistorySearch({ ...urlParams, year: value || null, page: null }))
   }
 
   const handleStatusChange = (value: string) => {
-    navigateTo(buildHistorySearch({ ...urlParams, status: value || null }))
+    navigateTo(buildHistorySearch({ ...urlParams, status: value || null, page: null }))
+  }
+
+  const pageHref = (page: number): string => `/${buildHistorySearch({ ...urlParams, page: String(page) })}`
+
+  const goToPage = (page: number) => {
+    try {
+      window.sessionStorage.setItem(FOCUS_PAGE_SUMMARY_SESSION_KEY, '1')
+    } catch {
+      // Storage unavailable: the page still changes, just without the focus move.
+    }
+    navigateTo(buildHistorySearch({ ...urlParams, page: String(page) }))
   }
 
   const handleSortChange = (value: string) => {
-    navigateTo(buildHistorySearch({ ...urlParams, sort: value }))
+    navigateTo(buildHistorySearch({ ...urlParams, sort: value, page: null }))
   }
 
   // Clears Year/Status only: the apartment tab and the sort (an ordering
   // preference, not a filter) stay.
   const handleClearFilters = () => {
-    navigateTo(buildHistorySearch({ apartment: urlParams.apartment, year: null, status: null, sort: urlParams.sort }))
+    navigateTo(
+      buildHistorySearch({ apartment: urlParams.apartment, year: null, status: null, sort: urlParams.sort, page: null }),
+    )
   }
 
   const tabs: { id: string | null; label: string; accessibleName?: string }[] = [
@@ -422,6 +459,10 @@ function ReceiptHistory() {
   const statusValue = status
 
   const anyFilterActive = yearValue !== null || statusValue !== null
+
+  const totalPages = Math.max(1, Math.ceil(listTotal / PAGE_SIZE))
+  const firstShown = listTotal === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
+  const lastShown = Math.min(currentPage * PAGE_SIZE, listTotal)
   const noticeBanner = notice ? <p className="text-sm text-green-600">{notice}</p> : null
 
   if (isLoading) {
@@ -502,11 +543,15 @@ function ReceiptHistory() {
       />
 
       <div className="flex items-center justify-between gap-2">
-        <p role="status" className="text-sm text-ink-muted">
-          {listCount < listTotal
-            ? `${listCount} of ${listTotal} receipts`
-            : `${listTotal} ${listTotal === 1 ? 'receipt' : 'receipts'}`}
-        </p>
+        {/* With one page, today's "N receipts"; with more, the count moves
+            to the "Showing a–b of N" line under the list. */}
+        {totalPages <= 1 ? (
+          <p role="status" className="text-sm text-ink-muted">
+            {`${listTotal} ${listTotal === 1 ? 'receipt' : 'receipts'}`}
+          </p>
+        ) : (
+          <span />
+        )}
         {anyFilterActive && (
           <Button variant="secondary" size="sm" onClick={handleClearFilters}>
             Clear filters
@@ -533,6 +578,7 @@ function ReceiptHistory() {
         )
       ) : (
         <>
+          <div ref={listTopRef} />
           <HistoryRowList
             header={
               isSmallScreen ? undefined : (
@@ -554,29 +600,24 @@ function ReceiptHistory() {
             ))}
           </HistoryRowList>
 
-          <div className="flex flex-col gap-2">
-            {loadMoreError && (
-              <>
-                <Alert variant="error">{loadMoreError}</Alert>
-                <Button variant="secondary" size="sm" className="self-start" onClick={handleShowMore}>
-                  Retry
-                </Button>
-              </>
-            )}
-            {!loadMoreError && listCount < listTotal && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="self-start"
-                onClick={handleShowMore}
-                disabled={isLoadingMore}
-                loading={isLoadingMore}
-                loadingText="Loading..."
+          {totalPages > 1 && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p
+                ref={summaryRef}
+                role="status"
+                tabIndex={-1}
+                className="text-sm text-ink-muted focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-brand"
               >
-                Show more
-              </Button>
-            )}
-          </div>
+                Showing {firstShown}–{lastShown} of {listTotal}
+              </p>
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                hrefForPage={pageHref}
+                onPageChange={goToPage}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

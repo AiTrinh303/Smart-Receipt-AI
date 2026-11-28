@@ -5,6 +5,7 @@ import Button from './components/ui/Button'
 import Card from './components/ui/Card'
 import PageHeader from './components/ui/PageHeader'
 import { ApartmentDot, ApartmentPill } from './components/ui/ApartmentTone'
+import Pagination from './components/ui/Pagination'
 import RadioCardGroup from './components/ui/RadioCardGroup'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
@@ -977,30 +978,22 @@ function StyleGuide() {
         </p>
       </Section>
 
-      <Section title='History summary line and "Show more" (not everything loaded / everything loaded / a failed page)'>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2">
-            <p role="status" className="text-sm text-ink-muted">
-              50 of 120 receipts
+      <Section title="History pages (Pagination -- 12 per page; first / a middle page / last; one page shows only &quot;N receipts&quot;)">
+        <p className="text-sm text-ink-muted">
+          Under the list: &quot;Showing a–b of N&quot; on the left, the pagination on the right. First, last,
+          current and its two neighbours are shown, &quot;…&quot; for gaps; the current page is filled and bold
+          and not a link. Below sm it becomes &quot;‹ Previous&quot;, &quot;Page N of M&quot;, &quot;Next ›&quot;.
+          These samples don&apos;t navigate.
+        </p>
+        {[1, 5, 8].map((page) => (
+          <div key={page} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-ink-muted">
+              Showing {(page - 1) * 12 + 1}–{Math.min(page * 12, 89)} of 89
             </p>
+            <Pagination currentPage={page} totalPages={8} hrefForPage={(n) => `#page-${n}`} onPageChange={() => {}} />
           </div>
-          <Button variant="secondary" size="sm" className="self-start">
-            Show more
-          </Button>
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <p role="status" className="text-sm text-ink-muted">
-            120 receipts
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Alert variant="error">Could not load receipt history. Please try again.</Alert>
-          <Button variant="secondary" size="sm" className="self-start">
-            Retry
-          </Button>
-        </div>
+        ))}
+        <p className="text-sm text-ink-muted">One page only (no pagination): &quot;9 receipts&quot;</p>
       </Section>
 
       <Section title="History tab bar and filters (ReceiptHistory -- All apartments / one apartment selected)">
