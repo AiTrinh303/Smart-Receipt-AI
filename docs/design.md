@@ -2775,6 +2775,43 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   from the two apartment cells added up; real receipt totals have two
   decimals.
 
+## Report export options: visible, compact choices above the buttons
+
+- **No more "Export options" `<details>`:** the Apartment and CSV format
+  choices are always visible, between the open-items note and the
+  download buttons, so it is obvious what the files will contain before
+  clicking.
+- **Compact radio groups** (`RadioCardGroup layout="inline"`, the receipt
+  detail's apartment choice): "Apartment" — "All apartments" (default),
+  then each apartment with its tone dot, short name visible, full name as
+  accessible name and `title`; "CSV format" — "German Excel" / "semicolon,
+  decimal comma" (default, `excel_de`) and "Plain CSV" / "comma, decimal
+  point" (`plain`). Visible legends, native radio arrow keys, 44px
+  targets below `sm`, wrapping on narrow screens; selection shown by the
+  check icon and weight, not colour alone.
+- **`RadioCardGroup` inline + `secondaryLabel`:** the inline layout now
+  shows a muted second line when an option has one (the CSV choices);
+  without one it renders exactly as before (the receipt detail).
+- **Summary next to the buttons** follows the choices: "2026 · All
+  apartments · German Excel" (short apartment name), replacing "2026, all
+  receipts".
+- **Unchanged:** component state only (never the URL); the hrefs are
+  built exactly as before.
+- **Tests changed (`ReceiptReport.test.tsx`):** "the two links have the
+  exact hrefs…" and "a basis param…" (the text next to the links is now
+  the choice summary, not "2026, all receipts"); "choosing an apartment…",
+  "choosing the plain format…" and "no fetch is ever made…" (they picked
+  options in the removed `<select>`s; now they click the radios, and the
+  first two also check the summary); "the export card comes last…" (it
+  asserted the closed "Export options" `<details>`; now it asserts both
+  groups are visible with their defaults, between the note and the
+  buttons). New: the apartment group (order, dots, short name, full
+  accessible name/title, one radio name, 44px), the summary with the
+  short name, the CSV group (second lines, values, arrow keys), and
+  `RadioCardGroup.test.tsx` (inline with and without a second line).
+- **`?view=styleguide`:** both groups with each choice selected, statically,
+  plus the live export cards.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
@@ -3001,6 +3038,12 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   upload form) that already shows its own visible heading above the
   group and would otherwise repeat the legend's text; every other caller
   omits it and keeps the legend visible, as before.
+  `layout="inline"`: one compact line (a floated visible legend, then
+  small pills that wrap) — the receipt detail's apartment choice and the
+  Report's export choices. An inline option with a `secondaryLabel`
+  shows it as a muted `text-xs` second line inside its pill, which then
+  grows from `min-h-[44px] sm:min-h-10` instead of the fixed `h-11
+  sm:h-10`; without one, a pill is unchanged.
 - **`formatFileSize`** — formats a byte count as `B`/`KB`/`MB`/`GB` for
   display next to a selected file.
 - **`PageHeader`** — `title` (rendered as the view's one `<h1>`,

@@ -839,17 +839,26 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   keeps the chosen apartment and CSV style in its own component state —
   deliberately never written to the URL or persisted across a reload,
   unlike Year, since this is a one-off export choice rather than a
-  saved view. The "Apartment" select ("All apartments" plus each
-  apartment from `useApartments(true)`, short name visible via
-  `apartmentShortName`, full name in the option's `title`) and "CSV
-  format" select ("German Excel (semicolon, decimal comma)", the
-  default value `"excel_de"`, or "Plain (comma, decimal point)",
-  `"plain"`) sit in a closed `<details>` "Export options" below the two
-  links (ZIP primary, CSV secondary), since the defaults fit almost
-  every export; the Year is read from the surrounding view, never
-  duplicated here, and also shown as plain text next to the links
-  ("`2026, all receipts`"), so a Year change (a full remount, like every
-  other filter in this app) updates both the hrefs and that text
+  saved view. The two choices are always visible, between the
+  open-items note and the download buttons (the former closed "Export
+  options" `<details>` is gone): two compact one-line radio groups, the
+  same `RadioCardGroup layout="inline"` as the receipt detail's
+  apartment choice, each with its visible legend, native arrow-key
+  movement, 44px targets below `sm`, wrapping on narrow screens.
+  "Apartment" (`name="report-export-apartment"`): "All apartments"
+  (value `""`, the default), then each apartment from
+  `useApartments(true)` with its `ApartmentDot`, short name visible via
+  `apartmentShortName`, full name as the radio's accessible name and the
+  pill's `title`. "CSV format" (`EXPORT_STYLE_OPTIONS`,
+  `name="report-export-style"`): "German Excel" / muted "semicolon,
+  decimal comma" (`"excel_de"`, the default) and "Plain CSV" / muted
+  "comma, decimal point" (`"plain"`). The Year is read from the
+  surrounding view, never duplicated here. Next to the links,
+  `exportSummaryText` shows a line that follows the choices: "`2026 ·
+  All apartments · German Excel`" (the apartment's short name, the
+  format's label), so a Year change (a full remount, like every other
+  filter in this app) or a new choice updates both the hrefs and that
+  text together; the hrefs are built exactly as before.
   together. When there is no
   year to export at all (`year === null` — no dated receipts, the same
   condition that already shows "No dated receipts yet..." instead of

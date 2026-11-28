@@ -18,6 +18,7 @@ import { formatDisplayDate } from './format/formatDisplayDate'
 import { ApartmentDot } from './components/ui/ApartmentTone'
 import Card from './components/ui/Card'
 import PageHeader from './components/ui/PageHeader'
+import RadioCardGroup from './components/ui/RadioCardGroup'
 import Select from './components/ui/Select'
 import Skeleton from './components/ui/Skeleton'
 import { formatMoneyFromString, currencySymbol } from './components/ui/formatMoney'
@@ -446,10 +447,6 @@ const DETAILS_SUMMARY_CLASSES =
   'cursor-pointer select-none text-sm font-semibold text-ink focus-visible:outline ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
 
-const EXPORT_SELECT_CLASSES =
-  'h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink ' +
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
-
 const EXPORT_LINK_BASE =
   'inline-flex min-h-[44px] flex-shrink-0 items-center justify-center gap-1.5 rounded-control px-4 ' +
   'text-sm font-semibold transition-colors duration-150 motion-reduce:transition-none sm:min-h-0 sm:h-10'
@@ -470,8 +467,25 @@ const EXPORT_SECONDARY_DISABLED_CLASSES =
 const EXPORT_NOTHING_TO_EXPORT_TEXT = 'Nothing to export yet.'
 const EXPORT_PRIVACY_TEXT = 'The ZIP contains personal data and is not encrypted; send it only to your tax advisor.'
 
-function exportPeriodText(year: number): string {
-  return `${year}, all receipts`
+/** The CSV format choices: the same `excel_de`/`plain` values the export
+ * endpoints accept, each with a muted second line. */
+const EXPORT_STYLE_OPTIONS: { value: ExportStyle; label: string; secondaryLabel: string }[] = [
+  { value: 'excel_de', label: 'German Excel', secondaryLabel: 'semicolon, decimal comma' },
+  { value: 'plain', label: 'Plain CSV', secondaryLabel: 'comma, decimal point' },
+]
+
+/** "2026 · All apartments · German Excel" next to the buttons -- follows
+ * the two choices (the apartment's short name). */
+function exportSummaryText(
+  year: number | null,
+  apartmentId: string,
+  style: ExportStyle,
+  apartments: Apartment[] | null,
+): string {
+  const apartment = apartments?.find((a) => a.id === apartmentId)
+  const apartmentText = apartment ? (apartmentShortName(apartment.name) ?? apartment.name) : 'All apartments'
+  const styleText = EXPORT_STYLE_OPTIONS.find((option) => option.value === style)?.label ?? style
+  return `${year} · ${apartmentText} · ${styleText}`
 }
 
 /** "For your tax advisor": the CSV/ZIP download controls below the yearly
@@ -649,51 +663,40 @@ export function ExportCard({ year, apartments, openItems }: ExportCardProps) {
 
       {year !== null && openItems && <ExportNote year={year} items={openItems} />}
 
-      {exportLinks(year, style, apartmentId)}
+      {/* The two choices, always visible, between the note and the
+          buttons: compact one-line radio groups (the receipt detail's
+          apartment choice), wrapping on narrow screens. Component state
+          only, never the URL. */}
+      <div className="flex flex-col gap-3">
+        <RadioCardGroup
+          layout="inline"
+          legend="Apartment"
+          name="report-export-apartment"
+          options={[
+            { value: '', label: 'All apartments' },
+            ...(apartments ?? []).map((apartment) => ({
+              value: apartment.id,
+              label: apartmentShortName(apartment.name) ?? apartment.name,
+              accessibleName: apartment.name,
+              leading: <ApartmentDot apartmentId={apartment.id} />,
+            })),
+          ]}
+          value={apartmentId}
+          onChange={setApartmentId}
+        />
+        <RadioCardGroup
+          layout="inline"
+          legend="CSV format"
+          name="report-export-style"
+          options={EXPORT_STYLE_OPTIONS}
+          value={style}
+          onChange={(value) => setStyle(value as ExportStyle)}
+        />
+      </div>
+
+      {exportLinks(year, style, apartmentId, exportSummaryText(year, apartmentId, style, apartments))}
 
       {year === null && <p className="text-sm text-ink-muted">{EXPORT_NOTHING_TO_EXPORT_TEXT}</p>}
-
-      {/* The defaults (all apartments, German Excel CSV) fit almost every
-          export, so the two choices start folded away. Closing the panel
-          keeps the chosen values. */}
-      <details className="flex flex-col gap-3">
-        <summary className={DETAILS_SUMMARY_CLASSES}>Export options</summary>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="report-export-apartment-select" className="text-sm font-medium text-ink">
-            Apartment
-          </label>
-          <select
-            id="report-export-apartment-select"
-            value={apartmentId}
-            onChange={(e) => setApartmentId(e.target.value)}
-            className={EXPORT_SELECT_CLASSES}
-          >
-            <option value="">All apartments</option>
-            {(apartments ?? []).map((apartment) => (
-              <option key={apartment.id} value={apartment.id} title={apartment.name}>
-                {apartmentShortName(apartment.name) ?? apartment.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label htmlFor="report-export-style-select" className="text-sm font-medium text-ink">
-            CSV format
-          </label>
-          <select
-            id="report-export-style-select"
-            value={style}
-            onChange={(e) => setStyle(e.target.value as ExportStyle)}
-            className={EXPORT_SELECT_CLASSES}
-          >
-            <option value="excel_de">German Excel (semicolon, decimal comma)</option>
-            <option value="plain">Plain (comma, decimal point)</option>
-          </select>
-        </div>
-      </div>
-      </details>
 
       <p className="text-sm text-ink-muted">{EXPORT_PRIVACY_TEXT}</p>
     </Card>
@@ -702,7 +705,7 @@ export function ExportCard({ year, apartments, openItems }: ExportCardProps) {
 
 /** The ZIP (primary) and CSV (secondary) download links -- plain `<a
  * href>`s, or disabled spans when there is no year to export. */
-function exportLinks(year: number | null, style: ExportStyle, apartmentId: string) {
+function exportLinks(year: number | null, style: ExportStyle, apartmentId: string, summary: string) {
   return (
       <div className="flex flex-wrap items-center gap-3">
         {year === null ? (
@@ -732,7 +735,7 @@ function exportLinks(year: number | null, style: ExportStyle, apartmentId: strin
               <DownloadIcon />
               Download CSV only
             </a>
-            <span className="text-sm text-ink-muted">{exportPeriodText(year)}</span>
+            <span className="text-sm text-ink-muted">{summary}</span>
           </>
         )}
       </div>

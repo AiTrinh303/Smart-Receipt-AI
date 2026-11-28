@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { chooseOption, selectControl, selectValue } from './test/select'
-import ReceiptReport, { MonthlyCurrencyTable } from './ReceiptReport'
+import ReceiptReport, { ExportCard, MonthlyCurrencyTable } from './ReceiptReport'
 import { SAMPLE_APARTMENTS, clearApartmentsCache, withApartments } from './test/apartmentsFetch'
 import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
 
@@ -945,7 +945,7 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
       'href',
       `${API_URL}/reports/yearly/export.csv?year=2026&style=excel_de`,
     )
-    expect(screen.getByText('2026, all receipts')).toBeInTheDocument()
+    expect(screen.getByText('2026 · All apartments · German Excel')).toBeInTheDocument()
   })
 
   test('changing the year updates both hrefs', async () => {
@@ -963,7 +963,7 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     )
   })
 
-  test('a basis param in the URL never reaches the export links; they say "all receipts"', async () => {
+  test('a basis param in the URL never reaches the export links', async () => {
     // Given an old bookmark with basis=approved
     window.history.replaceState({}, '', '/?view=report&year=2026&basis=approved')
     await renderReady()
@@ -971,17 +971,21 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     // Then the links carry no basis, and there is no checkbox to switch it
     expect(zipLink()).toHaveAttribute('href', `${API_URL}/reports/yearly/export.zip?year=2026&style=excel_de`)
     expect(csvLink()).toHaveAttribute('href', `${API_URL}/reports/yearly/export.csv?year=2026&style=excel_de`)
-    expect(screen.getByText('2026, all receipts')).toBeInTheDocument()
-    expect(screen.queryByText('2026, approved receipts only')).not.toBeInTheDocument()
+    expect(screen.getByText('2026 · All apartments · German Excel')).toBeInTheDocument()
+    expect(screen.queryByText(/approved receipts only/)).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 
-  test('choosing an apartment adds apartment_id to both hrefs', async () => {
+  test('choosing an apartment adds apartment_id to both hrefs and the summary follows', async () => {
+    // Given the export card with its defaults (All apartments)
     await renderReady()
-    await waitFor(() => {
-      expect(screen.getByLabelText('Apartment')).toHaveValue('')
-    })
-    await userEvent.selectOptions(screen.getByLabelText('Apartment'), SAMPLE_APARTMENTS[0].id)
+    const user = userEvent.setup()
+    expect(screen.getByRole('radio', { name: 'All apartments' })).toBeChecked()
+
+    // When an apartment is chosen
+    await user.click(screen.getByRole('radio', { name: SAMPLE_APARTMENTS[0].name }))
+
+    // Then both hrefs carry its id, exactly as before, and the summary names it
     expect(zipLink()).toHaveAttribute(
       'href',
       `${API_URL}/reports/yearly/export.zip?year=2026&style=excel_de&apartment_id=${SAMPLE_APARTMENTS[0].id}`,
@@ -990,21 +994,35 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
       'href',
       `${API_URL}/reports/yearly/export.csv?year=2026&style=excel_de&apartment_id=${SAMPLE_APARTMENTS[0].id}`,
     )
+    expect(screen.getByText(`2026 · ${SAMPLE_APARTMENTS[0].name} · German Excel`)).toBeInTheDocument()
+
+    // When All apartments is chosen again
+    await user.click(screen.getByRole('radio', { name: 'All apartments' }))
+
+    // Then apartment_id is gone again
+    expect(zipLink()).toHaveAttribute('href', `${API_URL}/reports/yearly/export.zip?year=2026&style=excel_de`)
   })
 
-  test('choosing the plain format sends style=plain; the default sends style=excel_de', async () => {
+  test('choosing the plain format sends style=plain; the default sends style=excel_de; the summary follows', async () => {
+    // Given the default German Excel choice
     await renderReady()
+    expect(screen.getByRole('radio', { name: 'German Excel' })).toBeChecked()
     expect(zipLink()).toHaveAttribute('href', expect.stringContaining('style=excel_de'))
 
-    await userEvent.selectOptions(screen.getByLabelText('CSV format'), 'plain')
+    // When Plain CSV is chosen
+    await userEvent.setup().click(screen.getByRole('radio', { name: 'Plain CSV' }))
+
+    // Then both links send style=plain and the summary says so
     expect(zipLink()).toHaveAttribute('href', expect.stringContaining('style=plain'))
     expect(csvLink()).toHaveAttribute('href', expect.stringContaining('style=plain'))
+    expect(screen.getByText('2026 · All apartments · Plain CSV')).toBeInTheDocument()
   })
 
   test('no fetch is ever made for the export links -- only /reports/years and /reports/yearly and /apartments', async () => {
     await renderReady()
-    await userEvent.selectOptions(screen.getByLabelText('CSV format'), 'plain')
-    await userEvent.selectOptions(screen.getByLabelText('Apartment'), SAMPLE_APARTMENTS[0].id)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('radio', { name: 'Plain CSV' }))
+    await user.click(screen.getByRole('radio', { name: SAMPLE_APARTMENTS[0].name }))
     for (const [url] of fetchSpy.mock.calls) {
       expect(String(url)).not.toContain('/export.')
     }
@@ -1028,7 +1046,7 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     }
   })
 
-  test('the export card comes last before the VAT note: ZIP primary, CSV secondary, options folded away, privacy note kept, no "not reviewed" line', async () => {
+  test('the export card comes last before the VAT note: ZIP primary, CSV secondary, the choices visible above the buttons, privacy note kept, no "not reviewed" line', async () => {
     // Given a year with unreviewed receipts
     fetchSpy.mockImplementation(
       withApartments(
@@ -1042,11 +1060,17 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     // Then ZIP is the primary link and CSV the secondary one
     expect(zipLink().className).toMatch(/\bbg-brand\b/)
     expect(csvLink().className).not.toMatch(/\bbg-brand\b/)
-    // And the two selects sit in a closed "Export options" <details>
-    const options = screen.getByText('Export options').closest('details') as HTMLDetailsElement
-    expect(options.open).toBe(false)
-    expect(within(options).getByLabelText('Apartment')).toHaveValue('')
-    expect(within(options).getByLabelText('CSV format')).toHaveValue('excel_de')
+    // And there is no "Export options" <details> any more: both groups are visible, with their defaults,
+    // between the open-items note and the buttons
+    expect(screen.queryByText('Export options')).not.toBeInTheDocument()
+    const apartmentGroup = screen.getByRole('radiogroup', { name: 'Apartment' })
+    const styleGroup = screen.getByRole('radiogroup', { name: 'CSV format' })
+    expect(apartmentGroup.closest('details')).toBeNull()
+    expect(within(apartmentGroup).getByRole('radio', { name: 'All apartments' })).toBeChecked()
+    expect(within(styleGroup).getByRole('radio', { name: 'German Excel' })).toBeChecked()
+    const note = screen.getByText(/3 not reviewed/)
+    expect(note.compareDocumentPosition(apartmentGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(styleGroup.compareDocumentPosition(zipLink()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // And the privacy note stays, the old "not reviewed" note is gone
     expect(
       screen.getByText('The ZIP contains personal data and is not encrypted; send it only to your tax advisor.'),
@@ -1056,6 +1080,87 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     const exportHeading = screen.getByRole('heading', { name: 'For your tax advisor' })
     const exportCard = exportHeading.parentElement as HTMLElement
     expect(exportCard.nextElementSibling?.textContent).toMatch(/^Totals are the amounts printed/)
+  })
+
+  test('the apartment group: All apartments, then each apartment with its dot, short name visible, full name as accessible name/title', () => {
+    // Given the real-style apartment names
+    render(
+      <ExportCard
+        year={2026}
+        apartments={[
+          { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick' },
+          { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück' },
+        ]}
+      />,
+    )
+
+    // Then the group's visible legend is "Apartment" and the options come in order
+    const group = screen.getByRole('radiogroup', { name: 'Apartment' })
+    expect(within(group).getByText('Apartment').tagName).toBe('LEGEND')
+    const radios = within(group).getAllByRole('radio')
+    expect(radios.map((radio) => radio.getAttribute('aria-label'))).toEqual([
+      'All apartments',
+      'Fewo JoJo - Oberaudorf - Bergblick',
+      'Fewo JoJo - Sankt Englmar - Waldglück',
+    ])
+    // And an apartment shows its short name and a tone dot, with the full name as title
+    const bergblick = radios[1].closest('label') as HTMLElement
+    expect(bergblick).toHaveTextContent('Bergblick')
+    expect(bergblick).not.toHaveTextContent('Fewo JoJo')
+    expect(bergblick).toHaveAttribute('title', 'Fewo JoJo - Oberaudorf - Bergblick')
+    expect(bergblick.querySelector('span[aria-hidden="true"].rounded-full')).not.toBeNull()
+    // And "All apartments" has no dot
+    expect((radios[0].closest('label') as HTMLElement).querySelector('.rounded-full')).toBeNull()
+    // And the radios share one name (native arrow-key movement), with 44px targets below sm
+    expect(new Set(radios.map((radio) => radio.getAttribute('name')))).toEqual(new Set(['report-export-apartment']))
+    expect(bergblick).toHaveClass('h-11', 'sm:h-10')
+  })
+
+  test('the summary uses the short apartment name: "2026 · Waldglück · Plain CSV"', async () => {
+    // Given the real-style apartment names
+    const user = userEvent.setup()
+    render(
+      <ExportCard
+        year={2026}
+        apartments={[
+          { id: 'oberaudorf-bergblick', name: 'Fewo JoJo - Oberaudorf - Bergblick' },
+          { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück' },
+        ]}
+      />,
+    )
+    expect(screen.getByText('2026 · All apartments · German Excel')).toBeInTheDocument()
+
+    // When Waldglück and Plain CSV are chosen
+    await user.click(screen.getByRole('radio', { name: 'Fewo JoJo - Sankt Englmar - Waldglück' }))
+    await user.click(screen.getByRole('radio', { name: 'Plain CSV' }))
+
+    // Then the summary follows both choices, with the short name
+    expect(screen.getByText('2026 · Waldglück · Plain CSV')).toBeInTheDocument()
+  })
+
+  test('the CSV format group: German Excel and Plain CSV, each with a muted second line; arrow keys move like native radios', async () => {
+    render(<ExportCard year={2026} apartments={[]} />)
+
+    // Then each option shows its label and a muted second line
+    const group = screen.getByRole('radiogroup', { name: 'CSV format' })
+    const excel = within(group).getByRole('radio', { name: 'German Excel' }).closest('label') as HTMLElement
+    const plain = within(group).getByRole('radio', { name: 'Plain CSV' }).closest('label') as HTMLElement
+    expect(within(excel).getByText('semicolon, decimal comma')).toHaveClass('text-xs', 'text-ink-muted')
+    expect(within(plain).getByText('comma, decimal point')).toHaveClass('text-xs', 'text-ink-muted')
+    // And the two-line pills keep a 44px minimum below sm
+    expect(excel).toHaveClass('min-h-[44px]')
+    // And the values are the same excel_de / plain as before
+    expect(within(group).getByRole('radio', { name: 'German Excel' })).toHaveAttribute('value', 'excel_de')
+    expect(within(group).getByRole('radio', { name: 'Plain CSV' })).toHaveAttribute('value', 'plain')
+
+    // When the checked radio gets focus and ArrowRight is pressed
+    const user = userEvent.setup()
+    within(group).getByRole('radio', { name: 'German Excel' }).focus()
+    await user.keyboard('{ArrowRight}')
+
+    // Then Plain CSV is chosen, like a native radio group
+    expect(within(group).getByRole('radio', { name: 'Plain CSV' })).toBeChecked()
+    expect(screen.getByText('2026 · All apartments · Plain CSV')).toBeInTheDocument()
   })
 
   test('counted_unreviewed = 0 under basis all shows no "not reviewed" line', async () => {

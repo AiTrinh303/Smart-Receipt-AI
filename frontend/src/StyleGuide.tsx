@@ -23,6 +23,7 @@ import { exportOpenItems } from './reportOpenItems'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
 import type { ItemRow, ReceiptSummary, ReportApartmentSummary, ReportCurrencyTotal, YearlyReport } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
+import { apartmentShortName } from './format/apartmentShortName'
 import { apartmentToneClasses } from './format/apartmentTone'
 import { RECEIPT_SORT_OPTIONS } from './historySort'
 
@@ -1739,7 +1740,53 @@ function StyleGuide() {
           />
         </div>
 
-        <p className="text-sm font-medium text-ink">Export card -- with things still open</p>
+        <p className="text-sm text-ink-muted">
+          Export choices: always visible between the open-items note and the buttons -- two compact one-line
+          radio groups (the receipt detail's inline RadioCardGroup), wrapping on narrow screens, legend as the
+          visible label, arrow keys like native radios, 44px targets below sm. The text next to the buttons
+          follows them: "2026 · All apartments · German Excel". Each choice, static:
+        </p>
+        <div className="flex flex-col gap-3">
+          {[
+            { key: 'all', value: '' },
+            { key: 'bergblick', value: 'oberaudorf-bergblick' },
+            { key: 'waldglueck', value: 'sankt-englmar-waldglueck' },
+          ].map((sample) => (
+            <RadioCardGroup
+              key={sample.key}
+              layout="inline"
+              legend="Apartment"
+              name={`styleguide-export-apartment-${sample.key}`}
+              options={[
+                { value: '', label: 'All apartments' },
+                ...SAMPLE_EXPORT_APARTMENTS.map((apartment) => ({
+                  value: apartment.id,
+                  label: apartmentShortName(apartment.name) ?? apartment.name,
+                  accessibleName: apartment.name,
+                  leading: <ApartmentDot apartmentId={apartment.id} />,
+                })),
+              ]}
+              value={sample.value}
+              onChange={() => {}}
+            />
+          ))}
+          {(['excel_de', 'plain'] as const).map((value) => (
+            <RadioCardGroup
+              key={value}
+              layout="inline"
+              legend="CSV format"
+              name={`styleguide-export-style-${value}`}
+              options={[
+                { value: 'excel_de', label: 'German Excel', secondaryLabel: 'semicolon, decimal comma' },
+                { value: 'plain', label: 'Plain CSV', secondaryLabel: 'comma, decimal point' },
+              ]}
+              value={value}
+              onChange={() => {}}
+            />
+          ))}
+        </div>
+
+        <p className="text-sm font-medium text-ink">Export card -- with things still open (the choices work for real)</p>
         <ExportCard
           year={2026}
           apartments={SAMPLE_EXPORT_APARTMENTS}

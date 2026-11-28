@@ -33,11 +33,20 @@ interface RadioCardGroupProps {
   hideLegend?: boolean
   /** `cards` (default): the large selectable cards, one per row below `sm`.
    * `inline`: one compact line -- the legend as a visible label, then small
-   * pill-shaped options (label only; `secondaryLabel` is not shown), for
-   * places where the choice is secondary to the page (the saved-receipt
-   * view). Same radios, same keyboard behavior, same accessible names. */
+   * pill-shaped options, for places where the choice is secondary to the
+   * page (the saved-receipt view, the Report's export choices). An option
+   * with a `secondaryLabel` shows it as a muted second line inside its
+   * pill (the pill grows from a fixed height to a min-height for it);
+   * without one, a pill is exactly as before. Same radios, same keyboard
+   * behavior, same accessible names. */
   layout?: 'cards' | 'inline'
 }
+
+/** Complete static strings: a one-line inline pill keeps its fixed 44px
+ * (40px from `sm`) height; a two-line one (label + muted secondary line)
+ * gets the same values as a minimum, plus a little vertical padding. */
+const INLINE_ONE_LINE_HEIGHT_CLASSES = 'h-11 sm:h-10'
+const INLINE_TWO_LINE_HEIGHT_CLASSES = 'min-h-[44px] py-1 sm:min-h-10'
 
 function CheckIcon() {
   return (
@@ -94,17 +103,29 @@ function RadioCardGroup({
           {options.map((option) => {
             const checked = value === option.value
             const accessibleName = option.accessibleName ?? option.label
+            const hasSecondary = Boolean(option.secondaryLabel)
             return (
               <label
                 key={option.value}
                 title={accessibleName}
-                className={`inline-flex h-11 max-w-[14rem] items-center gap-1.5 rounded-control border px-3 text-sm transition-colors duration-150 motion-reduce:transition-none focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand sm:h-10 ${
+                className={`inline-flex max-w-[14rem] items-center gap-1.5 rounded-control border px-3 text-sm transition-colors duration-150 motion-reduce:transition-none focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand ${
+                  hasSecondary ? INLINE_TWO_LINE_HEIGHT_CLASSES : INLINE_ONE_LINE_HEIGHT_CLASSES
+                } ${
                   checked ? 'border-brand bg-brand-subtle font-semibold text-ink' : 'border-border font-normal text-ink'
                 } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-brand'}`}
               >
                 {checked && <CheckIcon />}
                 {option.leading}
-                <span className="truncate">{option.label}</span>
+                {hasSecondary ? (
+                  <span className="min-w-0">
+                    <span className="block truncate leading-5">{option.label}</span>
+                    <span className="block truncate text-xs font-normal leading-4 text-ink-muted">
+                      {option.secondaryLabel}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="truncate">{option.label}</span>
+                )}
                 <input
                   type="radio"
                   name={name}
