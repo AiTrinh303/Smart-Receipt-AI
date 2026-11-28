@@ -159,14 +159,16 @@ function LatestUploadRow({ receipt }: { receipt: ReceiptSummary }) {
   )
 }
 
-/** The panel for a returning user: "How it works and tips" (closed) at
+/** The panel for a returning user: "How it works and tips" (open) at
  * the top, then "Latest uploads" (the panel's heading) with the 5 newest
  * uploads, then links on to History and the yearly Report. Presentational
  * (exported for the style guide and tests). */
 export function ReceiptsOverview({ latest }: { latest: ReceiptSummary[] }) {
   return (
     <Card className={PANEL_CLASSES}>
-      <details className="group border-b border-border-subtle pb-4 text-sm">
+      {/* Open by default (the owner can close it; nothing is remembered
+          across reloads). The below-lg TipsDetails in the form stays closed. */}
+      <details className="group border-b border-border-subtle pb-4 text-sm" open>
         <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 rounded-sm font-medium text-ink [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
           <svg
             aria-hidden="true"

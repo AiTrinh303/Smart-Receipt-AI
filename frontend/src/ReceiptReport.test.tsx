@@ -264,13 +264,13 @@ describe('ReceiptReport', () => {
     expect(screen.getByText('No receipts in 2026.')).toBeInTheDocument()
   })
 
-  test('"Show by month" is a closed text-style disclosure (rotating chevron) right under the summary cards', async () => {
+  test('"Show by month" is a text-style disclosure (rotating chevron), open by default, right under the summary cards', async () => {
     render(<ReceiptReport />)
     const summaryText = await screen.findByText('Show by month')
 
-    // Then it's a closed <details> placed directly after the summary cards
+    // Then it's a <details>, open by default, placed directly after the summary cards
     const details = summaryText.closest('details') as HTMLDetailsElement
-    expect(details.open).toBe(false)
+    expect(details.open).toBe(true)
     expect(details).toHaveClass('group')
     expect(details.previousElementSibling).toContainElement(screen.getByRole('heading', { name: 'Both apartments' }))
     // And its summary is the same text-style control as "How it works and tips": no marker, a chevron that
@@ -280,6 +280,29 @@ describe('ReceiptReport', () => {
     const chevron = summary.querySelector('svg') as SVGElement
     expect(chevron).toHaveAttribute('aria-hidden', 'true')
     expect(chevron).toHaveClass('group-open:rotate-90')
+  })
+
+  test('"Show by month" starts open and can still be closed; a new mount (reload) is open again', async () => {
+    // Given the report
+    const user = userEvent.setup()
+    const { unmount } = render(<ReceiptReport />)
+    const summary = (await screen.findByText('Show by month')).closest('summary') as HTMLElement
+    const details = summary.closest('details') as HTMLDetailsElement
+    expect(details.open).toBe(true)
+
+    // When the owner closes it
+    await user.click(summary)
+
+    // Then it is closed
+    expect(details.open).toBe(false)
+
+    // When the page mounts again (a reload)
+    unmount()
+    render(<ReceiptReport />)
+
+    // Then it is open again -- no state is remembered
+    const again = (await screen.findByText('Show by month')).closest('details') as HTMLDetailsElement
+    expect(again.open).toBe(true)
   })
 
   test('the monthly table: a full-width table-fixed table in a Card, four equal columns (Month, each apartment with its dot, Both apartments), right-aligned € amounts, muted dash and empty months, and a Total row from the summary', async () => {

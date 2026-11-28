@@ -144,15 +144,15 @@ test.each([
   expect(screen.queryByText('Latest uploads')).not.toBeInTheDocument()
 })
 
-test('the overview reads top to bottom: closed "How it works and tips", the "Latest uploads" heading and rows, then the two links', async () => {
+test('the overview reads top to bottom: "How it works and tips" (open by default), the "Latest uploads" heading and rows, then the two links', async () => {
   // Given saved receipts
   routeFetch({ receipts: okReceipts() })
   render(<UploadSidePanel />)
   const list = await latestList()
 
-  // Then the help is a closed <details> at the top, its text present exactly once
+  // Then the help is a <details> at the top, open by default, its text present exactly once
   const details = screen.getByText('How it works and tips').closest('details') as HTMLDetailsElement
-  expect(details.open).toBe(false)
+  expect(details.open).toBe(true)
   expect(screen.getAllByText('Lay the receipt flat.')).toHaveLength(1)
   expect(within(details).getByText('Choose the apartment.')).toBeInTheDocument()
 
@@ -274,4 +274,30 @@ test('ReceiptsOverview renders with just the latest uploads (no facets prop)', (
   // Then its heading and row are there
   expect(screen.getByRole('heading', { level: 2, name: 'Latest uploads' })).toBeInTheDocument()
   expect(screen.getByText('Edeka')).toBeInTheDocument()
+})
+
+test('"How it works and tips" starts open and can still be closed (nothing remembered: a new mount is open again)', async () => {
+  // Given the overview with saved receipts
+  routeFetch({ receipts: okReceipts() })
+  const user = userEvent.setup()
+  const { unmount } = render(<UploadSidePanel />)
+  await latestList()
+  const summary = screen.getByText('How it works and tips').closest('summary') as HTMLElement
+  const details = summary.closest('details') as HTMLDetailsElement
+  expect(details.open).toBe(true)
+
+  // When the owner closes it
+  await user.click(summary)
+
+  // Then it is closed
+  expect(details.open).toBe(false)
+
+  // When the panel mounts again (a reload)
+  unmount()
+  routeFetch({ receipts: okReceipts() })
+  render(<UploadSidePanel />)
+  await latestList()
+
+  // Then it is open again -- no state is remembered
+  expect((screen.getByText('How it works and tips').closest('details') as HTMLDetailsElement).open).toBe(true)
 })

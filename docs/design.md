@@ -2249,7 +2249,7 @@ place that says whether it's safe to send, and the export.
   "not in totals" bucket. A clear check is one success row; all clear is
   one success `Alert`, "Ready to send: every receipt of <year> is
   reviewed and counted."
-- **Monthly breakdown:** closed `<details>`; all 12 months, a dash where
+- **Monthly breakdown:** closed `<details>` *(open by default since CE)*; all 12 months, a dash where
   empty; no currency sub-heading with a single currency.
 - **Export card last:** ZIP primary, CSV secondary (unchanged), the
   Apartment/CSV-format selects folded into a closed "Export options"
@@ -2366,7 +2366,7 @@ itself; that part was verified by hand, as above.)
   be empty -- then one line per non-zero "not in these totals" bucket
   with today's texts and the "no valid date" link. Each line has the
   warning icon + words. Nothing when all is zero.
-- **"Show by month":** the monthly tables in a closed `<details>`
+- **"Show by month":** the monthly tables in a closed `<details>` *(open by default since CE)*
   directly under the summary cards, no card of its own; same content.
 - **Privacy note:** one sentence, "The ZIP contains personal data and is
   not encrypted; send it only to your tax advisor." (it also used to say
@@ -2468,7 +2468,7 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   dropzone takes up the spare height and both cards end on one line.
   With a long batch queue the form grows and the panel stretches with it.
   Below `lg`: unchanged (no panel, `TipsDetails` under the dropzone).
-- **Side panel:** "How it works and tips" (closed) at the top, then
+- **Side panel:** "How it works and tips" (closed; *open by default since CE*) at the top, then
   "Latest uploads" as the panel's `<h2>` with the same 5 rows, then the
   History and yearly-report links. Removed: "Your receipts", "N receipts
   saved", the per-apartment count links, and with them the
@@ -2840,6 +2840,25 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   `RadioCardGroup` grid-layout test.
 - **`?view=styleguide`:** the static export-choice samples use the grid
   layout with the second lines.
+
+## Open by default: "Show by month" and "How it works and tips"
+
+- **Report:** the "Show by month" `<details>` has the `open` attribute, so
+  the monthly table is visible on arrival. The owner can still close it;
+  nothing is remembered across reloads (plain uncontrolled `<details>`,
+  no state, no storage).
+- **Upload side panel (`lg` and up):** "How it works and tips" is open by
+  default, same rule.
+- **Unchanged:** below `lg`, the upload form's `TipsDetails` ("Tips for
+  better reading", above "Read receipt") stays closed, so the button
+  isn't pushed down; "Show possible duplicates" and everything else are
+  as before.
+- **Tests changed:** `UploadSidePanel.test.tsx` "the overview reads top
+  to bottom…" and `ReceiptReport.test.tsx` "'Show by month' is a
+  text-style disclosure…" asserted `open === false`; both now assert
+  `true`. New: each can still be closed by a click, and a fresh mount (a
+  reload) is open again. `ReceiptUpload.layout.test.tsx`'s TipsDetails
+  test still asserts closed (unchanged).
 
 ## Changelog
 

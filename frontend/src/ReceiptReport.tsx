@@ -936,9 +936,10 @@ function ReceiptReport() {
       </div>
 
       {monthlyTables.length > 0 && (
-        // A closed <details> right under the summary cards it breaks
-        // down; once open, each currency's table sits in its own Card.
-        <details className="group">
+        // A <details> right under the summary cards it breaks down, open
+        // by default (the owner can close it; nothing is remembered across
+        // reloads); each currency's table sits in its own Card.
+        <details className="group" open>
           <summary className={DISCLOSURE_SUMMARY_CLASSES}>
             <ChevronIcon className={DISCLOSURE_CHEVRON_CLASSES} />
             Show by month

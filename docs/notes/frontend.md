@@ -197,8 +197,10 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   variant so nothing jumps). The response's `total === 0` → `HelpPanel`
   (the help above, expanded); a failed request → the same `HelpPanel`,
   silently (no `Alert`); otherwise `ReceiptsOverview` (exported,
-  presentational, props `{latest}`), top to bottom: a closed
-  `<details>` "How it works and tips" holding `HowItWorksContent` (the
+  presentational, props `{latest}`), top to bottom: a `<details open>`
+  "How it works and tips" (open by default; the owner can close it,
+  nothing is remembered across reloads — the below-`lg` `TipsDetails`
+  in the form stays closed) holding `HowItWorksContent` (the
   same steps/tips `HelpPanel` shows — `TIPS_ITEMS`/`HOW_IT_WORKS_STEPS`
   live in this file, and `ReceiptUpload.tsx`'s `TipsDetails` imports
   `TIPS_ITEMS` from it); the panel's heading, an `<h2>` "Latest uploads",
@@ -754,7 +756,9 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   as one set. Contrast (asserted and printed): white ≥ 5.93:1 and
   white/90 ≥ 5.13:1 on all three. An apartment with no data shows "No
   receipts in `<year>`.".
-  **Show by month**: a closed `<details className="group">` directly
+  **Show by month**: a `<details className="group" open>` — open by
+  default; the owner can close it, nothing is remembered across
+  reloads — directly
   under the summary cards, with the same text-style summary as Upload's
   "How it works and tips" (no marker, `ChevronIcon` — exported from
   `ReceiptUpload.tsx` — rotating 90° when open, `min-h-[44px]` below
