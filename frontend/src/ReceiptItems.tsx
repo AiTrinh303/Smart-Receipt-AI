@@ -240,45 +240,76 @@ function rowDividerClass(items: ItemRow[], index: number): string {
 
 export const ITEMS_SEARCH_PLACEHOLDER = 'e.g. Kaffee, Rossmann'
 
-/** The Items search input group: the visible label, a magnifier inside on
- * the left, a "×" (aria-label "Clear search") inside on the right while
- * there is text, and the secondary "Search" submit button attached to the
- * input's right edge (shared border). Every control is h-11 (44px), the
- * same as the Selects in the row below. Tab order: input -> × -> Search.
+/** Complete static class strings for the search group (never built from
+ * a variable). The group owns the one border, radius and focus ring; the
+ * input has none of its own. `has-[input:focus-visible]` rings the whole
+ * bar only while the *input* is focused -- not when the "×" or the Search
+ * button is (each of those draws its own inset ring), so there's never a
+ * double ring. The `*_RING` strings are the same rings drawn statically,
+ * for the style guide's "focused" samples only. */
+const SEARCH_GROUP_CLASSES =
+  'flex h-11 rounded-control border border-border bg-surface ' +
+  'has-[input:focus-visible]:outline has-[input:focus-visible]:outline-2 ' +
+  'has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-brand'
+const SEARCH_GROUP_RING = 'outline outline-2 outline-offset-2 outline-brand'
+/** Primary (brand fill, white text), joined to the input: `-my-px -mr-px`
+ * lays it over the group's own top/right/bottom border so it is exactly
+ * the group's 44px height and only its outer corners are rounded. Its
+ * focus ring is inset and white (6.29:1 on brand), since a brand ring on
+ * a brand fill wouldn't show. */
+const SEARCH_BUTTON_CLASSES =
+  '-my-px -mr-px inline-flex h-11 flex-shrink-0 items-center gap-1.5 rounded-r-control bg-brand px-4 ' +
+  'text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover ' +
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-white ' +
+  'motion-reduce:transition-none'
+const SEARCH_BUTTON_RING = 'outline outline-2 outline-offset-[-4px] outline-white'
+
+function MagnifierIcon({ className }: { className: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className={className} fill="none">
+      <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M12.5 12.5L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** The Items search bar: one control group -- the visible label, then one
+ * bordered, `rounded-control` bar holding the input (a decorative
+ * magnifier inside on the left, a "×" with aria-label "Clear search"
+ * inside on the right while there is text) and the primary "Search"
+ * submit button (magnifier + text) joined to its right edge. 44px tall,
+ * the same as the Selects in the row below. Tab order: input -> × ->
+ * Search. `autoComplete="off"`: no browser history popup over the bar.
  *
- * Stacking: the input is `relative` (so its focus ring can be lifted with
- * `focus-visible:z-10` over the attached button), and positioned elements
- * with no z-index paint in DOM order -- the icon must carry its own
- * `z-20`, or the input's opaque `bg-surface` paints over it.
+ * The input is transparent and not positioned, so the icon behind its
+ * text area always shows (BW's bug was an opaque, `relative` input
+ * painting over it).
  * Exported so `?view=styleguide` renders the real thing; the caller wraps
- * it in the <form>. */
+ * it in the <form>. `sampleFocus` is for the style guide only: it draws
+ * the input's or the button's focus ring statically. */
 export function ItemsSearchField({
   id,
   value,
   onChange,
   onClear,
+  sampleFocus,
 }: {
   id: string
   value: string
   onChange: (value: string) => void
   onClear: () => void
+  sampleFocus?: 'input' | 'button'
 }) {
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-sm font-medium text-ink">
         Search items or stores
       </label>
-      <div className="flex">
-        <div className="relative flex-1">
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 20 20"
-            className="pointer-events-none absolute left-3 top-1/2 z-20 h-4 w-4 -translate-y-1/2 text-ink-muted"
-            fill="none"
-          >
-            <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M12.5 12.5L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
+      <div
+        className={`${SEARCH_GROUP_CLASSES} ${sampleFocus === 'input' ? SEARCH_GROUP_RING : ''}`}
+      >
+        <div className="relative flex min-w-0 flex-1">
+          <MagnifierIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
           <input
             id={id}
             type="text"
@@ -286,14 +317,15 @@ export function ItemsSearchField({
             onChange={(e) => onChange(e.target.value)}
             maxLength={MAX_SEARCH_LENGTH}
             placeholder={ITEMS_SEARCH_PLACEHOLDER}
-            className="relative h-11 w-full rounded-l-md border border-border bg-surface pl-9 pr-11 text-sm text-ink placeholder:text-ink-muted focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            autoComplete="off"
+            className="min-w-0 flex-1 rounded-l-control border-0 bg-transparent pl-9 pr-11 text-sm text-ink placeholder:text-ink-muted focus:outline-none"
           />
           {value && (
             <button
               type="button"
               aria-label="Clear search"
               onClick={onClear}
-              className="absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-md text-lg leading-none text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand"
+              className="absolute -bottom-px -top-px right-0 inline-flex w-11 items-center justify-center rounded-md text-lg leading-none text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand"
             >
               <span aria-hidden="true">×</span>
             </button>
@@ -301,8 +333,9 @@ export function ItemsSearchField({
         </div>
         <button
           type="submit"
-          className="-ml-px h-11 rounded-r-md border border-border bg-white px-4 text-sm font-medium text-ink transition-colors duration-150 hover:bg-slate-50 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none"
+          className={`${SEARCH_BUTTON_CLASSES} ${sampleFocus === 'button' ? SEARCH_BUTTON_RING : ''}`}
         >
+          <MagnifierIcon className="h-4 w-4" />
           Search
         </button>
       </div>

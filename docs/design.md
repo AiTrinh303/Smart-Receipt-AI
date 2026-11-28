@@ -2640,6 +2640,41 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   with text, Year active in the Items sample, the count line plus the
   table/cards in their own Card.
 
+## Items search bar: one unit, primary Search
+
+- **One control group:** the bar (`rounded-control`, `border-border`,
+  `bg-surface`, `h-11`) owns the only border and radius; the input has no
+  border, background or ring of its own.
+- **Focus:** while the input is focused, one brand ring goes around the
+  whole bar (`has-[input:focus-visible]:outline outline-2 outline-offset-2
+  outline-brand`). `focus-within` was not used: it would also ring the
+  bar while the Search button or "×" is focused, on top of their own
+  rings. The Search button has its own inset white ring
+  (`outline-offset-[-4px] outline-white`: 6.29:1 on `brand`, 7.9:1 on
+  `brand-hover`); the "×" keeps its inset brand ring.
+- **Search button:** primary (`bg-brand text-white hover:bg-brand-hover`)
+  with a decorative magnifier before the text, joined to the bar with
+  `-my-px -mr-px h-11`, so it covers the bar's border on its side, is
+  exactly 44px tall like the bar and the Selects, and only its outer
+  corners are rounded (`rounded-r-control`).
+- **`autoComplete="off"`** on the input: no browser history popup.
+- **Unchanged:** label, placeholder, `maxLength`, the "×" behaviour,
+  Enter to submit, Tab order input -> × -> Search -> Year.
+- **BW's icon fix is no longer needed:** the input is now transparent and
+  not positioned, so the icon behind it always shows; its `z-20` was
+  dropped.
+- **Tests changed:** "the search field: … secondary Search button" (now
+  checks primary classes, the button's icon and that it sits inside the
+  one group, instead of secondary/`-ml-px`/`rounded-r-md`/the input's
+  `rounded-l-md`); "every control is 44px tall" (checks the bar's `h-11`
+  instead of the input's, plus the button's `-my-px`); "the magnifier
+  paints above the input: z-20" replaced by "one control group…" (input
+  has no border/ring, `autocomplete="off"`, icon behind a transparent,
+  unpositioned input). New: the focus-ring test (group `has-[…]` ring,
+  no `focus-within`, button's inset white ring).
+- **`?view=styleguide`:** the interactive bar with text, plus static
+  idle, input-focused and button-focused samples (`sampleFocus`).
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

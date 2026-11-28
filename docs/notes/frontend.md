@@ -520,18 +520,28 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   `?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>&sort=<v>`. A search
   form (row 1, full width; the exported `ItemsSearchField`, which the
   style guide renders too): the visible label "Search items or stores",
-  an input group — a decorative magnifier inside on the left (`z-20`: the
-  input is `relative` with an opaque `bg-surface`, and positioned
-  elements without a z-index paint in DOM order, so without it the input
-  hid the icon in a real browser), placeholder
-  "e.g. Kaffee, Rossmann", `maxLength={100}`, a "×" button inside on the
-  right (`aria-label="Clear search"`, shown only once `searchInput` is
+  one control group — a bar with the only border and radius (`flex h-11
+  rounded-control border border-border bg-surface`); the input inside has
+  no border, background or ring of its own (`border-0 bg-transparent
+  focus:outline-none`, not positioned, so the decorative magnifier
+  behind it on the left always shows), placeholder
+  "e.g. Kaffee, Rossmann", `maxLength={100}`, `autoComplete="off"` (no
+  browser history popup), a "×" button inside on the right
+  (`aria-label="Clear search"`, shown only once `searchInput` is
   non-empty; same behaviour as the former "Clear" button: empties the
-  field and drops `q`), and a secondary "Search" submit button attached
-  to the input's right edge (`-ml-px`, shared border, `rounded-l-md`/
-  `rounded-r-md`). Every control in both rows is `h-11` (44px) — the
-  Search button uses the secondary-button tokens directly rather than
-  `Button`, whose `sm` size is 40px from `sm`. A `<form>` so Enter
+  field and drops `q`; its own inset brand ring), and the primary
+  "Search" submit button (brand fill, white text, a magnifier before the
+  text) joined to the bar's right edge: `-my-px -mr-px h-11` lays it over
+  the bar's border so it is exactly the bar's 44px and only its outer
+  corners are rounded (`rounded-r-control`). Focus: while the input is
+  focused, `has-[input:focus-visible]:outline…` draws one brand ring
+  around the whole bar (not `focus-within`, which would also ring it
+  while the button or "×" has focus — a double ring); the button keeps
+  its own inset white ring (`outline-offset-[-4px] outline-white`,
+  6.29:1 on brand, 7.9:1 on brand-hover). Every control in both rows is
+  44px (`h-11`); the Search button uses the primary tokens directly
+  rather than `Button`, whose `sm` size is 40px from `sm`. `sampleFocus`
+  ("input"/"button") is for the style guide only. A `<form>` so Enter
   submits; Tab order: input → × → Search → Year
   commits to the URL on submit, not as-you-type; `effectiveQuery()`
   (local to this file) trims and drops a `q` over 100 chars, same

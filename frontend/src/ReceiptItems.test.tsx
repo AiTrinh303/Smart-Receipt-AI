@@ -249,7 +249,7 @@ describe('ReceiptItems', () => {
 
   // --- Search and filter row -------------------------------------------------
 
-  test('the search field: visible label, magnifier icon, placeholder, and a secondary "Search" button attached to its right edge', async () => {
+  test('the search field: visible label, magnifier icon, placeholder, and a primary "Search" button joined to its right edge', async () => {
     fetchSpy.mockImplementation(
       routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
@@ -261,12 +261,16 @@ describe('ReceiptItems', () => {
     expect(input).toHaveAttribute('maxLength', '100')
     // And a decorative magnifier sits inside the same wrapper
     expect((input.parentElement as HTMLElement).querySelector('svg[aria-hidden="true"]')).not.toBeNull()
-    // And the Search button is secondary (not the brand fill) and shares the input's border
+    // And the Search button is primary (brand fill, white text) with a decorative magnifier before
+    // its text, joined to the input inside one group: only its outer (right) corners are rounded
     const search = screen.getByRole('button', { name: 'Search' })
     expect(search).toHaveAttribute('type', 'submit')
-    expect(search.className).not.toMatch(/\bbg-brand\b/)
-    expect(search).toHaveClass('-ml-px', 'rounded-r-md', 'border-border')
-    expect(input).toHaveClass('rounded-l-md')
+    expect(search).toHaveClass('bg-brand', 'text-white', 'hover:bg-brand-hover', 'rounded-r-control')
+    expect(search.className).not.toMatch(/\brounded-l/)
+    expect(search.firstElementChild?.tagName.toLowerCase()).toBe('svg')
+    expect(search.firstElementChild).toHaveAttribute('aria-hidden', 'true')
+    const group = input.closest('.rounded-control') as HTMLElement
+    expect(group).toContainElement(search)
     // And there is no "×" while the field is empty, and no separate "Clear" button
     expect(screen.queryByRole('button', { name: 'Clear search' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
@@ -331,10 +335,13 @@ describe('ReceiptItems', () => {
     // Row 1: the search form comes before it and is not part of the grid
     expect(row).not.toContainElement(input)
     expect(input.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // Same height everywhere: h-11
-    for (const control of [input, screen.getByRole('button', { name: 'Search' }), selectControl('Year'), selectControl('Status'), selectControl('Sort by')]) {
+    // Same height everywhere: h-11 -- the search bar (the input fills it) and its Search button
+    // (laid over the bar's border with -my-px, so exactly the bar's height), and the three selects
+    const group = input.closest('.rounded-control') as HTMLElement
+    for (const control of [group, screen.getByRole('button', { name: 'Search' }), selectControl('Year'), selectControl('Status'), selectControl('Sort by')]) {
       expect(control).toHaveClass('h-11')
     }
+    expect(screen.getByRole('button', { name: 'Search' })).toHaveClass('-my-px')
   })
 
   test('one line between the filter row and the table: "N items" (also with several pages), no Clear filters without a filter -- as on History', async () => {
@@ -356,18 +363,51 @@ describe('ReceiptItems', () => {
     expect((anchor.nextElementSibling as HTMLElement).querySelector('table')).not.toBeNull()
   })
 
-  test('the magnifier paints above the input: z-20, above the input\'s own (focus) stacking', async () => {
+  test('one control group: the bar has the only border and radius, the input has none and turns off autocomplete', async () => {
     fetchSpy.mockImplementation(
       routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
     render(<ReceiptItems />)
     const input = await screen.findByLabelText('Search items or stores')
 
-    // Then the icon (positioned, before the positioned opaque input in DOM order) carries its own z-index;
-    // without it the input's bg-surface paints over it in a real browser (jsdom can't see that)
+    // Then the group carries the one border and rounded-control radius
+    const group = input.closest('.rounded-control') as HTMLElement
+    expect(group).toHaveClass('border', 'border-border', 'bg-surface')
+    // And the input has no border, background or ring of its own
+    expect(input).toHaveClass('border-0', 'bg-transparent', 'focus:outline-none')
+    expect(input.className).not.toMatch(/\bborder-border\b|focus-visible:outline-brand/)
+    // And the browser's own history popup is off
+    expect(input).toHaveAttribute('autocomplete', 'off')
+    // And the icon still sits behind a transparent, unpositioned input (no stacking fix needed)
     const icon = (input.parentElement as HTMLElement).querySelector('svg[aria-hidden="true"]') as SVGElement
-    expect(icon).toHaveClass('absolute', 'z-20', 'pointer-events-none')
-    expect(input).toHaveClass('relative', 'bg-surface', 'focus-visible:z-10')
+    expect(icon).toHaveClass('absolute', 'pointer-events-none')
+    expect(input).not.toHaveClass('relative')
+  })
+
+  test('focus: one ring around the whole bar while the input is focused; the Search button keeps its own inset ring', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
+    )
+    render(<ReceiptItems />)
+    const input = await screen.findByLabelText('Search items or stores')
+    const group = input.closest('.rounded-control') as HTMLElement
+
+    // Then the group's ring is tied to the input's focus only (not focus-within, which would also
+    // ring the bar while the button or "×" is focused -- a double ring)
+    expect(group).toHaveClass(
+      'has-[input:focus-visible]:outline',
+      'has-[input:focus-visible]:outline-2',
+      'has-[input:focus-visible]:outline-offset-2',
+      'has-[input:focus-visible]:outline-brand',
+    )
+    expect(group.className).not.toMatch(/focus-within/)
+    // And the button draws its own ring inside its brand fill, in white
+    expect(screen.getByRole('button', { name: 'Search' })).toHaveClass(
+      'focus-visible:outline',
+      'focus-visible:outline-2',
+      'focus-visible:outline-offset-[-4px]',
+      'focus-visible:outline-white',
+    )
   })
 
   test('with a search the count line reads: 12 items for "milch", with Clear filters; without one: 268 items', async () => {

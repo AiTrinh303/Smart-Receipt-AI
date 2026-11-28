@@ -1443,10 +1443,12 @@ function StyleGuide() {
 
         <div className="flex flex-col gap-3">
           <p className="text-sm text-ink-muted">
-            Items' search and filter rows: row 1 the search input group (magnifier, placeholder, "×" while there
-            is text, the secondary "Search" button attached), row 2 Year, Status and Sort by as three equal
-            columns -- every control 44px tall. The magnifier sits above the input (z-20). Type to see the "×";
-            Year is shown as an active filter.
+            Items' search and filter rows: row 1 the search bar -- one control group (one border, rounded-control;
+            the input has no border or ring of its own) with a magnifier, the placeholder, a "×" while there is
+            text, and the primary "Search" button (magnifier + text) joined to its right edge; row 2 Year, Status
+            and Sort by as three equal columns -- every control 44px tall. Focusing the input rings the whole bar
+            once; the button has its own inset white ring. The interactive bar (top, with text) works for real --
+            type, clear, Tab through it; the three below are static states. Year is shown as an active filter.
           </p>
           <form onSubmit={(e) => e.preventDefault()}>
             <ItemsSearchField
@@ -1456,6 +1458,28 @@ function StyleGuide() {
               onClear={() => setSgItemsSearch('')}
             />
           </form>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {(
+              [
+                { key: 'idle', caption: 'Idle (empty)', value: '', sampleFocus: undefined },
+                { key: 'input', caption: 'Input focused (one ring around the bar)', value: '', sampleFocus: 'input' },
+                { key: 'button', caption: 'Search button focused (its own inset ring)', value: 'Kaffee', sampleFocus: 'button' },
+              ] as const
+            ).map((sample) => (
+              <div key={sample.key} className="flex flex-col gap-1">
+                <p className="text-xs text-ink-muted">{sample.caption}</p>
+                <form onSubmit={(e) => e.preventDefault()}>
+                  <ItemsSearchField
+                    id={`styleguide-items-search-${sample.key}`}
+                    value={sample.value}
+                    onChange={() => {}}
+                    onClear={() => {}}
+                    sampleFocus={sample.sampleFocus}
+                  />
+                </form>
+              </div>
+            ))}
+          </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Select
               id="styleguide-items-year"
