@@ -19,6 +19,7 @@ import ClampedText from './components/ui/ClampedText'
 import MissingValue from './components/ui/MissingValue'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
+import Select from './components/ui/Select'
 import StatusBadge from './components/ui/StatusBadge'
 import { formatMoney } from './components/ui/formatMoney'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -622,22 +623,14 @@ function ReceiptItems() {
   )
 
   const sortSelect = (
-    <div className="flex flex-col gap-1 md:w-48">
-      <label htmlFor="items-sort-select" className="text-sm font-medium text-ink">
-        Sort by
-      </label>
-      <select
+    <div className="md:w-48">
+      <Select
         id="items-sort-select"
+        label="Sort by"
         value={sort}
-        onChange={(e) => handleSortChange(e.target.value)}
-        className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-      >
-        {SORT_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        onChange={handleSortChange}
+        options={SORT_OPTIONS}
+      />
     </div>
   )
 

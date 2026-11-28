@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptHistory from './ReceiptHistory'
 import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
+import { chooseOption, optionLabels, selectControl, selectValue } from './test/select'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -568,13 +569,13 @@ describe('ReceiptHistory', () => {
     )
     render(<HistoryHarness />)
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+      expect(selectControl('Year')).toBeInTheDocument()
     })
 
-    await user.selectOptions(screen.getByLabelText('Year'), '2026')
+    await chooseOption(user, 'Year', '2026')
     await waitFor(() => expect(window.location.search).toContain('year=2026'))
 
-    await user.selectOptions(screen.getByLabelText('Status'), 'Approved')
+    await chooseOption(user, 'Status', 'Approved')
     await waitFor(() => expect(window.location.search).toContain('status=approved'))
 
     const lastCall = calls[calls.length - 1]
@@ -591,7 +592,7 @@ describe('ReceiptHistory', () => {
     )
     const { unmount } = render(<ReceiptHistory />)
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+      expect(selectControl('Year')).toBeInTheDocument()
     })
     expect(screen.queryByText('No valid date')).not.toBeInTheDocument()
     unmount()
@@ -1049,26 +1050,22 @@ describe('ReceiptHistory', () => {
 
   // --- Filter row composition (Commit 2) ----------------------------------
 
-  test('Year and Status selects are composed in the same row container', async () => {
+  test('Year, Status and Sort by fill one row as three equal columns from md up', async () => {
     fetchSpy.mockImplementation(
       routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
     )
     render(<ReceiptHistory />)
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+      expect(selectControl('Year')).toBeInTheDocument()
     })
-    const yearSelect = screen.getByLabelText('Year')
-    const statusSelect = screen.getByLabelText('Status')
-    // Both selects' wrapping row container is the same element, and that
-    // row is composed with the md:flex-row layout (never sm:flex-row,
-    // which the Items view's own, differently-composed row never used
-    // either -- this is the one row ReceiptHistory and ReceiptItems now
-    // share the same breakpoint for).
-    const yearRow = yearSelect.closest('div')?.parentElement
-    const statusRow = statusSelect.closest('div')?.parentElement
-    expect(yearRow).toBe(statusRow)
-    expect(yearRow?.className).toContain('md:flex-row')
+    // Year, Status and Sort by sit in one grid row of three equal columns
+    // from md up (stacked below md), filling the row like the list card
+    const row = selectControl('Year').closest('.grid') as HTMLElement
+    expect(row).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-3')
+    expect(row).toContainElement(selectControl('Status'))
+    expect(row).toContainElement(selectControl('Sort by'))
+    expect(row.children).toHaveLength(3)
   })
 
   // --- Sort by ------------------------------------------------------------
@@ -1092,9 +1089,9 @@ describe('ReceiptHistory', () => {
     await screen.findByText('Store A')
 
     // Then the select shows the default and its five options, in order
-    const select = screen.getByLabelText('Sort by') as HTMLSelectElement
-    expect(select).toHaveValue('date_desc')
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+    const select = selectControl('Sort by')
+    expect(selectValue(select)).toBe('date_desc')
+    expect(optionLabels(select)).toEqual([
       'Date (newest first)',
       'Date (oldest first)',
       'Total (high to low)',
@@ -1118,15 +1115,15 @@ describe('ReceiptHistory', () => {
       }),
     )
     render(<HistoryHarness />)
-    await screen.findByLabelText('Sort by')
+    await screen.findByRole('combobox', { name: 'Sort by' })
 
     // When "Total (high to low)" is chosen
-    await user.selectOptions(screen.getByLabelText('Sort by'), 'Total (high to low)')
+    await chooseOption(user, 'Sort by', 'Total (high to low)')
 
     // Then the URL carries it and the new list request sends it
     await waitFor(() => expect(window.location.search).toContain('sort=amount_desc'))
     await waitFor(() => expect(sortParam(calls[calls.length - 1])).toBe('amount_desc'))
-    expect(screen.getByLabelText('Sort by')).toHaveValue('amount_desc')
+    expect(selectValue(selectControl('Sort by'))).toBe('amount_desc')
 
     // And another page continues with the same sort (and the sort stays in the page links)
     const page2 = await screen.findByRole('link', { name: 'Page 2' })
@@ -1136,7 +1133,7 @@ describe('ReceiptHistory', () => {
     expect(sortParam(calls[calls.length - 1])).toBe('amount_desc')
 
     // When the default is chosen again, sort leaves the URL
-    await user.selectOptions(screen.getByLabelText('Sort by'), 'Date (newest first)')
+    await chooseOption(user, 'Sort by', 'Date (newest first)')
     await waitFor(() => expect(window.location.search).not.toContain('sort='))
   })
 
@@ -1156,7 +1153,7 @@ describe('ReceiptHistory', () => {
     await screen.findByText('Store A')
 
     // Then the select and the request both use the default
-    expect(screen.getByLabelText('Sort by')).toHaveValue('date_desc')
+    expect(selectValue(selectControl('Sort by'))).toBe('date_desc')
     expect(sortParam(calls[0])).toBe('date_desc')
   })
 
@@ -1318,7 +1315,7 @@ describe('ReceiptHistory', () => {
     await screen.findByText('Showing 25–30 of 30')
 
     // When the Status filter changes
-    await user.selectOptions(screen.getByLabelText('Status'), 'Approved')
+    await chooseOption(user, 'Status', 'Approved')
 
     // Then the URL drops the page and the request starts at offset 0
     await waitFor(() => expect(window.location.search).toContain('status=approved'))

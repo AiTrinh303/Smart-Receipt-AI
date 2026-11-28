@@ -97,7 +97,8 @@ professional look; see the Changelog for what prompted it).
   token, corrected to the standard `shadow-card`. `shadow-popover` (a
   larger, more pronounced version) is reserved for a genuinely elevated
   overlay -- something that visually floats *above* the page, like a real
-  popover or menu -- not yet used anywhere in this app.
+  popover or menu. **Its first real use is `ui/Select`'s listbox
+  popover** (see "Components").
 - **`border` vs. `border-subtle` -- the rule that matters most here:**
   `border` (`#64748b`, 4.76:1) is the **control** border -- every
   interactive element (`Button`, every `RadioCardGroup` card whether
@@ -2516,6 +2517,37 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
 - **`?view=styleguide`:** the "Show more" sample became a pagination
   sample (first, a middle page, last).
 
+## Full-width History filter row and a custom dropdown
+
+- **History filter row:** Year, Status and Sort by as three equal
+  columns from `md` up (`ReceiptFilters`' new `equalColumns`), stacked
+  below `md`. Items' row layout unchanged.
+- **`ui/Select`** (see "Components") replaces the native selects for
+  Year, Status (both pages, via `ReceiptFilters`) and both "Sort by"s --
+  same values, URLs and callbacks; native `<select>` below `sm`.
+- **Tests:** new `Select.test.tsx` (ARIA attributes, keyboard path,
+  type-ahead, onChange once / not for the same value, Escape, Tab, click
+  outside, 44px targets, native fallback below `sm`) and the helper
+  `src/test/select.ts`. Adapted -- each because the control is no longer
+  a native `<select>` (no `selectOptions`/`toHaveValue`/`.options`, and
+  `getByLabelText` now finds the button *and* its labelled listbox):
+  in `ReceiptHistory.test.tsx`, "each select sends its own param",
+  "changing a filter on page 3…", "an unknown sort in the URL…",
+  '"Sort by" defaults to "Date (newest first)"…', "choosing a sort
+  writes &sort=…", '"No valid date" option only appears…' (query
+  only); in `ReceiptItems.test.tsx`, "each filter sends its param…",
+  "changing a filter resets to the first page", "the default sort is
+  not sent…", "a non-default sort in the URL…", "an invalid sort value…",
+  "choosing a sort sends it…", "Back/Forward restores the previously
+  selected sort" -- all moved to `selectControl`/`chooseOption`/
+  `selectValue`/`optionLabels`, same assertions. Rewritten: "Year and
+  Status selects are composed in the same row container" -> "Year,
+  Status and Sort by fill one row as three equal columns from md up"
+  (the layout changed on purpose).
+- **`?view=styleguide`:** a "Select" section (closed, open with the
+  selected and highlighted options, long value); the History and Items
+  filter samples use the real `Select`.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**
@@ -2665,6 +2697,26 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   `#fdf4ff` 5.89:1 (6.32:1, now Waldglück's). Avoid amber/orange (reads
   as the warning colour), red/rose (danger), indigo (brand) and green/
   teal (the "Approved" badge). Remove a tone that is no longer mapped.
+- **`Select`** (`Select.tsx`) — a select-only combobox (WAI-ARIA APG
+  pattern), used for Year, Status and Sort by in History and Items. A
+  `<label>` (`htmlFor` the control, also the listbox's
+  `aria-labelledby`) and a `<button role="combobox">` showing the value
+  and a chevron (`aria-haspopup="listbox"`, `aria-expanded`,
+  `aria-controls`, `aria-activedescendant` while open; focus never leaves
+  it). The listbox popover is the **first real use of `shadow-popover`**:
+  `rounded-card border border-border-subtle bg-surface shadow-popover`,
+  `max-h-64` with scroll, `z-30`, kept in the DOM but `hidden` while
+  closed. Options: `hover:bg-slate-50`; the highlighted (active) one
+  `bg-brand-soft`; the selected one a check icon + `font-medium` +
+  `aria-selected` (never colour alone). Keyboard: Enter/Space/Alt+Down
+  (and Up/Down/Home/End) open; while open Up/Down (no wrap), Home/End
+  and type-ahead (a repeated letter cycles) move, Enter/Space selects,
+  Alt+Up selects, Escape closes, Tab closes and moves on; a click
+  outside closes; focus returns to the button. `onChange` fires once per
+  real change (not for re-choosing the current value). 44px targets
+  below `sm`; visible focus ring. Below `sm` (`useMediaQuery`) the
+  native `<select>` with the same options and `onChange` is rendered
+  instead — never both. `defaultOpen` exists only for the style guide.
 - **`Pagination`** (`Pagination.tsx`, `pageItems.ts`) — page navigation
   for a long list, inside `<nav aria-label="Pagination">`: "‹ Previous",
   the first and last page, the current page and its two neighbours ("…"

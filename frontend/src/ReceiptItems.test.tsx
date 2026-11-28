@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReceiptItems from './ReceiptItems'
 import ReceiptUpload from './ReceiptUpload'
+import { chooseOption, optionLabels, selectControl, selectValue } from './test/select'
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/')
@@ -259,13 +260,13 @@ describe('ReceiptItems', () => {
     const user = userEvent.setup()
     render(<ItemsHarness />)
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+      expect(selectControl('Year')).toBeInTheDocument()
     })
 
-    await user.selectOptions(screen.getByLabelText('Year'), '2026')
+    await chooseOption(user, 'Year', '2026')
     await waitFor(() => expect(window.location.search).toContain('year=2026'))
 
-    await user.selectOptions(screen.getByLabelText('Status'), 'Approved')
+    await chooseOption(user, 'Status', 'Approved')
     await waitFor(() => expect(window.location.search).toContain('status=approved'))
 
     await user.click(screen.getByRole('tab', { name: OBERAUDORF.name }))
@@ -349,7 +350,7 @@ describe('ReceiptItems', () => {
       expect(screen.getByText('Show more')).toBeInTheDocument()
     })
 
-    await user.selectOptions(screen.getByLabelText('Status'), 'Approved')
+    await chooseOption(user, 'Status', 'Approved')
 
     await waitFor(() => expect(window.location.search).toContain('status=approved'))
     const lastCall = calls[calls.length - 1]
@@ -919,7 +920,7 @@ describe('ReceiptItems', () => {
     })
     expect(calls[0]).toContain('sort=date_desc')
     expect(window.location.search).not.toContain('sort=')
-    expect(screen.getByLabelText('Sort by')).toHaveValue('date_desc')
+    expect(selectValue(selectControl('Sort by'))).toBe('date_desc')
   })
 
   test('choosing a sort sends it, updates the URL, and resets paging', async () => {
@@ -935,10 +936,10 @@ describe('ReceiptItems', () => {
     const user = userEvent.setup()
     render(<ItemsHarness />)
     await waitFor(() => {
-      expect(screen.getByLabelText('Sort by')).toBeInTheDocument()
+      expect(selectControl('Sort by')).toBeInTheDocument()
     })
 
-    await user.selectOptions(screen.getByLabelText('Sort by'), 'Amount (high to low)')
+    await chooseOption(user, 'Sort by', 'Amount (high to low)')
 
     await waitFor(() => expect(window.location.search).toContain('sort=amount_desc'))
     const lastCall = calls[calls.length - 1]
@@ -965,7 +966,7 @@ describe('ReceiptItems', () => {
     })
     expect(capturedUrl).not.toContain('sort=not-a-real-sort')
     expect(capturedUrl).toContain('sort=date_desc')
-    expect(screen.getByLabelText('Sort by')).toHaveValue('date_desc')
+    expect(selectValue(selectControl('Sort by'))).toBe('date_desc')
   })
 
   test('a non-default sort in the URL loads on first render and sends it', async () => {
@@ -985,7 +986,7 @@ describe('ReceiptItems', () => {
     await waitFor(() => {
       expect(capturedUrl).toContain('sort=store')
     })
-    expect(screen.getByLabelText('Sort by')).toHaveValue('store')
+    expect(selectValue(selectControl('Sort by'))).toBe('store')
   })
 
   test('Back/Forward restores the previously selected sort', async () => {
@@ -1001,10 +1002,10 @@ describe('ReceiptItems', () => {
     const user = userEvent.setup()
     render(<ItemsHarness />)
     await waitFor(() => {
-      expect(screen.getByLabelText('Sort by')).toBeInTheDocument()
+      expect(selectControl('Sort by')).toBeInTheDocument()
     })
 
-    await user.selectOptions(screen.getByLabelText('Sort by'), 'Store (A-Z)')
+    await chooseOption(user, 'Sort by', 'Store (A-Z)')
     await waitFor(() => expect(window.location.search).toContain('sort=store'))
 
     // Simulate the browser's Back button: pop to the prior history entry and
@@ -1014,7 +1015,7 @@ describe('ReceiptItems', () => {
       expect(window.location.search).not.toContain('sort=')
     })
     await waitFor(() => {
-      expect(screen.getByLabelText('Sort by')).toHaveValue('date_desc')
+      expect(selectValue(selectControl('Sort by'))).toBe('date_desc')
     })
 
     window.history.forward()
@@ -1022,7 +1023,7 @@ describe('ReceiptItems', () => {
       expect(window.location.search).toContain('sort=store')
     })
     await waitFor(() => {
-      expect(screen.getByLabelText('Sort by')).toHaveValue('store')
+      expect(selectValue(selectControl('Sort by'))).toBe('store')
     })
   })
 

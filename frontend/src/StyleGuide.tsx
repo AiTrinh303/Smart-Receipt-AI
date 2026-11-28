@@ -7,6 +7,7 @@ import PageHeader from './components/ui/PageHeader'
 import { ApartmentDot, ApartmentPill } from './components/ui/ApartmentTone'
 import Pagination from './components/ui/Pagination'
 import RadioCardGroup from './components/ui/RadioCardGroup'
+import Select from './components/ui/Select'
 import Skeleton from './components/ui/Skeleton'
 import StatusBadge from './components/ui/StatusBadge'
 import BatchQueue from './batch/BatchQueue'
@@ -22,6 +23,7 @@ import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSi
 import type { ItemRow, ReceiptSummary, YearlyReport } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
 import { apartmentToneClasses } from './format/apartmentTone'
+import { RECEIPT_SORT_OPTIONS } from './historySort'
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost'] as const
 const ALERT_VARIANTS = ['info', 'success', 'warning', 'error'] as const
@@ -393,6 +395,10 @@ function StyleGuide() {
     'loading' | 'table' | 'cards' | 'empty-unfiltered' | 'empty-filtered' | 'error'
   >('table')
   const [itemsSortSample, setItemsSortSample] = useState('date_desc')
+  const [sgYear, setSgYear] = useState('')
+  const [sgStatus, setSgStatus] = useState('')
+  const [sgSort, setSgSort] = useState('date_desc')
+  const [sgSelectClosed, setSgSelectClosed] = useState('date_desc')
 
   return (
     <div className="flex flex-col gap-10 pb-16">
@@ -996,6 +1002,45 @@ function StyleGuide() {
         <p className="text-sm text-ink-muted">One page only (no pagination): &quot;9 receipts&quot;</p>
       </Section>
 
+      <Section title="Select (ui/Select -- closed / open with the selected option checked and another highlighted / long value; native select below sm)">
+        <p className="text-sm text-ink-muted">
+          A select-only combobox: the button shows the value; the listbox popover (rounded-card, border-subtle,
+          shadow-popover, scrolls past max height) marks the selected option with a check and medium weight,
+          and the highlighted one with a brand-soft background. Try it with the keyboard: Enter/Space/Alt+Down
+          open, arrows/Home/End/letters move, Enter selects, Escape or Tab closes. Below sm (resize the window)
+          the native select is rendered instead.
+        </p>
+        <div className="grid gap-6 md:grid-cols-3">
+          <Select
+            id="styleguide-select-closed"
+            label="Closed"
+            value={sgSelectClosed}
+            onChange={setSgSelectClosed}
+            options={RECEIPT_SORT_OPTIONS}
+          />
+          <div className="pb-72">
+            <Select
+              id="styleguide-select-open"
+              label="Open (sample)"
+              value="amount_desc"
+              onChange={() => {}}
+              options={RECEIPT_SORT_OPTIONS}
+              defaultOpen
+            />
+          </div>
+          <Select
+            id="styleguide-select-long"
+            label="Long value (truncated)"
+            value="long"
+            onChange={() => {}}
+            options={[
+              { value: 'long', label: 'A very long option label that has to be truncated in the button' },
+              { value: 'short', label: 'Short' },
+            ]}
+          />
+        </div>
+      </Section>
+
       <Section title="History tab bar and filters (ReceiptHistory -- All apartments / one apartment selected)">
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => setHistoryTab('all')}>
@@ -1036,36 +1081,37 @@ function StyleGuide() {
             })}
           </div>
 
-          <div className="flex flex-col gap-3 md:flex-row">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="styleguide-history-year" className="text-sm font-medium text-ink">
-                Year
-              </label>
-              <select
-                id="styleguide-history-year"
-                onChange={() => {}}
-                className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-              >
-                <option value="">All years</option>
-                <option value="2026">2026</option>
-                <option value="2025">2025</option>
-                <option value="none">No valid date</option>
-              </select>
-            </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="styleguide-history-status" className="text-sm font-medium text-ink">
-                Status
-              </label>
-              <select
-                id="styleguide-history-status"
-                onChange={() => {}}
-                className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-              >
-                <option value="">All</option>
-                <option value="needs_review">Needs review</option>
-                <option value="approved">Approved</option>
-              </select>
-            </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Select
+              id="styleguide-history-year"
+              label="Year"
+              value={sgYear}
+              onChange={setSgYear}
+              options={[
+                { value: '', label: 'All years' },
+                { value: '2026', label: '2026' },
+                { value: '2025', label: '2025' },
+                { value: 'none', label: 'No valid date' },
+              ]}
+            />
+            <Select
+              id="styleguide-history-status"
+              label="Status"
+              value={sgStatus}
+              onChange={setSgStatus}
+              options={[
+                { value: '', label: 'All' },
+                { value: 'needs_review', label: 'Needs review' },
+                { value: 'approved', label: 'Approved' },
+              ]}
+            />
+            <Select
+              id="styleguide-history-sort"
+              label="Sort by"
+              value={sgSort}
+              onChange={setSgSort}
+              options={RECEIPT_SORT_OPTIONS}
+            />
           </div>
 
           <div className="flex items-center justify-between gap-2">
@@ -1352,22 +1398,20 @@ function StyleGuide() {
           </Button>
         </div>
 
-        <div className="flex flex-col gap-1 sm:w-48">
-          <label htmlFor="styleguide-items-sort" className="text-sm font-medium text-ink">
-            Sort by
-          </label>
-          <select
+        <div className="sm:w-48">
+          <Select
             id="styleguide-items-sort"
+            label="Sort by"
             value={itemsSortSample}
-            onChange={(e) => setItemsSortSample(e.target.value)}
-            className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            <option value="date_desc">Date (newest first)</option>
-            <option value="date_asc">Date (oldest first)</option>
-            <option value="amount_desc">Amount (high to low)</option>
-            <option value="amount_asc">Amount (low to high)</option>
-            <option value="store">Store (A-Z)</option>
-          </select>
+            onChange={setItemsSortSample}
+            options={[
+              { value: 'date_desc', label: 'Date (newest first)' },
+              { value: 'date_asc', label: 'Date (oldest first)' },
+              { value: 'amount_desc', label: 'Amount (high to low)' },
+              { value: 'amount_asc', label: 'Amount (low to high)' },
+              { value: 'store', label: 'Store (A-Z)' },
+            ]}
+          />
         </div>
 
         <Card className="flex flex-col gap-4">

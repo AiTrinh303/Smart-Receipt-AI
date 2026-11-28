@@ -10,6 +10,7 @@ import Button from './components/ui/Button'
 import { ApartmentPill } from './components/ui/ApartmentTone'
 import Card from './components/ui/Card'
 import Pagination from './components/ui/Pagination'
+import Select from './components/ui/Select'
 import ClampedText from './components/ui/ClampedText'
 import PageHeader from './components/ui/PageHeader'
 import Skeleton from './components/ui/Skeleton'
@@ -521,24 +522,15 @@ function ReceiptHistory() {
         statusValue={statusValue}
         onStatusChange={handleStatusChange}
         statusSelectId="history-status-select"
+        equalColumns
         extraFilter={
-          <div className="flex flex-col gap-1 md:w-48">
-            <label htmlFor="history-sort-select" className="text-sm font-medium text-ink">
-              Sort by
-            </label>
-            <select
-              id="history-sort-select"
-              value={sort}
-              onChange={(e) => handleSortChange(e.target.value)}
-              className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-            >
-              {RECEIPT_SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            id="history-sort-select"
+            label="Sort by"
+            value={sort}
+            onChange={handleSortChange}
+            options={RECEIPT_SORT_OPTIONS}
+          />
         }
       />
 

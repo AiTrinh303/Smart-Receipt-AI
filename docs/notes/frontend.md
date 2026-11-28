@@ -378,9 +378,20 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   before; `ReceiptUpload.tsx` adds a "Back to history" link when showing
   a result. `?view=styleguide`'s "History rows" section renders the real
   `HistoryRowList`/`HistoryHeaderRow`/`HistoryRow` for both layouts.
-  **Sort by (`src/historySort.ts`):** a "Sort by" select (`extraFilter`
-  of `ReceiptFilters`, same look as Items' — which also gives Year/Status
-  their fixed `md:w-48`) with `RECEIPT_SORT_OPTIONS`: "Date (newest
+  **Filter row and `ui/Select`:** Year, Status and "Sort by" are all the
+  shared `Select` (a select-only combobox; the native `<select>` below
+  `sm` — see `docs/design.md`, "Components"), in both History and Items.
+  History passes `ReceiptFilters` its new `equalColumns` prop: Year,
+  Status and Sort by fill the row as three equal columns from `md` up
+  (`grid grid-cols-1 gap-3 md:grid-cols-3`, right edge aligned with the
+  list card), stacked below `md`. Items' row layout is unchanged
+  (fixed-width Year/Status, search + its own Sort by `Select` beside
+  them). Tests pick and read options through `src/test/select.ts`
+  (`selectControl` = the `combobox` role by name — both forms have it,
+  and the custom listbox shares the label, so `getByLabelText` would
+  find two elements; `chooseOption`, `selectValue`, `optionLabels`).
+  **Sort by (`src/historySort.ts`):** the "Sort by" `Select` (`extraFilter`
+  of `ReceiptFilters`) with `RECEIPT_SORT_OPTIONS`: "Date (newest
   first)" `date_desc` (default), "Date (oldest first)" `date_asc`, "Total
   (high to low)" `amount_desc`, "Total (low to high)" `amount_asc`,
   "Recently uploaded" `uploaded_desc`. In the URL as `&sort=`, omitted

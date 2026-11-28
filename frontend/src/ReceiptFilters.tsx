@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { ReceiptStatus } from './api/types'
 import { ApartmentDot } from './components/ui/ApartmentTone'
+import Select from './components/ui/Select'
 
 /** Shared by ReceiptHistory and the Items view: the apartment tab bar plus
  * the Year/Status selects. Pure presentation + URL-agnostic callbacks --
@@ -61,6 +62,10 @@ interface ReceiptFiltersProps {
    * (ReceiptHistory's case) leaves the existing `sm:flex-row` two-select
    * layout completely unchanged. */
   extraFilter?: ReactNode
+  /** Lay Year, Status and `extraFilter` out as three equal columns from md
+   * up (History). Omitted: the Items row (fixed-width Year/Status, the
+   * extra filter taking the rest). */
+  equalColumns?: boolean
 }
 
 function ReceiptFilters({
@@ -77,8 +82,32 @@ function ReceiptFilters({
   onStatusChange,
   statusSelectId,
   extraFilter,
+  equalColumns = false,
 }: ReceiptFiltersProps) {
   const tabListRef = useRef<HTMLDivElement>(null)
+
+  const yearSelect = (
+    <Select
+      id={yearSelectId}
+      label="Year"
+      value={yearValue ?? ''}
+      onChange={onYearChange}
+      options={[
+        { value: '', label: 'All years' },
+        ...years.map((y) => ({ value: String(y), label: String(y) })),
+        ...(hasUndated ? [{ value: NONE_FILTER_VALUE, label: 'No valid date' }] : []),
+      ]}
+    />
+  )
+  const statusSelect = (
+    <Select
+      id={statusSelectId}
+      label="Status"
+      value={statusValue ?? ''}
+      onChange={onStatusChange}
+      options={[{ value: '', label: 'All' }, ...STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))]}
+    />
+  )
   const selectedTabIndex = tabs.findIndex((tab) => tab.id === selectedApartmentId)
 
   // Restores focus to the tab the user just moved to with the arrow keys,
@@ -143,48 +172,21 @@ function ReceiptFilters({
         })}
       </div>
 
-      <div className={`flex flex-col gap-3 md:flex-row ${extraFilter ? 'md:items-end' : ''}`}>
-        <div className={`flex flex-col gap-1 ${extraFilter ? 'md:w-48 md:flex-none' : 'flex-1'}`}>
-          <label htmlFor={yearSelectId} className="text-sm font-medium text-ink">
-            Year
-          </label>
-          <select
-            id={yearSelectId}
-            value={yearValue ?? ''}
-            onChange={(e) => onYearChange(e.target.value)}
-            className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            <option value="">All years</option>
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-            {hasUndated && <option value={NONE_FILTER_VALUE}>No valid date</option>}
-          </select>
+      {equalColumns ? (
+        // History: Year, Status and the extra control (Sort by) as three
+        // equal columns from md up, filling the row to the list's right edge.
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {yearSelect}
+          {statusSelect}
+          {extraFilter}
         </div>
-
-        <div className={`flex flex-col gap-1 ${extraFilter ? 'md:w-48 md:flex-none' : 'flex-1'}`}>
-          <label htmlFor={statusSelectId} className="text-sm font-medium text-ink">
-            Status
-          </label>
-          <select
-            id={statusSelectId}
-            value={statusValue ?? ''}
-            onChange={(e) => onStatusChange(e.target.value)}
-            className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            <option value="">All</option>
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+      ) : (
+        <div className={`flex flex-col gap-3 md:flex-row ${extraFilter ? 'md:items-end' : ''}`}>
+          <div className={extraFilter ? 'md:w-48 md:flex-none' : 'flex-1'}>{yearSelect}</div>
+          <div className={extraFilter ? 'md:w-48 md:flex-none' : 'flex-1'}>{statusSelect}</div>
+          {extraFilter && <div className="flex flex-1 flex-col gap-1">{extraFilter}</div>}
         </div>
-
-        {extraFilter && <div className="flex flex-1 flex-col gap-1">{extraFilter}</div>}
-      </div>
+      )}
     </>
   )
 }
