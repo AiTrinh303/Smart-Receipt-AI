@@ -200,14 +200,26 @@ function AmountOrDash({ entry }: { entry: ReportCurrencyTotal | undefined }) {
   return entry ? <>{formatMoneyFromString(entry.total, entry.currency)}</> : <EmptyAmount />
 }
 
+/** The monthly table's column widths: Month takes 40%, each apartment
+ * column an equal share of the remaining 60% -- computed from the column
+ * count, so they always add up to 100% whether there are one, two or
+ * more apartments. Used as `<col style={{ width }}>`, since a Tailwind
+ * width class can't be built from a number. Layout only, never money. */
+const MONTH_COLUMN_PERCENT = 40
+
+function monthlyColumnWidths(apartmentCount: number): { month: string; apartment: string } {
+  const apartmentPercent = apartmentCount > 0 ? (100 - MONTH_COLUMN_PERCENT) / apartmentCount : 0
+  return { month: `${MONTH_COLUMN_PERCENT}%`, apartment: `${apartmentPercent}%` }
+}
+
 /** One currency's monthly breakdown: Month, then one column per
  * apartment (its tone dot in the header), then a "Total" row. Each
  * apartment's total comes straight from its summary (`by_currency`, the
  * same numbers as the summary cards) -- never summed here. A month with
- * no data in any column is muted. A table in a Card from `sm` up (value
- * columns `w-40`, right-aligned, next to each other rather than spread
- * across the card); month cards plus a Total card below `sm`. Exported
- * for the style guide. */
+ * no data in any column is muted. A full-width, `table-fixed` table in a
+ * Card from `sm` up (Month 40%, the apartments sharing the other 60%
+ * equally -- see `monthlyColumnWidths`; values right-aligned); month
+ * cards plus a Total card below `sm`. Exported for the style guide. */
 export function MonthlyCurrencyTable({
   currency,
   months,
@@ -230,6 +242,7 @@ export function MonthlyCurrencyTable({
   const isEmptyMonth = (month: number) => apartments.every((apartment) => !entryFor(month, apartment.apartment_id))
   const shortName = (apartment: ReportApartmentSummary) =>
     apartmentShortName(apartment.apartment_name) ?? apartment.apartment_name
+  const columnWidths = monthlyColumnWidths(apartments.length)
   const heading = showCurrencyHeading && (
     <h3 className="text-sm font-semibold text-ink">{currencySymbol(currency)}</h3>
   )
@@ -286,18 +299,24 @@ export function MonthlyCurrencyTable({
       {heading}
       <Card className="overflow-hidden">
         <div className="-m-5 overflow-x-auto sm:-m-6">
-          <table className="text-left text-sm">
+          <table className="w-full table-fixed text-left text-sm">
             <caption className="sr-only">Monthly totals in {currencySymbol(currency)}</caption>
+            <colgroup>
+              <col style={{ width: columnWidths.month }} />
+              {apartments.map((apartment) => (
+                <col key={apartment.apartment_id} style={{ width: columnWidths.apartment }} />
+              ))}
+            </colgroup>
             <thead>
               <tr className="border-b border-border-subtle text-xs text-ink-muted">
-                <th scope="col" className="w-32 py-2 pl-4 pr-2 font-medium">
+                <th scope="col" className="py-2 pl-4 pr-2 font-medium">
                   Month
                 </th>
                 {apartments.map((apartment) => (
                   <th
                     key={apartment.apartment_id}
                     scope="col"
-                    className="w-40 whitespace-nowrap py-2 pl-2 pr-4 text-right font-medium"
+                    className="whitespace-nowrap py-2 pl-2 pr-4 text-right font-medium"
                     title={apartment.apartment_name}
                   >
                     <span className="inline-flex items-center gap-1.5">
@@ -318,7 +337,7 @@ export function MonthlyCurrencyTable({
                   {apartments.map((apartment) => (
                     <td
                       key={apartment.apartment_id}
-                      className="w-40 whitespace-nowrap py-2 pl-2 pr-4 text-right tabular-nums"
+                      className="whitespace-nowrap py-2 pl-2 pr-4 text-right tabular-nums"
                     >
                       <AmountOrDash entry={entryFor(month, apartment.apartment_id)} />
                     </td>
@@ -332,7 +351,7 @@ export function MonthlyCurrencyTable({
                 {apartments.map((apartment) => (
                   <td
                     key={apartment.apartment_id}
-                    className="w-40 whitespace-nowrap py-2 pl-2 pr-4 text-right tabular-nums"
+                    className="whitespace-nowrap py-2 pl-2 pr-4 text-right tabular-nums"
                   >
                     <AmountOrDash entry={totalFor(apartment)} />
                   </td>

@@ -2698,8 +2698,8 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   works and tips": a text control with a `ChevronIcon` that rotates 90°
   when open (no marker, visible focus ring, 44px below `sm`). Open: per
   currency, a table in a `Card` — Month, then one column per apartment
-  with its tone dot in the header; value columns `w-40`, right-aligned,
-  `tabular-nums`, next to each other (the table isn't `w-full`);
+  with its tone dot in the header; value columns right-aligned,
+  `tabular-nums` (widths: see "Report: monthly table fills its card");
   amounts via `formatMoneyFromString` with €; an empty cell is a
   `text-ink-muted` dash (read as "No receipts"); a month with no data in
   any column is `text-ink-muted` (the dashes say it too, not colour
@@ -2719,6 +2719,28 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
 - **`?view=styleguide`:** the header with the Year select, the open
   monthly table (with muted months and the Total row), the small-screen
   cards with the Total card; the "basis approved" export sample removed.
+
+## Report: monthly table fills its card
+
+- BY's fixed `w-40` columns left the table at ~40% of its card. It is
+  now `w-full table-fixed`: **Month 40%, each apartment column an equal
+  share of the remaining 60%**, set on a `<colgroup>` from the column
+  count (`monthlyColumnWidths`, a plain `style` width — Tailwind width
+  classes can't be computed), so the widths add up to 100% for one, two
+  or more apartments. Values stay right-aligned and `tabular-nums`; row
+  dividers now run across the full width.
+- Unchanged: the header dots, € amounts, muted empty months, the Total
+  row, and the small-screen month cards.
+- **Tests changed:** the monthly-table test (it asserted the table was
+  *not* `w-full` and the `w-40` column classes; it now asserts `w-full
+  table-fixed` and `40% / 30% / 30%`). New: widths for one and three
+  apartments add up to 100%. Also `App.styleguide.test.tsx`: its first
+  wait for the lazily loaded style guide got `{ timeout: 5000 }` — the
+  page has grown enough that its first load under a full parallel run
+  sometimes exceeded `waitFor`'s 1s default (2 failures in 11 full runs
+  before, 0 in 8 after).
+- **`?view=styleguide`:** caption updated, plus a one-apartment sample
+  (40% / 60%).
 
 ## Changelog
 

@@ -760,11 +760,15 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   `sm`). When open, `MonthlyCurrencyTable` (exported for the style
   guide) renders one block per currency present in any apartment's
   `months`, with **all 12 months** January–December (`ALL_MONTHS`,
-  `MONTH_NAMES` — no locale dependence). From `sm` up: a table in a
-  `Card` (History's header style, `pl-4`/`pr-4` at the edges, not
-  `w-full`, so the value columns sit next to each other): Month, then one
-  `w-40` right-aligned tabular-nums column per apartment with its
-  `ApartmentDot` in the header; amounts via `formatMoneyFromString` (with
+  `MONTH_NAMES` — no locale dependence). From `sm` up: a `w-full
+  table-fixed` table in a `Card` (History's header style, `pl-4`/`pr-4`
+  at the edges, row dividers across the full width): Month, then one
+  right-aligned tabular-nums column per apartment with its
+  `ApartmentDot` in the header. Widths come from a `<colgroup>`
+  (`monthlyColumnWidths(count)`): Month 40%, each apartment an equal
+  share of the other 60% (`<col style={{ width }}>` — a Tailwind class
+  can't be built from a number), so they add up for any number of
+  apartments; amounts via `formatMoneyFromString` (with
   €); an empty cell is a muted dash read as "No receipts"
   (`EmptyAmount`); a month with no data in any column is `text-ink-muted`;
   last a "Total" row (`<tfoot>`, `font-semibold`, `border-t

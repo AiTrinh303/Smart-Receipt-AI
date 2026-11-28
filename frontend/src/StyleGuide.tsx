@@ -1682,9 +1682,10 @@ function StyleGuide() {
 
         <p className="text-sm text-ink-muted">
           Under the summary cards: a closed "Show by month" (the same text-style disclosure as Upload's
-          "How it works and tips", chevron rotates open). Open: one Card per currency with Month, one column
-          per apartment (tone dot in the header, w-40, right-aligned, with €), a muted dash where a month has
-          no data, a muted row for a month empty in every column, and a Total row (font-semibold, top border)
+          "How it works and tips", chevron rotates open). Open: one Card per currency with a full-width,
+          table-fixed table -- Month 40%, each apartment an equal share of the other 60% (tone dot in the
+          header, right-aligned, tabular, with €), row dividers across the full width, a muted dash where a
+          month has no data, a muted row for a month empty in every column, and a Total row (font-semibold, top border)
           from the summary totals -- the same numbers as the cards above. Below sm: month cards plus a Total
           card. Then the export card, then the VAT note.
         </p>
@@ -1704,6 +1705,17 @@ function StyleGuide() {
             />
           </div>
         </details>
+        <p className="text-sm font-medium text-ink">
+          One apartment column (widths from the column count: Month 40%, apartment 60%)
+        </p>
+        <MonthlyCurrencyTable
+          currency="EUR"
+          months={[1, 2, 3]}
+          cells={SAMPLE_MONTHLY_CELLS}
+          apartments={SAMPLE_MONTHLY_APARTMENTS.slice(0, 1)}
+          isSmallScreen={false}
+          showCurrencyHeading={false}
+        />
         <p className="text-sm font-medium text-ink">Below sm: month cards (first four shown) and the Total card</p>
         <div className="max-w-sm">
           <MonthlyCurrencyTable

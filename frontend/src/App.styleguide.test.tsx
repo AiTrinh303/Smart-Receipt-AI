@@ -26,9 +26,14 @@ test('the style guide page renders every Button variant, Alert variant, the logo
   render(<App />)
 
   // Then every Button variant renders in its enabled, disabled and loading groups
-  await waitFor(() => {
-    expect(screen.getByRole('heading', { name: 'Style guide' })).toBeInTheDocument()
-  })
+  // (the page is a lazy import of the large StyleGuide module: under a full parallel test run its
+  // first load can take longer than waitFor's 1s default, so this one wait gets more time)
+  await waitFor(
+    () => {
+      expect(screen.getByRole('heading', { name: 'Style guide' })).toBeInTheDocument()
+    },
+    { timeout: 5000 },
+  )
   for (const variant of ['primary', 'secondary', 'danger', 'ghost', 'danger-ghost']) {
     expect(screen.getByRole('button', { name: variant })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: `${variant} (disabled)` })).toBeInTheDocument()

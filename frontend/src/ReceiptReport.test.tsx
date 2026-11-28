@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { chooseOption, selectControl, selectValue } from './test/select'
-import ReceiptReport from './ReceiptReport'
+import ReceiptReport, { MonthlyCurrencyTable } from './ReceiptReport'
 import { SAMPLE_APARTMENTS, clearApartmentsCache, withApartments } from './test/apartmentsFetch'
 import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
 
@@ -281,7 +281,7 @@ describe('ReceiptReport', () => {
     expect(chevron).toHaveClass('group-open:rotate-90')
   })
 
-  test('the monthly table: in a Card, Month + one w-40 right-aligned column per apartment with its dot, € amounts, muted dash and empty months, and a Total row from the summary', async () => {
+  test('the monthly table: a full-width table-fixed table in a Card, Month 40% + an equal share per apartment with its dot, right-aligned € amounts, muted dash and empty months, and a Total row from the summary', async () => {
     // Given Bergblick with January and March data, and a summary total the backend sent; Waldglück empty
     fetchSpy.mockImplementation(
       routeFetch({
@@ -311,13 +311,16 @@ describe('ReceiptReport', () => {
     // Then the table sits in a Card
     const table = within(details).getByRole('table')
     expect(table.closest('.rounded-card')).toHaveClass('shadow-card')
-    // And the columns sit next to each other (the table isn't stretched to the card's edges)
-    expect(table).not.toHaveClass('w-full')
+    // And it fills the card with fixed column widths: Month 40%, the two apartments 30% each
+    expect(table).toHaveClass('w-full', 'table-fixed')
+    const cols = Array.from(table.querySelectorAll('colgroup > col')) as HTMLElement[]
+    expect(cols.map((col) => col.style.width)).toEqual(['40%', '30%', '30%'])
     // And the header is Month plus one column per apartment, each with its tone dot
     const headers = within(table).getAllByRole('columnheader')
     expect(headers.map((th) => th.textContent)).toEqual(['Month', 'Bergblick', 'Waldglück'])
     for (const th of headers.slice(1)) {
-      expect(th).toHaveClass('w-40', 'text-right')
+      expect(th).toHaveClass('text-right')
+      expect(th.className).not.toMatch(/\bw-\d/)
       expect(th.querySelector('span[aria-hidden="true"].rounded-full')).not.toBeNull()
     }
 
@@ -330,7 +333,7 @@ describe('ReceiptReport', () => {
     // And amounts carry €, right-aligned, tabular, fixed width
     const marchBergblick = rows[2].children[1] as HTMLElement
     expect(marchBergblick).toHaveTextContent('€15.00')
-    expect(marchBergblick).toHaveClass('w-40', 'text-right', 'tabular-nums')
+    expect(marchBergblick).toHaveClass('text-right', 'tabular-nums')
     // And an empty cell is a muted dash (read as "No receipts")
     const marchWaldglueck = rows[2].children[2] as HTMLElement
     expect(marchWaldglueck.querySelector('.text-ink-muted')).toHaveTextContent('—')
@@ -377,6 +380,31 @@ describe('ReceiptReport', () => {
     const total = rows[rows.length - 1]
     expect(total).toHaveTextContent('€99.99')
     expect(total).not.toHaveTextContent('25.00')
+  })
+
+  test.each([
+    [1, ['40%', '60%']],
+    [3, ['40%', '20%', '20%', '20%']],
+  ])('with %i apartment column(s) the widths are computed from the count and add up to 100%%', (count, expected) => {
+    // Given a monthly table with that many apartments
+    const apartments = Array.from({ length: count }, (_, index) =>
+      apartmentSummary({ apartment_id: `apartment-${index}`, apartment_name: `Apartment ${index}`, months: [] }),
+    )
+    render(
+      <MonthlyCurrencyTable
+        currency="EUR"
+        months={[1]}
+        cells={{}}
+        apartments={apartments}
+        isSmallScreen={false}
+        showCurrencyHeading={false}
+      />,
+    )
+
+    // Then Month keeps 40% and the apartments share the rest equally
+    const cols = Array.from(screen.getByRole('table').querySelectorAll('colgroup > col')) as HTMLElement[]
+    expect(cols.map((col) => col.style.width)).toEqual(expected)
+    expect(cols.reduce((sum, col) => sum + parseFloat(col.style.width), 0)).toBeCloseTo(100)
   })
 
   test('switching the year updates the URL and refetches', async () => {
