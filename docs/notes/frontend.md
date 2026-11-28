@@ -728,12 +728,13 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   in headings: the receipt table's "Unit price (€)"/"Line total (€)",
   "Discounts (€)"/"Taxes (€)", the Report's per-currency headings and
   captions. The receipt meta line's currency field, the edit form's
-  currency input and the exports keep the code. This is also why the monthly table has **no
-  combined "Both" column**: `GET /reports/yearly`'s `overall` field has
-  no monthly breakdown (only each apartment's own `months` does), and
-  summing two apartments' decimal strings to produce one would be
-  exactly the arithmetic this rule forbids — the monthly table shows one
-  column per apartment only (documented in `ReceiptReport.tsx` itself).
+  currency input and the exports keep the code. The same rule shapes the
+  monthly table's **"Both apartments" column**: it was left out at first
+  because the backend had no monthly breakdown for both apartments and
+  summing two apartments' decimal strings here would be the forbidden
+  arithmetic; since CB the backend sends `overall_months` (summed with
+  `Decimal` from the counted receipts), so the column shows those values
+  as given — still no arithmetic in the frontend.
   **Page order** (top to bottom): header ("Spending per apartment, from
   every saved receipt." with the Year select on the right); the summary
   cards; "Show by month"; "For your tax advisor" (with its short note);
@@ -764,18 +765,23 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   table-fixed` table in a `Card` (History's header style, `pl-4`/`pr-4`
   at the edges, row dividers across the full width): Month, then one
   right-aligned tabular-nums column per apartment with its
-  `ApartmentDot` in the header. Widths come from a `<colgroup>`
-  (`monthlyColumnWidths(count)`): Month 40%, each apartment an equal
-  share of the other 60% (`<col style={{ width }}>` — a Tailwind class
+  `ApartmentDot` in the header, then a last "Both apartments" column (no
+  dot) from `overall_months` (`both`: `{months, total}` built by
+  `buildMonthlyCurrencyTables`; the page always passes it). Widths come
+  from a `<colgroup>` (`monthlyColumnWidths(count, hasBoth)`): with the
+  Both column every column gets an equal share — four 25% columns for two
+  apartments; without it (style guide only) Month 40% and the apartments
+  share the other 60% (`<col style={{ width }}>` — a Tailwind class
   can't be built from a number), so they add up for any number of
   apartments; amounts via `formatMoneyFromString` (with
   €); an empty cell is a muted dash read as "No receipts"
   (`EmptyAmount`); a month with no data in any column is `text-ink-muted`;
   last a "Total" row (`<tfoot>`, `font-semibold`, `border-t
   border-border`) whose values are each apartment's `by_currency` entry
-  for that currency — the same numbers as the summary cards, never summed
-  from the months. Below `sm`: month cards (each apartment with its dot,
-  € amounts, empty months muted) plus a "Total" card at the end. The
+  for that currency and, for Both, `overall`'s — the same numbers as the
+  summary cards, never summed from the months. Below `sm`: month cards
+  (each apartment with its dot, a "Both apartments" line, € amounts,
+  empty months muted) plus a "Total" card at the end. The
   currency sub-heading appears only when the year has more than one
   currency. Only one of table/cards is ever mounted (`useMediaQuery`).
   **No checks card, no warnings/duplicates lists:** the former "Before

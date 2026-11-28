@@ -9,6 +9,7 @@ import type {
   ReportApartmentSummary,
   ReportCurrencyTotal,
   ReportDuplicateGroup,
+  ReportMonth,
   YearlyReport,
 } from './api/types'
 import { apartmentShortName } from './format/apartmentShortName'
@@ -155,15 +156,17 @@ function OverallSummaryCard({ overall, year }: { overall: ReportCurrencyTotal[];
  * monthly table/cards below -- pure data organization (grouping and
  * sorting), never arithmetic on the amounts themselves. Every currency
  * lists all 12 months, January to December; a month with no data for an
- * apartment shows a dash. There is no
- * combined "Both apartments" column here: the backend's `overall` field
- * has no monthly breakdown, and summing two apartments' decimal-string
- * totals in the frontend would be exactly the arithmetic this app's
- * money rule forbids, so this table only ever shows one column per
- * apartment. */
-function buildMonthlyCurrencyTables(apartments: ReportApartmentSummary[]) {
+ * apartment shows a dash. The "Both apartments" column comes straight
+ * from the backend: `overall_months` (per month) and `overall` (the
+ * Total) -- never summed from the two apartments here. */
+function buildMonthlyCurrencyTables(
+  apartments: ReportApartmentSummary[],
+  overallMonths: ReportMonth[],
+  overall: ReportCurrencyTotal[],
+) {
   const currencies = new Set<string>()
   const cells: Record<string, Record<number, Record<string, ReportCurrencyTotal>>> = {}
+  const bothCells: Record<string, Record<number, ReportCurrencyTotal>> = {}
 
   for (const apartment of apartments) {
     for (const monthEntry of apartment.months) {
@@ -176,15 +179,35 @@ function buildMonthlyCurrencyTables(apartments: ReportApartmentSummary[]) {
       }
     }
   }
+  for (const monthEntry of overallMonths) {
+    for (const currencyTotal of monthEntry.by_currency) {
+      currencies.add(currencyTotal.currency)
+      bothCells[currencyTotal.currency] ??= {}
+      bothCells[currencyTotal.currency][monthEntry.month] = currencyTotal
+    }
+  }
 
   return Array.from(currencies)
     .sort()
     .map((currency) => ({
       currency,
       months: ALL_MONTHS,
-      cells: cells[currency],
+      cells: cells[currency] ?? {},
+      both: {
+        months: bothCells[currency] ?? {},
+        total: overall.find((entry) => entry.currency === currency),
+      },
     }))
 }
+
+/** The "Both apartments" column's data for one currency, as the backend
+ * sent it: per month from `overall_months`, the Total from `overall`. */
+export interface BothApartmentsColumn {
+  months: Record<number, ReportCurrencyTotal>
+  total: ReportCurrencyTotal | undefined
+}
+
+const BOTH_APARTMENTS_LABEL = 'Both apartments'
 
 /** An empty month/total cell: a muted dash, read as "No receipts". */
 function EmptyAmount() {
@@ -200,26 +223,33 @@ function AmountOrDash({ entry }: { entry: ReportCurrencyTotal | undefined }) {
   return entry ? <>{formatMoneyFromString(entry.total, entry.currency)}</> : <EmptyAmount />
 }
 
-/** The monthly table's column widths: Month takes 40%, each apartment
- * column an equal share of the remaining 60% -- computed from the column
- * count, so they always add up to 100% whether there are one, two or
- * more apartments. Used as `<col style={{ width }}>`, since a Tailwind
+/** The monthly table's column widths, computed from the column count so
+ * they always add up to 100%: with a "Both apartments" column every column
+ * (Month, each apartment, Both) gets an equal share -- 25% each for two
+ * apartments; without it, Month takes 40% and the apartments share the
+ * other 60% equally. Used as `<col style={{ width }}>`, since a Tailwind
  * width class can't be built from a number. Layout only, never money. */
 const MONTH_COLUMN_PERCENT = 40
 
-function monthlyColumnWidths(apartmentCount: number): { month: string; apartment: string } {
-  const apartmentPercent = apartmentCount > 0 ? (100 - MONTH_COLUMN_PERCENT) / apartmentCount : 0
-  return { month: `${MONTH_COLUMN_PERCENT}%`, apartment: `${apartmentPercent}%` }
+function monthlyColumnWidths(apartmentCount: number, hasBoth: boolean): { month: string; value: string } {
+  if (hasBoth) {
+    const equal = `${100 / (apartmentCount + 2)}%`
+    return { month: equal, value: equal }
+  }
+  const valuePercent = apartmentCount > 0 ? (100 - MONTH_COLUMN_PERCENT) / apartmentCount : 0
+  return { month: `${MONTH_COLUMN_PERCENT}%`, value: `${valuePercent}%` }
 }
 
 /** One currency's monthly breakdown: Month, then one column per
- * apartment (its tone dot in the header), then a "Total" row. Each
- * apartment's total comes straight from its summary (`by_currency`, the
- * same numbers as the summary cards) -- never summed here. A month with
- * no data in any column is muted. A full-width, `table-fixed` table in a
- * Card from `sm` up (Month 40%, the apartments sharing the other 60%
- * equally -- see `monthlyColumnWidths`; values right-aligned); month
- * cards plus a Total card below `sm`. Exported for the style guide. */
+ * apartment (its tone dot in the header), then -- when `both` is given --
+ * a "Both apartments" column (no dot), then a "Total" row. Each
+ * apartment's total comes straight from its summary (`by_currency`) and
+ * Both's from `overall` (the same numbers as the summary cards); Both's
+ * months come from `overall_months` -- nothing is summed here. A month
+ * with no data in any column is muted. A full-width, `table-fixed` table
+ * in a Card from `sm` up (widths from `monthlyColumnWidths`; values
+ * right-aligned); month cards plus a Total card below `sm`, each with a
+ * "Both apartments" line too. Exported for the style guide. */
 export function MonthlyCurrencyTable({
   currency,
   months,
@@ -227,6 +257,7 @@ export function MonthlyCurrencyTable({
   apartments,
   isSmallScreen,
   showCurrencyHeading,
+  both,
 }: {
   currency: string
   months: number[]
@@ -235,14 +266,17 @@ export function MonthlyCurrencyTable({
   isSmallScreen: boolean
   /** Only when the year has more than one currency. */
   showCurrencyHeading: boolean
+  /** The "Both apartments" column (the page always passes it). */
+  both?: BothApartmentsColumn
 }) {
   const entryFor = (month: number, apartmentId: string) => cells[month]?.[apartmentId]
   const totalFor = (apartment: ReportApartmentSummary) =>
     apartment.by_currency.find((entry) => entry.currency === currency)
-  const isEmptyMonth = (month: number) => apartments.every((apartment) => !entryFor(month, apartment.apartment_id))
+  const isEmptyMonth = (month: number) =>
+    apartments.every((apartment) => !entryFor(month, apartment.apartment_id)) && !both?.months[month]
   const shortName = (apartment: ReportApartmentSummary) =>
     apartmentShortName(apartment.apartment_name) ?? apartment.apartment_name
-  const columnWidths = monthlyColumnWidths(apartments.length)
+  const columnWidths = monthlyColumnWidths(apartments.length, both !== undefined)
   const heading = showCurrencyHeading && (
     <h3 className="text-sm font-semibold text-ink">{currencySymbol(currency)}</h3>
   )
@@ -270,6 +304,14 @@ export function MonthlyCurrencyTable({
                     </dd>
                   </div>
                 ))}
+                {both && (
+                  <div className="flex items-baseline justify-between gap-2">
+                    <dt className="text-ink-muted">{BOTH_APARTMENTS_LABEL}</dt>
+                    <dd className="tabular-nums">
+                      <AmountOrDash entry={both.months[month]} />
+                    </dd>
+                  </div>
+                )}
               </dl>
             </li>
           ))}
@@ -287,6 +329,14 @@ export function MonthlyCurrencyTable({
                   </dd>
                 </div>
               ))}
+              {both && (
+                <div className="flex items-baseline justify-between gap-2">
+                  <dt>{BOTH_APARTMENTS_LABEL}</dt>
+                  <dd className="tabular-nums">
+                    <AmountOrDash entry={both.total} />
+                  </dd>
+                </div>
+              )}
             </dl>
           </li>
         </ul>
@@ -304,8 +354,9 @@ export function MonthlyCurrencyTable({
             <colgroup>
               <col style={{ width: columnWidths.month }} />
               {apartments.map((apartment) => (
-                <col key={apartment.apartment_id} style={{ width: columnWidths.apartment }} />
+                <col key={apartment.apartment_id} style={{ width: columnWidths.value }} />
               ))}
+              {both && <col style={{ width: columnWidths.value }} />}
             </colgroup>
             <thead>
               <tr className="border-b border-border-subtle text-xs text-ink-muted">
@@ -325,6 +376,11 @@ export function MonthlyCurrencyTable({
                     </span>
                   </th>
                 ))}
+                {both && (
+                  <th scope="col" className="whitespace-nowrap py-2 pl-2 pr-4 text-right font-medium">
+                    {BOTH_APARTMENTS_LABEL}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -342,6 +398,11 @@ export function MonthlyCurrencyTable({
                       <AmountOrDash entry={entryFor(month, apartment.apartment_id)} />
                     </td>
                   ))}
+                  {both && (
+                    <td className="whitespace-nowrap py-2 pl-2 pr-4 text-right tabular-nums">
+                      <AmountOrDash entry={both.months[month]} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -356,6 +417,11 @@ export function MonthlyCurrencyTable({
                     <AmountOrDash entry={totalFor(apartment)} />
                   </td>
                 ))}
+                {both && (
+                  <td className="whitespace-nowrap py-2 pl-2 pr-4 text-right tabular-nums">
+                    <AmountOrDash entry={both.total} />
+                  </td>
+                )}
               </tr>
             </tfoot>
           </table>
@@ -833,7 +899,7 @@ function ReceiptReport() {
     return null
   }
 
-  const monthlyTables = buildMonthlyCurrencyTables(report.apartments)
+  const monthlyTables = buildMonthlyCurrencyTables(report.apartments, report.overall_months ?? [], report.overall)
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -871,7 +937,7 @@ function ReceiptReport() {
             Show by month
           </summary>
           <div className="mt-4 flex flex-col gap-4">
-            {monthlyTables.map(({ currency, months, cells }) => (
+            {monthlyTables.map(({ currency, months, cells, both }) => (
               <MonthlyCurrencyTable
                 key={currency}
                 currency={currency}
@@ -880,6 +946,7 @@ function ReceiptReport() {
                 apartments={report.apartments}
                 isSmallScreen={isSmallScreen}
                 showCurrencyHeading={monthlyTables.length > 1}
+                both={both}
               />
             ))}
           </div>

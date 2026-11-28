@@ -1571,11 +1571,12 @@ trusting the totals.
   `formatMoneyFromString()` (`components/ui/formatMoney.ts`) displays one
   exactly as given, with its currency prefix — never parsed into a
   number and re-formatted, which would be arithmetic on money in the
-  frontend. This is also why the monthly table has **no combined "Both"
-  column**: the backend's `overall` field has no monthly breakdown, and
-  summing two apartments' decimal strings to produce one would be
-  exactly that forbidden arithmetic — the monthly table shows one column
-  per apartment only, documented in `ReceiptReport.tsx` itself.
+  frontend. This is also why the monthly table had **no combined "Both"
+  column** at first: the backend's `overall` field has no monthly
+  breakdown, and summing two apartments' decimal strings to produce one
+  would be exactly that forbidden arithmetic. *(Reversed in CB: the
+  backend now sends `overall_months` — see "Report: Both apartments
+  column in the monthly table" below.)*
 - **Summary cards**: one `Card` per apartment (short name visible via
   `apartmentShortName`, full name in `title`) with a right-aligned,
   tabular-nums amount per currency plus "N receipts", then a combined
@@ -2741,6 +2742,38 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   before, 0 in 8 after).
 - **`?view=styleguide`:** caption updated, plus a one-apartment sample
   (40% / 60%).
+
+## Report: Both apartments column in the monthly table
+
+- **Reverses the earlier "no Both column" decision. Why:** the column was
+  left out only because the frontend would have had to add two
+  apartments' amounts itself, which the money rule forbids. Moving that
+  sum to the backend removes the obstacle: `GET /reports/yearly` now
+  returns `overall_months` — both apartments per month and currency,
+  summed with `Decimal` from the same counted receipts as `overall` —
+  and the frontend only displays it. The owner wanted to see the monthly
+  total for both holiday apartments together (the number the tax advisor
+  asks about) without adding two columns by hand.
+- **Field name:** `overall_months` is a new top-level field rather than
+  `overall.months`: `overall` is a list of currency totals, and turning
+  it into an object would change an existing field. Every existing field
+  is unchanged (asserted by a backend test).
+- **Table:** a last "Both apartments" column (no dot — it isn't one
+  apartment's colour), right-aligned and tabular like the others; its
+  Total cell comes from `overall`. With this column all four columns are
+  equal, **25% each** (computed from the column count: `100 / (apartments
+  + 2)`). Below `sm`, every month card and the Total card get a "Both
+  apartments" line.
+- **No arithmetic in the frontend:** a test feeds Both values that are
+  deliberately *not* the apartments' sum and checks they are shown as
+  given. The backend tests check that `overall_months` equals the
+  apartments' months added up (exact `Decimal`), adds up to `overall`,
+  never mixes currencies and only uses counted receipts.
+- **Rounding note:** every value is rounded half-up to two decimals on its
+  own, exactly like `overall` vs. the apartments, so with receipt totals
+  that have more than two decimals a Both cell could differ by a cent
+  from the two apartment cells added up; real receipt totals have two
+  decimals.
 
 ## Changelog
 

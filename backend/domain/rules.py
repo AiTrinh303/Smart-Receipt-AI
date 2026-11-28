@@ -735,6 +735,7 @@ def summarize_year(
     apartment_totals: dict[str, dict[str, _CurrencyAccumulator]] = {a.id: {} for a in apartments}
     apartment_month_totals: dict[str, dict[int, dict[str, _CurrencyAccumulator]]] = {a.id: {} for a in apartments}
     overall_totals: dict[str, _CurrencyAccumulator] = {}
+    overall_month_totals: dict[int, dict[str, _CurrencyAccumulator]] = {}
 
     with_warnings = 0
     counted_unreviewed = 0
@@ -760,6 +761,7 @@ def summarize_year(
             currency, _CurrencyAccumulator()
         ).add(amount)
         overall_totals.setdefault(currency, _CurrencyAccumulator()).add(amount)
+        overall_month_totals.setdefault(month, {}).setdefault(currency, _CurrencyAccumulator()).add(amount)
 
         if receipt.status != ReceiptStatus.APPROVED:
             counted_unreviewed += 1
@@ -787,6 +789,12 @@ def summarize_year(
     ]
 
     overall_out = _currency_totals_to_list(overall_totals)
+    # Both apartments per month: summed straight from the counted receipts
+    # (like `overall`), never from the apartments' already-rounded strings.
+    overall_months_out = [
+        MonthlyBreakdown(month=month, by_currency=_currency_totals_to_list(overall_month_totals[month]))
+        for month in sorted(overall_month_totals.keys())
+    ]
 
     # --- attention: counted receipts with at least one warning ------------
     flagged = [(receipt, check_receipt(receipt, today)) for receipt in counted]
@@ -867,6 +875,7 @@ def summarize_year(
         basis=basis,
         apartments=apartments_out,
         overall=overall_out,
+        overall_months=overall_months_out,
         excluded=ExcludedCounts(**excluded),
         with_warnings=with_warnings,
         counted_unreviewed=counted_unreviewed,

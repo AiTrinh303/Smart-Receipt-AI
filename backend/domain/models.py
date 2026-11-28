@@ -151,8 +151,10 @@ class CurrencyTotal(BaseModel):
 
 
 class MonthlyBreakdown(BaseModel):
-    """One calendar month (1-12) of a yearly report's apartment breakdown
-    -- only months that actually had a counted receipt appear."""
+    """One calendar month (1-12) of a yearly report's monthly breakdown
+    (an apartment's `months`, or `overall_months` for both apartments
+    together) -- only months that actually had a counted receipt
+    appear."""
 
     month: int
     by_currency: list[CurrencyTotal]
@@ -233,6 +235,11 @@ class YearlySummary(BaseModel):
     basis: str
     apartments: list[ApartmentYearSummary]
     overall: list[CurrencyTotal]
+    # Both apartments together, per month and currency -- the same shape
+    # as each apartment's `months`, built from the same counted receipts
+    # as `overall`. A separate field (not `overall.months`) so `overall`
+    # itself stays the unchanged list every existing client reads.
+    overall_months: list[MonthlyBreakdown]
     excluded: ExcludedCounts
     with_warnings: int
     counted_unreviewed: int

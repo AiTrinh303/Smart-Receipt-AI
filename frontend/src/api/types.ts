@@ -170,6 +170,10 @@ export interface YearlyReport {
   basis: ReportBasis
   apartments: ReportApartmentSummary[]
   overall: ReportCurrencyTotal[]
+  /** Both apartments together per month (same shape as an apartment's
+   * `months`, only months with data) -- summed by the backend from the same
+   * counted receipts as `overall`; the frontend never adds amounts. */
+  overall_months: ReportMonth[]
   excluded: ReportExcludedCounts
   with_warnings: number
   counted_unreviewed: number

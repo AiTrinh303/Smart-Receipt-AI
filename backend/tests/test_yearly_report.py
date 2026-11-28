@@ -214,6 +214,138 @@ def test_overall_equals_the_sum_of_apartments_per_currency():
     assert summary["overall"] == [{"currency": "EUR", "total": "30.00", "receipt_count": 2}]
 
 
+def _months_added_up(apartments):
+    """Adds the apartments' monthly strings with Decimal -- the expected
+    overall_months, computed independently of summarize_year."""
+    from decimal import Decimal
+
+    sums: dict[int, dict[str, list]] = {}
+    for apartment in apartments:
+        for month in apartment["months"]:
+            for entry in month["by_currency"]:
+                slot = sums.setdefault(month["month"], {}).setdefault(entry["currency"], [Decimal("0"), 0])
+                slot[0] += Decimal(entry["total"])
+                slot[1] += entry["receipt_count"]
+    return [
+        {
+            "month": month,
+            "by_currency": [
+                {"currency": currency, "total": str(total), "receipt_count": count}
+                for currency, (total, count) in sorted(by_currency.items())
+            ],
+        }
+        for month, by_currency in sorted(sums.items())
+    ]
+
+
+def test_overall_months_equals_the_apartments_months_added_up():
+    # Given receipts in both apartments, across several months, with awkward amounts
+    receipts = [
+        mk("r1", apartment_id="a1", purchase_date="2026-01-05", total=0.1),
+        mk("r2", apartment_id="a2", purchase_date="2026-01-20", total=0.2),
+        mk("r3", apartment_id="a1", purchase_date="2026-03-02", total=19.99),
+        mk("r4", apartment_id="a1", purchase_date="2026-03-28", total=5.01),
+        mk("r5", apartment_id="a2", purchase_date="2026-07-14", total=-12.5),
+    ]
+
+    # When the year is summarized
+    summary = summarize_year(receipts, APARTMENTS, 2026, "all", TODAY)
+
+    # Then overall_months is, per month and currency, the apartments' months added up (exact Decimal)
+    assert summary["overall_months"] == _months_added_up(summary["apartments"])
+    assert summary["overall_months"] == [
+        {"month": 1, "by_currency": [{"currency": "EUR", "total": "0.30", "receipt_count": 2}]},
+        {"month": 3, "by_currency": [{"currency": "EUR", "total": "25.00", "receipt_count": 2}]},
+        {"month": 7, "by_currency": [{"currency": "EUR", "total": "-12.50", "receipt_count": 1}]},
+    ]
+
+
+def test_overall_months_adds_up_to_overall():
+    # Given receipts across months
+    receipts = [
+        mk("r1", apartment_id="a1", purchase_date="2026-02-01", total=10.0),
+        mk("r2", apartment_id="a2", purchase_date="2026-02-03", total=2.5),
+        mk("r3", apartment_id="a2", purchase_date="2026-11-30", total=7.25),
+    ]
+    summary = summarize_year(receipts, APARTMENTS, 2026, "all", TODAY)
+
+    # Then the months' totals per currency add up to overall (built from the same counted receipts)
+    from decimal import Decimal
+
+    month_sum = sum(Decimal(m["by_currency"][0]["total"]) for m in summary["overall_months"])
+    assert str(month_sum) == summary["overall"][0]["total"] == "19.75"
+
+
+def test_overall_months_never_mixes_currencies():
+    # Given EUR and USD receipts in the same month, in both apartments
+    receipts = [
+        mk("r1", apartment_id="a1", purchase_date="2026-05-01", total=10.0, currency="EUR"),
+        mk("r2", apartment_id="a2", purchase_date="2026-05-02", total=20.0, currency="USD"),
+        mk("r3", apartment_id="a2", purchase_date="2026-05-03", total=1.0, currency="EUR"),
+    ]
+    summary = summarize_year(receipts, APARTMENTS, 2026, "all", TODAY)
+
+    # Then May lists each currency on its own, never summed together
+    assert summary["overall_months"] == [
+        {
+            "month": 5,
+            "by_currency": [
+                {"currency": "EUR", "total": "11.00", "receipt_count": 2},
+                {"currency": "USD", "total": "20.00", "receipt_count": 1},
+            ],
+        }
+    ]
+
+
+def test_overall_months_uses_only_counted_receipts():
+    # Given counted receipts plus every kind of excluded one (and one from another year)
+    receipts = [
+        mk("r1", apartment_id="a1", purchase_date="2026-04-01", total=10.0),
+        mk("r2", purchase_date=None),
+        mk("r3", purchase_date="2026-04-02", total=None),
+        mk("r4", purchase_date="2026-04-03", currency=None),
+        mk("r5", purchase_date="2026-04-04", apartment_id=None),
+        mk("r6", purchase_date="2025-04-05", total=99.0),
+    ]
+
+    # Then only the counted receipt is in overall_months (same as overall); with basis=approved and
+    # nothing approved there is nothing at all
+    summary = summarize_year(receipts, APARTMENTS, 2026, "all", TODAY)
+    assert summary["overall_months"] == [
+        {"month": 4, "by_currency": [{"currency": "EUR", "total": "10.00", "receipt_count": 1}]}
+    ]
+    assert summarize_year(receipts, APARTMENTS, 2026, "approved", TODAY)["overall_months"] == []
+
+
+def test_no_receipts_means_empty_overall_months():
+    # Given no receipts at all
+    # When the year is summarized
+    summary = summarize_year([], APARTMENTS, 2026, "all", TODAY)
+    # Then overall_months is an empty list (like an empty apartment's months)
+    assert summary["overall_months"] == []
+
+
+def test_every_existing_field_is_unchanged_only_overall_months_is_added():
+    # Given a typical year
+    receipts = [
+        mk("r1", apartment_id="a1", purchase_date="2026-01-10", total=10.0),
+        mk("r2", apartment_id="a2", purchase_date="2026-02-10", total=20.0),
+    ]
+    summary = summarize_year(receipts, APARTMENTS, 2026, "all", TODAY)
+
+    # Then the response has exactly the former fields plus overall_months
+    assert set(summary) == {
+        "year", "basis", "apartments", "overall", "excluded", "with_warnings", "counted_unreviewed",
+        "attention", "possible_duplicates", "possible_duplicate_groups", "largest", "overall_months",
+    }
+    # And overall is still the plain list of currency totals, the apartments still carry their months
+    assert summary["overall"] == [{"currency": "EUR", "total": "30.00", "receipt_count": 2}]
+    assert set(summary["apartments"][0]) == {"apartment_id", "apartment_name", "by_currency", "months"}
+    assert summary["apartments"][0]["months"] == [
+        {"month": 1, "by_currency": [{"currency": "EUR", "total": "10.00", "receipt_count": 1}]}
+    ]
+
+
 def test_with_warnings_counts_only_counted_receipts():
     # Given a counted receipt with a warning (missing store name) and an
     # excluded receipt (no total) that would also warn if it were counted
@@ -433,6 +565,28 @@ def test_valid_request_returns_200_with_default_basis_all():
     assert body["basis"] == "all"
     assert body["year"] == 2026
     assert len(body["apartments"]) == 2
+
+
+def test_get_yearly_report_returns_overall_months(temp_repository):
+    # Given one saved receipt per apartment in March
+    for apartment_id, total in (("oberaudorf-bergblick", 12.5), ("sankt-englmar-waldglueck", 7.5)):
+        temp_repository.save_receipt(
+            str(uuid.uuid4()),
+            ReceiptData(
+                store_name="Store", purchase_date="2026-03-15", currency="EUR",
+                items=[], discounts=[], taxes=[], total=total,
+            ),
+            apartment_id=apartment_id,
+        )
+
+    # When the yearly report is requested
+    body = client.get("/reports/yearly?year=2026").json()
+
+    # Then overall_months has March with both apartments together, and overall is unchanged
+    assert body["overall_months"] == [
+        {"month": 3, "by_currency": [{"currency": "EUR", "total": "20.00", "receipt_count": 2}]}
+    ]
+    assert body["overall"] == [{"currency": "EUR", "total": "20.00", "receipt_count": 2}]
 
 
 def test_report_years_endpoint_returns_descending_years(temp_repository):

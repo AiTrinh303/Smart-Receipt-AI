@@ -66,6 +66,7 @@ function reportResponse(overrides: Record<string, unknown> = {}) {
       }),
     ],
     overall: [currencyTotal('EUR', '25.00', 2)],
+    overall_months: [{ month: 1, by_currency: [currencyTotal('EUR', '25.00', 2)] }],
     excluded: emptyExcluded(),
     with_warnings: 0,
     counted_unreviewed: 0,
@@ -151,7 +152,7 @@ describe('ReceiptReport', () => {
     })
     expect(screen.getAllByText('€25.00').length).toBeGreaterThan(0)
     expect(screen.getAllByText('2 receipts').length).toBeGreaterThan(0)
-    expect(screen.getByText('Both apartments')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Both apartments' })).toBeInTheDocument()
   })
 
   test('apartment cards are solid in their tone with white text; Both apartments is solid slate-700 with white text', async () => {
@@ -281,8 +282,8 @@ describe('ReceiptReport', () => {
     expect(chevron).toHaveClass('group-open:rotate-90')
   })
 
-  test('the monthly table: a full-width table-fixed table in a Card, Month 40% + an equal share per apartment with its dot, right-aligned € amounts, muted dash and empty months, and a Total row from the summary', async () => {
-    // Given Bergblick with January and March data, and a summary total the backend sent; Waldglück empty
+  test('the monthly table: a full-width table-fixed table in a Card, four equal columns (Month, each apartment with its dot, Both apartments), right-aligned € amounts, muted dash and empty months, and a Total row from the summary', async () => {
+    // Given Bergblick with January and March data, Waldglück empty, and the backend's overall/overall_months
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () =>
@@ -300,6 +301,11 @@ describe('ReceiptReport', () => {
                   }),
                   apartmentSummary({ apartment_id: WALDGLUECK.id, apartment_name: WALDGLUECK.name, by_currency: [], months: [] }),
                 ],
+                overall: [currencyTotal('EUR', '25.00', 2)],
+                overall_months: [
+                  { month: 1, by_currency: [currencyTotal('EUR', '10.00', 1)] },
+                  { month: 3, by_currency: [currencyTotal('EUR', '15.00', 1)] },
+                ],
               }),
             ),
           ),
@@ -311,18 +317,21 @@ describe('ReceiptReport', () => {
     // Then the table sits in a Card
     const table = within(details).getByRole('table')
     expect(table.closest('.rounded-card')).toHaveClass('shadow-card')
-    // And it fills the card with fixed column widths: Month 40%, the two apartments 30% each
+    // And it fills the card with four equal columns (Month, two apartments, Both): 25% each
     expect(table).toHaveClass('w-full', 'table-fixed')
     const cols = Array.from(table.querySelectorAll('colgroup > col')) as HTMLElement[]
-    expect(cols.map((col) => col.style.width)).toEqual(['40%', '30%', '30%'])
-    // And the header is Month plus one column per apartment, each with its tone dot
+    expect(cols.map((col) => col.style.width)).toEqual(['25%', '25%', '25%', '25%'])
+    // And the header is Month, one column per apartment with its tone dot, then "Both apartments" (no dot)
     const headers = within(table).getAllByRole('columnheader')
-    expect(headers.map((th) => th.textContent)).toEqual(['Month', 'Bergblick', 'Waldglück'])
+    expect(headers.map((th) => th.textContent)).toEqual(['Month', 'Bergblick', 'Waldglück', 'Both apartments'])
     for (const th of headers.slice(1)) {
       expect(th).toHaveClass('text-right')
       expect(th.className).not.toMatch(/\bw-\d/)
+    }
+    for (const th of headers.slice(1, 3)) {
       expect(th.querySelector('span[aria-hidden="true"].rounded-full')).not.toBeNull()
     }
+    expect(headers[3].querySelector('.rounded-full')).toBeNull()
 
     // And every month January..December is a row, then Total
     const rows = within(table).getAllByRole('row').slice(1)
@@ -341,11 +350,17 @@ describe('ReceiptReport', () => {
     // And a month with no data in any column is muted; one with data is not
     expect(rows[1]).toHaveClass('text-ink-muted')
     expect(rows[2]).toHaveClass('text-ink')
-    // And the Total row (semibold, top border) shows the summary totals as given
+    // And the Both column shows overall_months, right-aligned and tabular
+    const marchBoth = rows[2].children[3] as HTMLElement
+    expect(marchBoth).toHaveTextContent('€15.00')
+    expect(marchBoth).toHaveClass('text-right', 'tabular-nums')
+    expect(rows[1].children[3]).toHaveTextContent('—')
+    // And the Total row (semibold, top border) shows the summary totals and overall as given
     const total = rows[12]
     expect(total).toHaveClass('font-semibold', 'border-t')
     expect(total.children[1]).toHaveTextContent('€25.00')
     expect(total.children[2]).toHaveTextContent('—')
+    expect(total.children[3]).toHaveTextContent('€25.00')
     expect(within(details).queryByRole('heading', { name: '€' })).not.toBeInTheDocument()
   })
 
@@ -375,17 +390,81 @@ describe('ReceiptReport', () => {
     render(<ReceiptReport />)
     const details = (await screen.findByText('Show by month')).closest('details') as HTMLDetailsElement
 
-    // Then Total shows the summary card's number, not 25.00
+    // Then the apartment's Total shows the summary card's number, not 25.00
     const rows = within(within(details).getByRole('table')).getAllByRole('row')
     const total = rows[rows.length - 1]
-    expect(total).toHaveTextContent('€99.99')
-    expect(total).not.toHaveTextContent('25.00')
+    expect(total.children[1]).toHaveTextContent('€99.99')
+    expect(total.children[1]).not.toHaveTextContent('25.00')
+  })
+
+  test('the Both column shows what the backend sent (overall_months / overall), never adds the apartments up', async () => {
+    // Given Both values that deliberately are NOT the apartments added up
+    fetchSpy.mockImplementation(
+      routeFetch({
+        yearly: () =>
+          Promise.resolve(
+            jsonResponse(
+              200,
+              reportResponse({
+                apartments: [
+                  apartmentSummary({
+                    by_currency: [currencyTotal('EUR', '10.00', 1)],
+                    months: [{ month: 2, by_currency: [currencyTotal('EUR', '10.00', 1)] }],
+                  }),
+                  apartmentSummary({
+                    apartment_id: WALDGLUECK.id,
+                    apartment_name: WALDGLUECK.name,
+                    by_currency: [currencyTotal('EUR', '5.00', 1)],
+                    months: [{ month: 2, by_currency: [currencyTotal('EUR', '5.00', 1)] }],
+                  }),
+                ],
+                overall: [currencyTotal('EUR', '77.77', 2)],
+                overall_months: [{ month: 2, by_currency: [currencyTotal('EUR', '66.66', 2)] }],
+              }),
+            ),
+          ),
+      }),
+    )
+    render(<ReceiptReport />)
+    const details = (await screen.findByText('Show by month')).closest('details') as HTMLDetailsElement
+
+    // Then February's Both cell and the Total's Both cell are the backend's numbers, not 15.00
+    const rows = within(within(details).getByRole('table')).getAllByRole('row')
+    expect(rows[2].children[3]).toHaveTextContent('€66.66')
+    expect(rows[rows.length - 1].children[3]).toHaveTextContent('€77.77')
+    expect(within(details).queryByText('€15.00')).not.toBeInTheDocument()
+  })
+
+  test.each([
+    [2, ['25%', '25%', '25%', '25%']],
+    [3, ['20%', '20%', '20%', '20%', '20%']],
+  ])('with %i apartments and the Both column every column gets an equal share adding up to 100%%', (count, expected) => {
+    // Given a monthly table with that many apartments plus Both
+    const apartments = Array.from({ length: count }, (_, index) =>
+      apartmentSummary({ apartment_id: `apartment-${index}`, apartment_name: `Apartment ${index}`, months: [] }),
+    )
+    render(
+      <MonthlyCurrencyTable
+        currency="EUR"
+        months={[1]}
+        cells={{}}
+        apartments={apartments}
+        isSmallScreen={false}
+        showCurrencyHeading={false}
+        both={{ months: {}, total: undefined }}
+      />,
+    )
+
+    // Then all columns are equal and add up to 100%
+    const cols = Array.from(screen.getByRole('table').querySelectorAll('colgroup > col')) as HTMLElement[]
+    expect(cols.map((col) => col.style.width)).toEqual(expected)
+    expect(cols.reduce((sum, col) => sum + parseFloat(col.style.width), 0)).toBeCloseTo(100)
   })
 
   test.each([
     [1, ['40%', '60%']],
     [3, ['40%', '20%', '20%', '20%']],
-  ])('with %i apartment column(s) the widths are computed from the count and add up to 100%%', (count, expected) => {
+  ])('without a Both column, with %i apartment column(s), Month keeps 40%% and the widths add up to 100%%', (count, expected) => {
     // Given a monthly table with that many apartments
     const apartments = Array.from({ length: count }, (_, index) =>
       apartmentSummary({ apartment_id: `apartment-${index}`, apartment_name: `Apartment ${index}`, months: [] }),
@@ -654,7 +733,7 @@ describe('ReceiptReport', () => {
     )
     render(<ReceiptReport />)
     await waitFor(() => {
-      expect(screen.getByText('Both apartments')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Both apartments' })).toBeInTheDocument()
     })
     expect(screen.queryByText(/are not approved yet/)).not.toBeInTheDocument()
     expect(screen.queryByText(/not approved/)).not.toBeInTheDocument()
@@ -812,6 +891,9 @@ describe('ReceiptReport', () => {
     expect(cards[12]).toHaveTextContent('Total')
     expect(cards[12]).toHaveClass('font-semibold')
     expect(cards[12]).toHaveTextContent('€25.00')
+    // And every card has a "Both apartments" line (January's from overall_months, the Total's from overall)
+    expect(within(cards[0]).getByText('Both apartments').nextElementSibling).toHaveTextContent('€25.00')
+    expect(within(cards[12]).getByText('Both apartments').nextElementSibling).toHaveTextContent('€25.00')
   })
 
   test('large screen (matchMedia does not match): the monthly table renders, no cards', async () => {

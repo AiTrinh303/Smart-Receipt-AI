@@ -531,7 +531,16 @@ Per-feature detail for `backend/`, moved verbatim from CLAUDE.md's former "Proje
     actually had a counted receipt**); `overall` — the same `by_currency`
     shape, summed across every apartment (always equal to the sum of the
     apartments' own `by_currency`, since both are built from the same
-    per-receipt loop); `excluded` (the five counts above); `with_warnings`
+    per-receipt loop); `overall_months` — both apartments together per
+    month, the same `MonthlyBreakdown` shape as an apartment's `months`
+    (only months with a counted receipt, currencies never mixed), summed
+    with `Decimal` from the same counted receipts as `overall` in the same
+    loop, so it equals the apartments' months added up and its months add
+    up to `overall` (for two-decimal amounts; each value is quantized
+    half-up on its own, exactly like `overall` vs. the apartments). It is
+    a separate top-level field rather than `overall.months` because
+    `overall` is a list and stays unchanged for existing clients;
+    `excluded` (the five counts above); `with_warnings`
     — the number of **counted** receipts for which `check_receipt(data,
     today)` returns at least one warning (an excluded receipt's warnings,
     if any, are never counted here).

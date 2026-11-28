@@ -17,7 +17,7 @@ import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_E
 import { ItemCardList, ItemsSearchField, ItemsTable } from './ReceiptItems'
 import { HistoryHeaderRow, HistoryRow, HistoryRowList } from './ReceiptHistory'
 import ReceiptFileViewer from './ReceiptFileViewer'
-import { ExportCard, MonthlyCurrencyTable, VAT_FOOTNOTE } from './ReceiptReport'
+import { ExportCard, MonthlyCurrencyTable, VAT_FOOTNOTE, type BothApartmentsColumn } from './ReceiptReport'
 import { ChevronIcon } from './ReceiptUpload'
 import { exportOpenItems } from './reportOpenItems'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
@@ -296,6 +296,12 @@ const SAMPLE_MONTHLY_CELLS: Record<number, Record<string, ReportCurrencyTotal>> 
   3: { 'oberaudorf-bergblick': eur('1054.16', 4), 'sankt-englmar-waldglueck': eur('89.90', 1) },
   8: { 'oberaudorf-bergblick': eur('60.00', 1) },
 }
+/** "Both apartments" as the backend would send it (overall_months and
+ * overall) -- literal sample strings, never summed in the frontend. */
+const SAMPLE_MONTHLY_BOTH: BothApartmentsColumn = {
+  months: { 1: eur('120.40', 2), 3: eur('1144.06', 5), 8: eur('60.00', 1) },
+  total: eur('1324.46', 8),
+}
 const ALL_MONTH_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 const SAMPLE_REPORT_ALL_CLEAR: YearlyReport = {
@@ -303,6 +309,7 @@ const SAMPLE_REPORT_ALL_CLEAR: YearlyReport = {
   basis: 'all',
   apartments: [],
   overall: [],
+  overall_months: [],
   excluded: { undated: 0, not_approved: 0, no_total: 0, no_currency: 0, no_apartment: 0 },
   with_warnings: 0,
   counted_unreviewed: 0,
@@ -1683,11 +1690,13 @@ function StyleGuide() {
         <p className="text-sm text-ink-muted">
           Under the summary cards: a closed "Show by month" (the same text-style disclosure as Upload's
           "How it works and tips", chevron rotates open). Open: one Card per currency with a full-width,
-          table-fixed table -- Month 40%, each apartment an equal share of the other 60% (tone dot in the
-          header, right-aligned, tabular, with €), row dividers across the full width, a muted dash where a
-          month has no data, a muted row for a month empty in every column, and a Total row (font-semibold, top border)
-          from the summary totals -- the same numbers as the cards above. Below sm: month cards plus a Total
-          card. Then the export card, then the VAT note.
+          table-fixed table -- Month, each apartment (tone dot in the header) and a last "Both apartments"
+          column (no dot, from the backend's overall_months), four equal 25% columns; values right-aligned,
+          tabular, with €; row dividers across the full width, a muted dash where a month has no data, a muted
+          row for a month empty in every column, and a Total row (font-semibold, top border) from the summary
+          totals and overall -- the same numbers as the cards above. Each row's Both equals its two
+          apartments (the backend sums them). Below sm: month cards plus a Total card, each with a Both line.
+          Then the export card, then the VAT note.
         </p>
         <details className="group" open>
           <summary className="flex min-h-[44px] w-fit cursor-pointer select-none list-none items-center gap-1.5 rounded-sm text-sm font-medium text-ink [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand sm:min-h-0">
@@ -1702,11 +1711,12 @@ function StyleGuide() {
               apartments={SAMPLE_MONTHLY_APARTMENTS}
               isSmallScreen={false}
               showCurrencyHeading={false}
+              both={SAMPLE_MONTHLY_BOTH}
             />
           </div>
         </details>
         <p className="text-sm font-medium text-ink">
-          One apartment column (widths from the column count: Month 40%, apartment 60%)
+          Without a Both column, one apartment (widths from the column count: Month 40%, apartment 60%)
         </p>
         <MonthlyCurrencyTable
           currency="EUR"
@@ -1725,6 +1735,7 @@ function StyleGuide() {
             apartments={SAMPLE_MONTHLY_APARTMENTS}
             isSmallScreen
             showCurrencyHeading={false}
+            both={SAMPLE_MONTHLY_BOTH}
           />
         </div>
 
