@@ -98,6 +98,9 @@ export interface ItemsPage {
   total: number
 }
 
+/** The backend's `basis` field on a yearly report. The frontend never
+ * requests "approved" (no basis toggle, see docs/design.md), so it is
+ * always "all" in practice; kept to mirror the response shape. */
 export type ReportBasis = 'all' | 'approved'
 
 /** One currency's total within a yearly report scope (an apartment, a

@@ -17,10 +17,11 @@ import { EXTRACTION_FAILED_MESSAGE, EXTRACTION_NOT_CONFIGURED_MESSAGE, NETWORK_E
 import { ItemCardList, ItemsSearchField, ItemsTable } from './ReceiptItems'
 import { HistoryHeaderRow, HistoryRow, HistoryRowList } from './ReceiptHistory'
 import ReceiptFileViewer from './ReceiptFileViewer'
-import { ExportCard, VAT_FOOTNOTE } from './ReceiptReport'
+import { ExportCard, MonthlyCurrencyTable, VAT_FOOTNOTE } from './ReceiptReport'
+import { ChevronIcon } from './ReceiptUpload'
 import { exportOpenItems } from './reportOpenItems'
 import { HelpPanel, ReceiptsOverview, UploadSidePanelSkeleton } from './UploadSidePanel'
-import type { ItemRow, ReceiptSummary, YearlyReport } from './api/types'
+import type { ItemRow, ReceiptSummary, ReportApartmentSummary, ReportCurrencyTotal, YearlyReport } from './api/types'
 import { formatMoneyFromString } from './components/ui/formatMoney'
 import { apartmentToneClasses } from './format/apartmentTone'
 import { RECEIPT_SORT_OPTIONS } from './historySort'
@@ -267,6 +268,36 @@ const SAMPLE_EXPORT_APARTMENTS = [
   { id: 'sankt-englmar-waldglueck', name: 'Fewo JoJo - Sankt Englmar - Waldglück' },
 ]
 
+/** "Show by month" sample: Bergblick has data in Jan, Mar and Aug,
+ * Waldglück only in Mar; every other month is empty in both (muted rows).
+ * The by_currency totals are what the backend sends -- the Total row
+ * shows them as given, nothing is summed here. */
+const eur = (total: string, receipt_count: number): ReportCurrencyTotal => ({ currency: 'EUR', total, receipt_count })
+const SAMPLE_MONTHLY_APARTMENTS: ReportApartmentSummary[] = [
+  {
+    apartment_id: 'oberaudorf-bergblick',
+    apartment_name: 'Fewo JoJo - Oberaudorf - Bergblick',
+    by_currency: [eur('1234.56', 7)],
+    months: [
+      { month: 1, by_currency: [eur('120.40', 2)] },
+      { month: 3, by_currency: [eur('1054.16', 4)] },
+      { month: 8, by_currency: [eur('60.00', 1)] },
+    ],
+  },
+  {
+    apartment_id: 'sankt-englmar-waldglueck',
+    apartment_name: 'Fewo JoJo - Sankt Englmar - Waldglück',
+    by_currency: [eur('89.90', 1)],
+    months: [{ month: 3, by_currency: [eur('89.90', 1)] }],
+  },
+]
+const SAMPLE_MONTHLY_CELLS: Record<number, Record<string, ReportCurrencyTotal>> = {
+  1: { 'oberaudorf-bergblick': eur('120.40', 2) },
+  3: { 'oberaudorf-bergblick': eur('1054.16', 4), 'sankt-englmar-waldglueck': eur('89.90', 1) },
+  8: { 'oberaudorf-bergblick': eur('60.00', 1) },
+}
+const ALL_MONTH_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
 const SAMPLE_REPORT_ALL_CLEAR: YearlyReport = {
   year: 2026,
   basis: 'all',
@@ -395,6 +426,7 @@ function StyleGuide() {
     'loading' | 'table' | 'cards' | 'empty-unfiltered' | 'empty-filtered' | 'error'
   >('table')
   const [itemsSortSample, setItemsSortSample] = useState('date_desc')
+  const [sgReportYear, setSgReportYear] = useState('2026')
   const [sgItemsSearch, setSgItemsSearch] = useState('Kaffee')
   const [sgYear, setSgYear] = useState('')
   const [sgStatus, setSgStatus] = useState('')
@@ -1590,7 +1622,25 @@ function StyleGuide() {
         )}
       </Section>
 
-      <Section title="Yearly report (ReceiptReport -- solid apartment cards in their tone and a solid slate-700 Both apartments card, all with white text; Show by month, export card with its short note, VAT note)">
+      <Section title="Yearly report (ReceiptReport -- Year select in the header; solid apartment cards in their tone and a solid slate-700 Both apartments card, all with white text; Show by month with its table/cards and Total; export card with its short note, VAT note)">
+        <PageHeader
+          title="Yearly report"
+          description="Spending per apartment, from every saved receipt."
+          actions={
+            <div className="w-40">
+              <Select
+                id="styleguide-report-year"
+                label="Year"
+                value={sgReportYear}
+                onChange={setSgReportYear}
+                options={[
+                  { value: '2026', label: '2026' },
+                  { value: '2025', label: '2025' },
+                ]}
+              />
+            </div>
+          }
+        />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card surface={apartmentToneClasses('oberaudorf-bergblick').card} className="flex flex-col gap-3">
             <h2
@@ -1631,39 +1681,54 @@ function StyleGuide() {
         </div>
 
         <p className="text-sm text-ink-muted">
-          Under the summary cards: a closed "Show by month" (all 12 months, a dash where a month has no
-          data, no currency heading for a single currency), then the export card, then the VAT note.
+          Under the summary cards: a closed "Show by month" (the same text-style disclosure as Upload's
+          "How it works and tips", chevron rotates open). Open: one Card per currency with Month, one column
+          per apartment (tone dot in the header, w-40, right-aligned, with €), a muted dash where a month has
+          no data, a muted row for a month empty in every column, and a Total row (font-semibold, top border)
+          from the summary totals -- the same numbers as the cards above. Below sm: month cards plus a Total
+          card. Then the export card, then the VAT note.
         </p>
+        <details className="group" open>
+          <summary className="flex min-h-[44px] w-fit cursor-pointer select-none list-none items-center gap-1.5 rounded-sm text-sm font-medium text-ink [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand sm:min-h-0">
+            <ChevronIcon className="h-4 w-4 flex-shrink-0 text-ink-muted transition-transform duration-150 motion-reduce:transition-none group-open:rotate-90" />
+            Show by month
+          </summary>
+          <div className="mt-4 flex flex-col gap-4">
+            <MonthlyCurrencyTable
+              currency="EUR"
+              months={ALL_MONTH_NUMBERS}
+              cells={SAMPLE_MONTHLY_CELLS}
+              apartments={SAMPLE_MONTHLY_APARTMENTS}
+              isSmallScreen={false}
+              showCurrencyHeading={false}
+            />
+          </div>
+        </details>
+        <p className="text-sm font-medium text-ink">Below sm: month cards (first four shown) and the Total card</p>
+        <div className="max-w-sm">
+          <MonthlyCurrencyTable
+            currency="EUR"
+            months={[1, 2, 3, 4]}
+            cells={SAMPLE_MONTHLY_CELLS}
+            apartments={SAMPLE_MONTHLY_APARTMENTS}
+            isSmallScreen
+            showCurrencyHeading={false}
+          />
+        </div>
 
-        <p className="text-sm font-medium text-ink">Export card -- basis all, with things still open</p>
+        <p className="text-sm font-medium text-ink">Export card -- with things still open</p>
         <ExportCard
           year={2026}
-          basis="all"
           apartments={SAMPLE_EXPORT_APARTMENTS}
-          openItems={exportOpenItems(SAMPLE_REPORT_WITH_CHECKS, 'all')}
-        />
-        <p className="text-sm font-medium text-ink">Same data, basis approved ("not approved")</p>
-        <ExportCard
-          year={2026}
-          basis="approved"
-          apartments={SAMPLE_EXPORT_APARTMENTS}
-          openItems={exportOpenItems(
-            {
-              ...SAMPLE_REPORT_WITH_CHECKS,
-              counted_unreviewed: 0,
-              excluded: { ...SAMPLE_REPORT_WITH_CHECKS.excluded, not_approved: 5 },
-            },
-            'approved',
-          )}
+          openItems={exportOpenItems(SAMPLE_REPORT_WITH_CHECKS)}
         />
         <p className="text-sm font-medium text-ink">Nothing open (no note at all)</p>
         <ExportCard
           year={2026}
-          basis="all"
           apartments={SAMPLE_EXPORT_APARTMENTS}
-          openItems={exportOpenItems(SAMPLE_REPORT_ALL_CLEAR, 'all')}
+          openItems={exportOpenItems(SAMPLE_REPORT_ALL_CLEAR)}
         />
-        <ExportCard year={null} basis="all" apartments={null} />
+        <ExportCard year={null} apartments={null} />
         <p className="text-sm text-ink-muted">{VAT_FOOTNOTE}</p>
       </Section>
     </div>

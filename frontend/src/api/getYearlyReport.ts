@@ -1,20 +1,19 @@
 import { ApiError } from './ApiError'
-import type { ReportBasis, YearlyReport } from './types'
+import type { YearlyReport } from './types'
 
 export interface GetYearlyReportOptions {
   year: number
-  /** Omitted entirely when "all" (the backend's own default), so the URL
-   * only ever carries `basis=approved` when the owner opted into it. */
-  basis?: ReportBasis
 }
 
 const API_URL = import.meta.env.VITE_API_URL
 
+/** GET /reports/yearly for one year. Never sends `basis`: the page always
+ * uses the backend's default ("all" -- every saved receipt counts), see
+ * docs/design.md "Report: year in the header, no basis toggle". */
 export async function getYearlyReport(options: GetYearlyReportOptions): Promise<YearlyReport> {
-  const { year, basis } = options
+  const { year } = options
 
   const params = new URLSearchParams({ year: String(year) })
-  if (basis && basis !== 'all') params.set('basis', basis)
 
   const response = await fetch(`${API_URL}/reports/yearly?${params.toString()}`)
 

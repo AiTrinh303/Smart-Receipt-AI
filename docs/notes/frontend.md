@@ -697,14 +697,19 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   title can't blow out a row's height.
   **Yearly report (`ReceiptReport.tsx`, `src/api/getReportYears.ts`,
   `src/api/getYearlyReport.ts`, a fourth nav link "Report"/`?view=
-  report`):** reads `GET /reports/years` and `GET /reports/yearly?year=
-  &basis=`. State lives in the URL (`?view=report&year=<v>&basis=
-  approved`) — `basis=all` (the backend's own default) is the one value
-  never written to the URL; only an explicit `basis=approved` opt-in is.
-  The checkbox is "Only count receipts I approved" (unchecked by
-  default). An invalid/missing `year` falls back to the newest loaded
-  year, same "ignored, never sent as given" spirit as every other filter
-  in this app.
+  report`):** reads `GET /reports/years` and `GET /reports/yearly?year=`.
+  State lives in the URL (`?view=report&year=<v>`). **No basis:** the
+  page and the export links always use the backend's default basis
+  ("all" — every saved receipt counts) and never send `basis`; the
+  former "Only count receipts I approved" checkbox and every
+  approved-only path are gone (ADR 0005). A leftover `basis` param in
+  the URL (an old bookmark) is ignored and dropped from the address bar
+  with `replaceState` (`dropBasisParam`, no remount). An invalid/missing
+  `year` falls back to the newest loaded year, same "ignored, never sent
+  as given" spirit as every other filter in this app. **Year** is the
+  shared `ui/Select` (native below `sm`) in `PageHeader`'s actions slot,
+  right of "Yearly report", in a `w-40` wrapper; choosing a year
+  navigates to `?view=report&year=<y>` (a full remount, as before).
   **No arithmetic on money in the frontend:** the backend's amounts are
   already-rounded decimal strings (e.g. `"1234.56"`, `"-12.50"`).
   `formatMoneyFromString()` (`components/ui/formatMoney.ts`) displays
@@ -729,8 +734,8 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   summing two apartments' decimal strings to produce one would be
   exactly the arithmetic this rule forbids — the monthly table shows one
   column per apartment only (documented in `ReceiptReport.tsx` itself).
-  **Page order** (top to bottom): header (the description follows the
-  basis), Year select and "Only count receipts I approved"; the summary
+  **Page order** (top to bottom): header ("Spending per apartment, from
+  every saved receipt." with the Year select on the right); the summary
   cards; "Show by month"; "For your tax advisor" (with its short note);
   the VAT note.
   **Summary**: one `Card` per apartment (`apartmentShortName` visible,
@@ -747,16 +752,28 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   solid `bg-slate-700` with the same white text, so the three cards read
   as one set. Contrast (asserted and printed): white ≥ 5.93:1 and
   white/90 ≥ 5.13:1 on all three. An apartment with no data shows "No
-  approved receipts in `<year>`." (`basis=approved`) or "No receipts in
-  `<year>`." (`basis=all`).
-  **Show by month**: a closed `<details>` directly under the summary
-  cards — no card of its own. When open, one table per currency present
-  in any apartment's `months`, with **all 12 months** January–December
-  (`ALL_MONTHS`, `MONTH_NAMES` — no locale dependence) and one column per
-  apartment; a cell with no data shows a plain dash. The currency
-  sub-heading appears only when the year has more than one currency.
-  From `sm` up it's a table, below `sm` a list of cards — only one ever
-  mounted (`useMediaQuery`).
+  receipts in `<year>`.".
+  **Show by month**: a closed `<details className="group">` directly
+  under the summary cards, with the same text-style summary as Upload's
+  "How it works and tips" (no marker, `ChevronIcon` — exported from
+  `ReceiptUpload.tsx` — rotating 90° when open, `min-h-[44px]` below
+  `sm`). When open, `MonthlyCurrencyTable` (exported for the style
+  guide) renders one block per currency present in any apartment's
+  `months`, with **all 12 months** January–December (`ALL_MONTHS`,
+  `MONTH_NAMES` — no locale dependence). From `sm` up: a table in a
+  `Card` (History's header style, `pl-4`/`pr-4` at the edges, not
+  `w-full`, so the value columns sit next to each other): Month, then one
+  `w-40` right-aligned tabular-nums column per apartment with its
+  `ApartmentDot` in the header; amounts via `formatMoneyFromString` (with
+  €); an empty cell is a muted dash read as "No receipts"
+  (`EmptyAmount`); a month with no data in any column is `text-ink-muted`;
+  last a "Total" row (`<tfoot>`, `font-semibold`, `border-t
+  border-border`) whose values are each apartment's `by_currency` entry
+  for that currency — the same numbers as the summary cards, never summed
+  from the months. Below `sm`: month cards (each apartment with its dot,
+  € amounts, empty months muted) plus a "Total" card at the end. The
+  currency sub-heading appears only when the year has more than one
+  currency. Only one of table/cards is ever mounted (`useMediaQuery`).
   **No checks card, no warnings/duplicates lists:** the former "Before
   you send it" card (and before it "Quick check", "Receipts not in these
   totals" and "Largest receipts") is gone; what's still open is a short
@@ -776,12 +793,12 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   **Download controls for the yearly export (`ExportCard`, exported from
   `ReceiptReport.tsx`; `src/api/reportExportUrl.ts`):** a "For your tax
   advisor" `Card` at the end of the page (just above the VAT note).
-  **Its note (`ExportNote`, from `openItems` = `exportOpenItems(report,
-  basis)`, in `src/reportOpenItems.ts`), above the buttons, only when something is open:** one line
-  "N not reviewed · M with warnings · K possible duplicates" (K =
-  `possible_duplicate_groups`, singular "1 possible duplicate") — "not approved" under
-  `basis=approved` (`excluded.not_approved`), else `counted_unreviewed`;
-  a zero part is left out — with a right-aligned "Review them" link to
+  **Its note (`ExportNote`, from `openItems` = `exportOpenItems(report)`,
+  in `src/reportOpenItems.ts`), above the buttons, only when something is open:** one line
+  "N not reviewed · M with warnings · K possible duplicates" (N =
+  `counted_unreviewed`, K = `possible_duplicate_groups`, singular "1
+  possible duplicate"; `excluded.not_approved` is never read); a zero
+  part is left out — with a right-aligned "Review them" link to
   `?view=history&year=<year>&status=needs_review` (shown only while the
   not-reviewed count is above 0; with only warnings it would open an
   empty list); then one line per non-zero "not in these totals" bucket:
@@ -801,18 +818,17 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   download" contract as "Download PDF" in `ReceiptFileViewer.tsx`
   (whose `DownloadIcon` is exported and reused here rather than
   duplicated). `reportExportCsvUrl(params)`/`reportExportZipUrl(params)`
-  (`{year, basis?, style, apartmentId?}`) build the query string with
-  `URLSearchParams`, following `getYearlyReport.ts`'s own convention for
-  `basis` (omitted entirely when `"all"`) — **except `style`, which is
-  always sent, even for the default `"excel_de"`**, so the downloaded
-  file's format can never silently depend on the backend's own default
-  changing later (the one deliberate difference from the `basis`
-  convention). `ExportCard` takes `year`/`basis`/`apartments` as props (presentational, exported specifically so
+  (`{year, style, apartmentId?}`) build the query string with
+  `URLSearchParams` — never `basis` (the backend default, "all") —
+  **and `style` is always sent, even for the default `"excel_de"`**, so
+  the downloaded file's format can never silently depend on the
+  backend's own default changing later. `ExportCard` takes
+  `year`/`apartments`/`openItems` as props (presentational, exported specifically so
   `StyleGuide.tsx` and tests can render it directly with static data,
   the same pattern `ApartmentCell`/`HistoryRow`/etc. already use) and
   keeps the chosen apartment and CSV style in its own component state —
   deliberately never written to the URL or persisted across a reload,
-  unlike Year/basis, since this is a one-off export choice rather than a
+  unlike Year, since this is a one-off export choice rather than a
   saved view. The "Apartment" select ("All apartments" plus each
   apartment from `useApartments(true)`, short name visible via
   `apartmentShortName`, full name in the option's `title`) and "CSV
@@ -820,12 +836,11 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   default value `"excel_de"`, or "Plain (comma, decimal point)",
   `"plain"`) sit in a closed `<details>` "Export options" below the two
   links (ZIP primary, CSV secondary), since the defaults fit almost
-  every export; Year and
-  "Only count receipts I approved" are read from the surrounding view,
-  never duplicated here, and also shown as plain text next to the links
-  ("`2026, all receipts`"/"`2026, approved receipts only`"), so a
-  Year/basis change (a full remount, like every other filter in this
-  app) updates both the hrefs and that text together. When there is no
+  every export; the Year is read from the surrounding view, never
+  duplicated here, and also shown as plain text next to the links
+  ("`2026, all receipts`"), so a Year change (a full remount, like every
+  other filter in this app) updates both the hrefs and that text
+  together. When there is no
   year to export at all (`year === null` — no dated receipts, the same
   condition that already shows "No dated receipts yet..." instead of
   the summary), both links render as non-interactive
@@ -837,9 +852,11 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   advisor." (The former "Receipts that were not reviewed are included."
   line is gone — the note above covers unreviewed receipts.) No request is ever made for the export
   itself — only a click on a link triggers the browser's own download;
-  `ExportCard` never calls `fetch`. In `?view=styleguide`: the summary
-  cards, `ExportCard` with its note under each basis, with nothing open
-  (no note), and with `year={null}`, and the VAT note.
+  `ExportCard` never calls `fetch`. In `?view=styleguide`: the header
+  with its Year select, the summary cards, the open "Show by month"
+  table and the small-screen cards with the Total card, `ExportCard`
+  with things open, with nothing open (no note), and with
+  `year={null}`, and the VAT note.
   **Changing the apartment on a saved receipt (`ReceiptApartment.tsx`,
   `src/api/updateReceiptApartment.ts`):** rendered by the saved-receipt
   container (the same `if (result)` branch used right after extraction and

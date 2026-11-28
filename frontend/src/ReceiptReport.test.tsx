@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { chooseOption, selectControl, selectValue } from './test/select'
 import ReceiptReport from './ReceiptReport'
 import { SAMPLE_APARTMENTS, clearApartmentsCache, withApartments } from './test/apartmentsFetch'
 import { expectBrowserHandlesModifiedClicks } from './test/linkClicks'
@@ -127,7 +128,7 @@ describe('ReceiptReport', () => {
   test('years load and the newest is selected by default', async () => {
     render(<ReceiptReport />)
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toHaveValue('2026')
+      expect(selectValue(selectControl('Year'))).toBe('2026')
     })
     const yearlyCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/reports/yearly'))!
     expect(String(yearlyCall[0])).toContain('year=2026')
@@ -136,7 +137,7 @@ describe('ReceiptReport', () => {
   test('the default request sends no basis param and shows no "Estimates only" text', async () => {
     render(<ReceiptReport />)
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+      expect(selectControl('Year')).toBeInTheDocument()
     })
     const yearlyCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/reports/yearly'))!
     expect(String(yearlyCall[0])).not.toContain('basis=')
@@ -200,23 +201,31 @@ describe('ReceiptReport', () => {
     expect(heading).toHaveClass('text-ink')
   })
 
-  test('the page description follows "Only count receipts I approved"', async () => {
-    // Given the default basis (all receipts)
-    const { unmount } = render(<ReceiptReport />)
-    await screen.findByRole('heading', { name: 'Bergblick' })
-
-    // Then the description says every saved receipt counts
-    expect(screen.getByText('Spending per apartment, from every saved receipt.')).toBeInTheDocument()
-    expect(screen.queryByText('Spending per apartment, from the receipts you approved.')).not.toBeInTheDocument()
-    unmount()
-
-    // Given basis=approved
+  test('no basis toggle: the description always says every saved receipt counts; a basis param in the URL is ignored and dropped', async () => {
+    // Given an old bookmark with basis=approved
     window.history.replaceState({}, '', '/?view=report&year=2026&basis=approved')
+    const calls: string[] = []
+    fetchSpy.mockImplementation(
+      routeFetch({
+        yearly: (urlString) => {
+          calls.push(urlString)
+          return Promise.resolve(jsonResponse(200, reportResponse()))
+        },
+      }),
+    )
     render(<ReceiptReport />)
     await screen.findByRole('heading', { name: 'Bergblick' })
 
-    // Then it says only approved receipts count
-    expect(screen.getByText('Spending per apartment, from the receipts you approved.')).toBeInTheDocument()
+    // Then the page uses the default basis: the request has no basis, the description is the "all" one
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).not.toContain('basis=')
+    expect(screen.getByText('Spending per apartment, from every saved receipt.')).toBeInTheDocument()
+    expect(screen.queryByText('Spending per apartment, from the receipts you approved.')).not.toBeInTheDocument()
+    // And the param is dropped from the address bar, the year kept
+    expect(window.location.search).toBe('?view=report&year=2026')
+    // And there is no "Only count receipts I approved" checkbox
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByText('Only count receipts I approved')).not.toBeInTheDocument()
   })
 
   test('two currencies are never merged -- shown as separate lines', async () => {
@@ -246,7 +255,7 @@ describe('ReceiptReport', () => {
     expect(screen.getAllByText('USD 20.00').length).toBeGreaterThan(0)
   })
 
-  test('an apartment with no data shows the right empty message for the current basis', async () => {
+  test('an apartment with no data shows "No receipts in <year>."', async () => {
     render(<ReceiptReport />)
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Waldglück' })).toBeInTheDocument()
@@ -254,8 +263,26 @@ describe('ReceiptReport', () => {
     expect(screen.getByText('No receipts in 2026.')).toBeInTheDocument()
   })
 
-  test('"Show by month" is a closed details right under the summary cards (no card of its own), all 12 months with a dash where empty', async () => {
-    // Given one apartment with January and March data, in one currency
+  test('"Show by month" is a closed text-style disclosure (rotating chevron) right under the summary cards', async () => {
+    render(<ReceiptReport />)
+    const summaryText = await screen.findByText('Show by month')
+
+    // Then it's a closed <details> placed directly after the summary cards
+    const details = summaryText.closest('details') as HTMLDetailsElement
+    expect(details.open).toBe(false)
+    expect(details).toHaveClass('group')
+    expect(details.previousElementSibling).toContainElement(screen.getByRole('heading', { name: 'Both apartments' }))
+    // And its summary is the same text-style control as "How it works and tips": no marker, a chevron that
+    // rotates open, a visible focus ring
+    const summary = details.querySelector('summary') as HTMLElement
+    expect(summary).toHaveClass('list-none', 'font-medium', 'text-ink', 'focus-visible:outline-brand')
+    const chevron = summary.querySelector('svg') as SVGElement
+    expect(chevron).toHaveAttribute('aria-hidden', 'true')
+    expect(chevron).toHaveClass('group-open:rotate-90')
+  })
+
+  test('the monthly table: in a Card, Month + one w-40 right-aligned column per apartment with its dot, € amounts, muted dash and empty months, and a Total row from the summary', async () => {
+    // Given Bergblick with January and March data, and a summary total the backend sent; Waldglück empty
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () =>
@@ -265,6 +292,7 @@ describe('ReceiptReport', () => {
               reportResponse({
                 apartments: [
                   apartmentSummary({
+                    by_currency: [currencyTotal('EUR', '25.00', 2)],
                     months: [
                       { month: 1, by_currency: [currencyTotal('EUR', '10.00', 1)] },
                       { month: 3, by_currency: [currencyTotal('EUR', '15.00', 1)] },
@@ -278,29 +306,77 @@ describe('ReceiptReport', () => {
       }),
     )
     render(<ReceiptReport />)
-    const summary = await screen.findByText('Show by month')
+    const details = (await screen.findByText('Show by month')).closest('details') as HTMLDetailsElement
 
-    // Then it's a closed <details> placed directly after the summary cards, not inside a Card
-    const details = summary.closest('details') as HTMLDetailsElement
-    expect(details.open).toBe(false)
-    expect(details.previousElementSibling).toContainElement(screen.getByRole('heading', { name: 'Both apartments' }))
-    expect(details.parentElement?.className).not.toMatch(/rounded-card/)
-
-    // And every month January..December is a row, a dash where there's no data
+    // Then the table sits in a Card
     const table = within(details).getByRole('table')
+    expect(table.closest('.rounded-card')).toHaveClass('shadow-card')
+    // And the columns sit next to each other (the table isn't stretched to the card's edges)
+    expect(table).not.toHaveClass('w-full')
+    // And the header is Month plus one column per apartment, each with its tone dot
+    const headers = within(table).getAllByRole('columnheader')
+    expect(headers.map((th) => th.textContent)).toEqual(['Month', 'Bergblick', 'Waldglück'])
+    for (const th of headers.slice(1)) {
+      expect(th).toHaveClass('w-40', 'text-right')
+      expect(th.querySelector('span[aria-hidden="true"].rounded-full')).not.toBeNull()
+    }
+
+    // And every month January..December is a row, then Total
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
       'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      'July', 'August', 'September', 'October', 'November', 'December', 'Total',
     ])
-    expect(rows[1]).toHaveTextContent('—')
-    expect(rows[2]).toHaveTextContent('15.00')
-    expect(within(table).getAllByRole('columnheader').map((th) => th.textContent)).toEqual([
-      'Month',
-      'Bergblick',
-      'Waldglück',
-    ])
+    // And amounts carry €, right-aligned, tabular, fixed width
+    const marchBergblick = rows[2].children[1] as HTMLElement
+    expect(marchBergblick).toHaveTextContent('€15.00')
+    expect(marchBergblick).toHaveClass('w-40', 'text-right', 'tabular-nums')
+    // And an empty cell is a muted dash (read as "No receipts")
+    const marchWaldglueck = rows[2].children[2] as HTMLElement
+    expect(marchWaldglueck.querySelector('.text-ink-muted')).toHaveTextContent('—')
+    expect(marchWaldglueck).toHaveTextContent('No receipts')
+    // And a month with no data in any column is muted; one with data is not
+    expect(rows[1]).toHaveClass('text-ink-muted')
+    expect(rows[2]).toHaveClass('text-ink')
+    // And the Total row (semibold, top border) shows the summary totals as given
+    const total = rows[12]
+    expect(total).toHaveClass('font-semibold', 'border-t')
+    expect(total.children[1]).toHaveTextContent('€25.00')
+    expect(total.children[2]).toHaveTextContent('—')
     expect(within(details).queryByRole('heading', { name: '€' })).not.toBeInTheDocument()
+  })
+
+  test('the Total row is taken from the summary totals, never summed from the months', async () => {
+    // Given a summary total that is deliberately NOT the sum of the months (10.00 + 15.00)
+    fetchSpy.mockImplementation(
+      routeFetch({
+        yearly: () =>
+          Promise.resolve(
+            jsonResponse(
+              200,
+              reportResponse({
+                apartments: [
+                  apartmentSummary({
+                    by_currency: [currencyTotal('EUR', '99.99', 2)],
+                    months: [
+                      { month: 1, by_currency: [currencyTotal('EUR', '10.00', 1)] },
+                      { month: 3, by_currency: [currencyTotal('EUR', '15.00', 1)] },
+                    ],
+                  }),
+                ],
+              }),
+            ),
+          ),
+      }),
+    )
+    render(<ReceiptReport />)
+    const details = (await screen.findByText('Show by month')).closest('details') as HTMLDetailsElement
+
+    // Then Total shows the summary card's number, not 25.00
+    const rows = within(within(details).getByRole('table')).getAllByRole('row')
+    const total = rows[rows.length - 1]
+    expect(total).toHaveTextContent('€99.99')
+    expect(total).not.toHaveTextContent('25.00')
   })
 
   test('switching the year updates the URL and refetches', async () => {
@@ -316,35 +392,26 @@ describe('ReceiptReport', () => {
     const user = userEvent.setup()
     render(<ReportHarness />)
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toHaveValue('2026')
+      expect(selectValue(selectControl('Year'))).toBe('2026')
     })
 
-    await user.selectOptions(screen.getByLabelText('Year'), '2025')
+    await chooseOption(user, 'Year', '2025')
 
     await waitFor(() => expect(window.location.search).toContain('year=2025'))
     expect(calls[calls.length - 1]).toContain('year=2025')
   })
 
-  test('checking the checkbox adds basis=approved to the URL and refetches', async () => {
-    const calls: string[] = []
-    fetchSpy.mockImplementation(
-      routeFetch({
-        yearly: (urlString) => {
-          calls.push(urlString)
-          return Promise.resolve(jsonResponse(200, reportResponse()))
-        },
-      }),
-    )
-    const user = userEvent.setup()
-    render(<ReportHarness />)
-    await waitFor(() => {
-      expect(screen.getByLabelText('Only count receipts I approved')).toBeInTheDocument()
-    })
+  test('the Year select is the shared Select in the page header, right of the title, at a fixed width', async () => {
+    render(<ReceiptReport />)
+    await screen.findByRole('heading', { name: 'Bergblick' })
 
-    await user.click(screen.getByLabelText('Only count receipts I approved'))
-
-    await waitFor(() => expect(window.location.search).toContain('basis=approved'))
-    expect(calls[calls.length - 1]).toContain('basis=approved')
+    // Then the combobox sits in the PageHeader next to the h1, inside a w-40 wrapper
+    const control = selectControl('Year')
+    const header = screen.getByRole('heading', { level: 1, name: 'Yearly report' }).parentElement?.parentElement as HTMLElement
+    expect(header).toContainElement(control)
+    expect(control.closest('.w-40')).not.toBeNull()
+    // And it offers the same years
+    expect(selectValue(control)).toBe('2026')
   })
 
   /** The export card (the note lives inside it). */
@@ -505,8 +572,8 @@ describe('ReceiptReport', () => {
     expect(screen.queryByText(/Ready to send/)).not.toBeInTheDocument()
   })
 
-  test('basis approved: the note says "not approved" and lists every non-zero "not in these totals" bucket; the VAT line stays last', async () => {
-    // Given basis=approved with every bucket non-zero
+  test('the note says "N not reviewed" and lists every non-zero "not in these totals" bucket; the VAT line stays last', async () => {
+    // Given every bucket non-zero
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () =>
@@ -514,19 +581,18 @@ describe('ReceiptReport', () => {
             jsonResponse(
               200,
               reportResponse({
-                basis: 'approved',
-                excluded: { undated: 2, not_approved: 3, no_total: 1, no_currency: 1, no_apartment: 1 },
+                counted_unreviewed: 3,
+                excluded: { undated: 2, not_approved: 0, no_total: 1, no_currency: 1, no_apartment: 1 },
                 with_warnings: 4,
               }),
             ),
           ),
       }),
     )
-    window.history.replaceState({}, '', '/?view=report&year=2026&basis=approved')
     render(<ReceiptReport />)
 
-    // Then the first line says "not approved", with the same review link
-    expect(await screen.findByText('3 not approved · 4 with warnings')).toBeInTheDocument()
+    // Then the first line says "not reviewed", with the review link
+    expect(await screen.findByText('3 not reviewed · 4 with warnings')).toBeInTheDocument()
     const card = exportCard()
     expect(within(card).getByRole('link', { name: 'Review them' })).toHaveAttribute(
       'href',
@@ -549,7 +615,7 @@ describe('ReceiptReport', () => {
     expect(vat[0].nextElementSibling).toBeNull()
   })
 
-  test('the "not approved" link is hidden when basis=all, even if excluded.not_approved were somehow nonzero', async () => {
+  test('excluded.not_approved is never shown (the page always uses basis all), even if it were somehow nonzero', async () => {
     fetchSpy.mockImplementation(
       routeFetch({
         yearly: () =>
@@ -563,6 +629,7 @@ describe('ReceiptReport', () => {
       expect(screen.getByText('Both apartments')).toBeInTheDocument()
     })
     expect(screen.queryByText(/are not approved yet/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/not approved/)).not.toBeInTheDocument()
   })
 
   test('decimal string amounts display exactly as given, including negative and "0.00"', async () => {
@@ -600,7 +667,7 @@ describe('ReceiptReport', () => {
     expect(screen.getByText('Loading report...')).toBeInTheDocument()
 
     deferred.resolve(jsonResponse(200, { items: [2026] }))
-    await waitFor(() => expect(screen.getByLabelText('Year')).toBeInTheDocument())
+    await waitFor(() => expect(selectControl('Year')).toBeInTheDocument())
   })
 
   test('error state shows an Alert with Retry, which reloads on click', async () => {
@@ -626,7 +693,7 @@ describe('ReceiptReport', () => {
     await user.click(screen.getByRole('button', { name: /retry/i }))
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+      expect(selectControl('Year')).toBeInTheDocument()
     })
     expect(callCount).toBe(2)
   })
@@ -649,7 +716,7 @@ describe('ReceiptReport', () => {
         screen.getByText('No dated receipts yet. Upload and approve receipts to see the report.'),
       ).toBeInTheDocument()
     })
-    expect(screen.queryByLabelText('Year')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Year' })).not.toBeInTheDocument()
   })
 
   test('a reply to an older (stale) request never overwrites the newer result', async () => {
@@ -674,7 +741,7 @@ describe('ReceiptReport', () => {
     render(<ReceiptReport />)
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toBeInTheDocument()
+      expect(selectControl('Year')).toBeInTheDocument()
     })
 
     // And only then does the older, now-stale request resolve
@@ -682,7 +749,7 @@ describe('ReceiptReport', () => {
 
     // Then the stale response never overwrites the newer, already-shown result
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(screen.getByLabelText('Year')).toBeInTheDocument()
+    expect(selectControl('Year')).toBeInTheDocument()
   })
 
   function mockMatchMedia(matches: boolean) {
@@ -699,13 +766,24 @@ describe('ReceiptReport', () => {
     delete window.matchMedia
   })
 
-  test('small screen (matchMedia matches): monthly cards render, not a table', async () => {
+  test('small screen (matchMedia matches): monthly cards render, not a table -- with € amounts and a Total card at the end', async () => {
     mockMatchMedia(true)
     render(<ReceiptReport />)
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Bergblick' })).toBeInTheDocument()
     })
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+
+    // Then 12 month cards plus a Total card, amounts with €
+    const details = screen.getByText('Show by month').closest('details') as HTMLDetailsElement
+    const cards = within(details).getAllByRole('listitem')
+    expect(cards).toHaveLength(13)
+    expect(cards[0]).toHaveTextContent('January')
+    expect(cards[0]).toHaveTextContent('€25.00')
+    expect(cards[1]).toHaveClass('text-ink-muted')
+    expect(cards[12]).toHaveTextContent('Total')
+    expect(cards[12]).toHaveClass('font-semibold')
+    expect(cards[12]).toHaveTextContent('€25.00')
   })
 
   test('large screen (matchMedia does not match): the monthly table renders, no cards', async () => {
@@ -735,7 +813,7 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
   async function renderReady() {
     render(<ReportHarness />)
     await waitFor(() => {
-      expect(screen.getByLabelText('Year')).toHaveValue('2026')
+      expect(selectValue(selectControl('Year'))).toBe('2026')
     })
   }
 
@@ -762,7 +840,7 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
 
   test('changing the year updates both hrefs', async () => {
     await renderReady()
-    await userEvent.selectOptions(screen.getByLabelText('Year'), '2025')
+    await chooseOption(userEvent.setup(), 'Year', '2025')
     await waitFor(() => {
       expect(zipLink()).toHaveAttribute(
         'href',
@@ -775,21 +853,17 @@ describe('ReceiptReport export controls (For your tax advisor)', () => {
     )
   })
 
-  test('the checkbox switches basis -- hrefs and the visible text update', async () => {
+  test('a basis param in the URL never reaches the export links; they say "all receipts"', async () => {
+    // Given an old bookmark with basis=approved
+    window.history.replaceState({}, '', '/?view=report&year=2026&basis=approved')
     await renderReady()
-    await userEvent.click(screen.getByLabelText('Only count receipts I approved'))
-    await waitFor(() => {
-      expect(zipLink()).toHaveAttribute(
-        'href',
-        `${API_URL}/reports/yearly/export.zip?year=2026&basis=approved&style=excel_de`,
-      )
-    })
-    expect(csvLink()).toHaveAttribute(
-      'href',
-      `${API_URL}/reports/yearly/export.csv?year=2026&basis=approved&style=excel_de`,
-    )
-    expect(screen.getByText('2026, approved receipts only')).toBeInTheDocument()
-    expect(screen.queryByText('2026, all receipts')).not.toBeInTheDocument()
+
+    // Then the links carry no basis, and there is no checkbox to switch it
+    expect(zipLink()).toHaveAttribute('href', `${API_URL}/reports/yearly/export.zip?year=2026&style=excel_de`)
+    expect(csvLink()).toHaveAttribute('href', `${API_URL}/reports/yearly/export.csv?year=2026&style=excel_de`)
+    expect(screen.getByText('2026, all receipts')).toBeInTheDocument()
+    expect(screen.queryByText('2026, approved receipts only')).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 
   test('choosing an apartment adds apartment_id to both hrefs', async () => {

@@ -1555,8 +1555,10 @@ A fourth nav link, "Report" (`?view=report`, `ReceiptReport.tsx`), reads
 apartment for one year, with a quick check of what to look at before
 trusting the totals.
 
-- **Every receipt counts by default.** The checkbox "Only count receipts
-  I approved" is unchecked by default (`basis=all`, the backend's own
+- **Every receipt counts by default.** *(Superseded: the checkbox was
+  removed — the Report always counts every saved receipt; see "Report:
+  year in the header, no basis toggle" below and ADR 0005.)* The checkbox "Only count receipts
+  I approved" was unchecked by default (`basis=all`, the backend's own
   default — the owner has no time to review every receipt before a tax
   declaration is due); checking it adds `basis=approved` to the URL.
   `basis=all` is never written to the URL itself — only an explicit
@@ -2674,6 +2676,49 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
   no `focus-within`, button's inset white ring).
 - **`?view=styleguide`:** the interactive bar with text, plus static
   idle, input-focused and button-focused samples (`sampleFocus`).
+
+## Report: year in the header, no basis toggle
+
+- **Year** is the shared `ui/Select` (native below `sm`) in
+  `PageHeader`'s actions slot, right of "Yearly report", `w-40`. Same
+  values (the years `GET /reports/years` returns) and the same URL
+  behaviour (`?view=report&year=<y>`, a full remount).
+- **No basis toggle (decision, ADR 0005):** the "Only count receipts I
+  approved" checkbox is removed. The page and the export links always
+  use the backend's default basis, "all" (every saved receipt counts),
+  and never send `basis`. A `basis` param in the URL is ignored and
+  dropped (`replaceState`). All approved-only wording ("not approved",
+  "No approved receipts in <year>.", "approved receipts only", the
+  approved description) and code paths are gone. **Why:** the owner
+  doesn't review every receipt before the tax deadline, the
+  approved-only numbers were never the ones sent to the tax advisor, and
+  the export note already says how many are not reviewed. The backend
+  still supports `basis=approved`, unused.
+- **"Show by month"** uses the same disclosure style as Upload's "How it
+  works and tips": a text control with a `ChevronIcon` that rotates 90°
+  when open (no marker, visible focus ring, 44px below `sm`). Open: per
+  currency, a table in a `Card` — Month, then one column per apartment
+  with its tone dot in the header; value columns `w-40`, right-aligned,
+  `tabular-nums`, next to each other (the table isn't `w-full`);
+  amounts via `formatMoneyFromString` with €; an empty cell is a
+  `text-ink-muted` dash (read as "No receipts"); a month with no data in
+  any column is `text-ink-muted` (the dashes say it too, not colour
+  alone); a last "Total" row (`font-semibold`, `border-t border-border`)
+  with each apartment's total taken from the summary data (`by_currency`)
+  — no arithmetic in the frontend, so it always equals the summary
+  cards. Below `sm`: the month cards (with €, empty months muted) and a
+  Total card at the end.
+- **Tests changed:** see the ticket report; in short, the "description
+  follows the checkbox", "checking the checkbox adds basis=approved",
+  "basis approved: the note says not approved" and export "the checkbox
+  switches basis" tests were rewritten for the no-basis behaviour; the
+  old "Show by month … (no card of its own)" test was split into the
+  disclosure test and the monthly-table test; every `getByLabelText('Year')`
+  became `selectControl('Year')` (the custom Select's listbox shares the
+  label).
+- **`?view=styleguide`:** the header with the Year select, the open
+  monthly table (with muted months and the Total row), the small-screen
+  cards with the Total card; the "basis approved" export sample removed.
 
 ## Changelog
 

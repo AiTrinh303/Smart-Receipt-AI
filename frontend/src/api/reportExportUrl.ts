@@ -1,5 +1,3 @@
-import type { ReportBasis } from './types'
-
 /** The two CSV styles GET /reports/yearly/export.csv and .zip accept --
  * excel_de (";" delimiter, BOM, decimal comma, German headers) or plain
  * (",", no BOM, decimal point, English headers). */
@@ -7,9 +5,6 @@ export type ExportStyle = 'excel_de' | 'plain'
 
 export interface ReportExportUrlParams {
   year: number
-  /** Omitted entirely when "all" (the backend's own default), same
-   * convention as getYearlyReport.ts. */
-  basis?: ReportBasis
   /** Always sent, even for the default "excel_de" -- so the downloaded
    * file's format never depends on a server-side default silently
    * changing later. */
@@ -20,9 +15,10 @@ export interface ReportExportUrlParams {
 const API_URL = import.meta.env.VITE_API_URL
 
 function buildExportSearch(params: ReportExportUrlParams): string {
-  const { year, basis, style, apartmentId } = params
+  // Never sends `basis`: the export always uses the backend's default
+  // ("all"), the same as the page (see getYearlyReport.ts).
+  const { year, style, apartmentId } = params
   const search = new URLSearchParams({ year: String(year) })
-  if (basis && basis !== 'all') search.set('basis', basis)
   search.set('style', style)
   if (apartmentId) search.set('apartment_id', apartmentId)
   return search.toString()

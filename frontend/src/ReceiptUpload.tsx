@@ -206,7 +206,7 @@ function SectionHeading({
   )
 }
 
-function ChevronIcon({ className = '' }: { className?: string }) {
+export function ChevronIcon({ className = '' }: { className?: string }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" className={className} fill="none">
       <path d="M7.5 4.5l5 5.5-5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

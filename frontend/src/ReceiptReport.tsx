@@ -7,7 +7,6 @@ import { reportExportCsvUrl, reportExportZipUrl } from './api/reportExportUrl'
 import type {
   Apartment,
   ReportApartmentSummary,
-  ReportBasis,
   ReportCurrencyTotal,
   ReportDuplicateGroup,
   YearlyReport,
@@ -15,24 +14,23 @@ import type {
 import { apartmentShortName } from './format/apartmentShortName'
 import { apartmentToneClasses } from './format/apartmentTone'
 import { formatDisplayDate } from './format/formatDisplayDate'
+import { ApartmentDot } from './components/ui/ApartmentTone'
 import Card from './components/ui/Card'
 import PageHeader from './components/ui/PageHeader'
+import Select from './components/ui/Select'
 import Skeleton from './components/ui/Skeleton'
 import { formatMoneyFromString, currencySymbol } from './components/ui/formatMoney'
 import { useApartments } from './hooks/useApartments'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { navigateTo, isPlainLeftClick } from './navigation'
 import { DownloadIcon } from './ReceiptFileViewer'
+import { ChevronIcon } from './ReceiptUpload'
 import { exportOpenItems, type ExportOpenItems } from './reportOpenItems'
 
-/** The page description follows the "Only count receipts I approved"
- * choice, so it never claims approved-only totals while every receipt is
- * counted. */
-function reportDescription(basis: ReportBasis): string {
-  return basis === 'approved'
-    ? 'Spending per apartment, from the receipts you approved.'
-    : 'Spending per apartment, from every saved receipt.'
-}
+/** Every saved receipt counts (the backend's default basis, "all"); the
+ * former "Only count receipts I approved" toggle was removed -- see
+ * docs/design.md "Report: year in the header, no basis toggle". */
+const REPORT_DESCRIPTION = 'Spending per apartment, from every saved receipt.'
 const LOADING_ROW_COUNT = 4
 
 const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Please try again.'
@@ -57,31 +55,29 @@ const MONTH_NAMES = [
 
 interface ReportUrlParams {
   year: string | null
-  basis: string | null
 }
 
 function readUrlParams(): ReportUrlParams {
   const params = new URLSearchParams(window.location.search)
   return {
     year: params.get('year'),
-    basis: params.get('basis'),
   }
 }
 
-/** The default basis is "all" (the owner has no time to review every
- * receipt before a tax declaration is due), so it is the one value
- * omitted from the URL entirely -- only "approved" (an explicit opt-in)
- * is ever written. Any other value is ignored, same "ignored, never
- * sent" spirit as every other filter in this app. */
-function effectiveBasis(rawBasis: string | null): ReportBasis {
-  return rawBasis === 'approved' ? 'approved' : 'all'
+/** A leftover `basis` param (from a bookmark made while the toggle
+ * existed) is ignored and dropped from the address bar -- `replaceState`,
+ * so no extra history entry and no remount. */
+function dropBasisParam() {
+  const params = new URLSearchParams(window.location.search)
+  if (!params.has('basis')) return
+  params.delete('basis')
+  window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}`)
 }
 
-function buildReportSearch(year: number, basis: ReportBasis): string {
+function buildReportSearch(year: number): string {
   const params = new URLSearchParams()
   params.set('view', 'report')
   params.set('year', String(year))
-  if (basis === 'approved') params.set('basis', 'approved')
   return `?${params.toString()}`
 }
 
@@ -110,19 +106,11 @@ function CurrencyRow({ entry, text }: { entry: ReportCurrencyTotal; text: Summar
   )
 }
 
-function emptyApartmentText(year: number, basis: ReportBasis): string {
-  return basis === 'approved' ? `No approved receipts in ${year}.` : `No receipts in ${year}.`
+function emptyApartmentText(year: number): string {
+  return `No receipts in ${year}.`
 }
 
-function ApartmentSummaryCard({
-  apartment,
-  year,
-  basis,
-}: {
-  apartment: ReportApartmentSummary
-  year: number
-  basis: ReportBasis
-}) {
+function ApartmentSummaryCard({ apartment, year }: { apartment: ReportApartmentSummary; year: number }) {
   // The apartment's tone as the whole card's surface (solid, the same
   // colour as its dot) with white text; an unknown apartment gets the plain
   // card with ink text.
@@ -134,7 +122,7 @@ function ApartmentSummaryCard({
         {apartmentShortName(apartment.apartment_name) ?? apartment.apartment_name}
       </h2>
       {apartment.by_currency.length === 0 ? (
-        <p className={`text-sm ${text.muted}`}>{emptyApartmentText(year, basis)}</p>
+        <p className={`text-sm ${text.muted}`}>{emptyApartmentText(year)}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {apartment.by_currency.map((entry) => (
@@ -146,20 +134,12 @@ function ApartmentSummaryCard({
   )
 }
 
-function OverallSummaryCard({
-  overall,
-  year,
-  basis,
-}: {
-  overall: ReportCurrencyTotal[]
-  year: number
-  basis: ReportBasis
-}) {
+function OverallSummaryCard({ overall, year }: { overall: ReportCurrencyTotal[]; year: number }) {
   return (
     <Card variant="emphasis" className="flex flex-col gap-3">
       <h2 className={`text-base font-semibold ${BOTH_CARD_TEXT.strong}`}>Both apartments</h2>
       {overall.length === 0 ? (
-        <p className={`text-sm ${BOTH_CARD_TEXT.muted}`}>{emptyApartmentText(year, basis)}</p>
+        <p className={`text-sm ${BOTH_CARD_TEXT.muted}`}>{emptyApartmentText(year)}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {overall.map((entry) => (
@@ -206,7 +186,29 @@ function buildMonthlyCurrencyTables(apartments: ReportApartmentSummary[]) {
     }))
 }
 
-function MonthlyCurrencyTable({
+/** An empty month/total cell: a muted dash, read as "No receipts". */
+function EmptyAmount() {
+  return (
+    <span className="text-ink-muted">
+      <span aria-hidden="true">—</span>
+      <span className="sr-only">No receipts</span>
+    </span>
+  )
+}
+
+function AmountOrDash({ entry }: { entry: ReportCurrencyTotal | undefined }) {
+  return entry ? <>{formatMoneyFromString(entry.total, entry.currency)}</> : <EmptyAmount />
+}
+
+/** One currency's monthly breakdown: Month, then one column per
+ * apartment (its tone dot in the header), then a "Total" row. Each
+ * apartment's total comes straight from its summary (`by_currency`, the
+ * same numbers as the summary cards) -- never summed here. A month with
+ * no data in any column is muted. A table in a Card from `sm` up (value
+ * columns `w-40`, right-aligned, next to each other rather than spread
+ * across the card); month cards plus a Total card below `sm`. Exported
+ * for the style guide. */
+export function MonthlyCurrencyTable({
   currency,
   months,
   cells,
@@ -222,31 +224,58 @@ function MonthlyCurrencyTable({
   /** Only when the year has more than one currency. */
   showCurrencyHeading: boolean
 }) {
-  const cellText = (month: number, apartmentId: string): string => {
-    const entry = cells[month]?.[apartmentId]
-    return entry ? formatMoneyFromString(entry.total, currency, { includeCurrency: false }) : '—'
-  }
+  const entryFor = (month: number, apartmentId: string) => cells[month]?.[apartmentId]
+  const totalFor = (apartment: ReportApartmentSummary) =>
+    apartment.by_currency.find((entry) => entry.currency === currency)
+  const isEmptyMonth = (month: number) => apartments.every((apartment) => !entryFor(month, apartment.apartment_id))
+  const shortName = (apartment: ReportApartmentSummary) =>
+    apartmentShortName(apartment.apartment_name) ?? apartment.apartment_name
+  const heading = showCurrencyHeading && (
+    <h3 className="text-sm font-semibold text-ink">{currencySymbol(currency)}</h3>
+  )
 
   if (isSmallScreen) {
     return (
       <div className="flex flex-col gap-2">
-        {showCurrencyHeading && <h3 className="text-sm font-semibold text-ink">{currencySymbol(currency)}</h3>}
+        {heading}
         <ul className="flex flex-col gap-2">
           {months.map((month) => (
-            <li key={month} className="rounded-md border border-border p-3 text-sm">
-              <p className="font-medium text-ink">{MONTH_NAMES[month - 1]}</p>
+            <li
+              key={month}
+              className={`rounded-md border border-border p-3 text-sm ${isEmptyMonth(month) ? 'text-ink-muted' : 'text-ink'}`}
+            >
+              <p className="font-medium">{MONTH_NAMES[month - 1]}</p>
               <dl className="mt-1 flex flex-col gap-1">
                 {apartments.map((apartment) => (
                   <div key={apartment.apartment_id} className="flex items-baseline justify-between gap-2">
-                    <dt className="text-ink-muted" title={apartment.apartment_name}>
-                      {apartmentShortName(apartment.apartment_name) ?? apartment.apartment_name}
+                    <dt className="flex items-center gap-1.5 text-ink-muted" title={apartment.apartment_name}>
+                      <ApartmentDot apartmentId={apartment.apartment_id} />
+                      {shortName(apartment)}
                     </dt>
-                    <dd className="tabular-nums text-ink">{cellText(month, apartment.apartment_id)}</dd>
+                    <dd className="tabular-nums">
+                      <AmountOrDash entry={entryFor(month, apartment.apartment_id)} />
+                    </dd>
                   </div>
                 ))}
               </dl>
             </li>
           ))}
+          <li className="rounded-md border border-border p-3 text-sm font-semibold text-ink">
+            <p>Total</p>
+            <dl className="mt-1 flex flex-col gap-1">
+              {apartments.map((apartment) => (
+                <div key={apartment.apartment_id} className="flex items-baseline justify-between gap-2">
+                  <dt className="flex items-center gap-1.5" title={apartment.apartment_name}>
+                    <ApartmentDot apartmentId={apartment.apartment_id} />
+                    {shortName(apartment)}
+                  </dt>
+                  <dd className="tabular-nums">
+                    <AmountOrDash entry={totalFor(apartment)} />
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </li>
         </ul>
       </div>
     )
@@ -254,47 +283,79 @@ function MonthlyCurrencyTable({
 
   return (
     <div className="flex flex-col gap-2">
-      {showCurrencyHeading && <h3 className="text-sm font-semibold text-ink">{currencySymbol(currency)}</h3>}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <caption className="sr-only">Monthly totals in {currencySymbol(currency)}</caption>
-          <thead>
-            <tr className="border-b border-border text-ink-muted">
-              <th scope="col" className="py-1 pr-2 font-medium">
-                Month
-              </th>
-              {apartments.map((apartment) => (
-                <th
-                  key={apartment.apartment_id}
-                  scope="col"
-                  className="whitespace-nowrap py-1 pr-2 text-right font-medium"
-                  title={apartment.apartment_name}
-                >
-                  {apartmentShortName(apartment.apartment_name) ?? apartment.apartment_name}
+      {heading}
+      <Card className="overflow-hidden">
+        <div className="-m-5 overflow-x-auto sm:-m-6">
+          <table className="text-left text-sm">
+            <caption className="sr-only">Monthly totals in {currencySymbol(currency)}</caption>
+            <thead>
+              <tr className="border-b border-border-subtle text-xs text-ink-muted">
+                <th scope="col" className="w-32 py-2 pl-4 pr-2 font-medium">
+                  Month
                 </th>
+                {apartments.map((apartment) => (
+                  <th
+                    key={apartment.apartment_id}
+                    scope="col"
+                    className="w-40 whitespace-nowrap py-2 pl-2 pr-4 text-right font-medium"
+                    title={apartment.apartment_name}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <ApartmentDot apartmentId={apartment.apartment_id} />
+                      {shortName(apartment)}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {months.map((month) => (
+                <tr
+                  key={month}
+                  className={`border-t border-border-subtle ${isEmptyMonth(month) ? 'text-ink-muted' : 'text-ink'}`}
+                >
+                  <td className="py-2 pl-4 pr-2">{MONTH_NAMES[month - 1]}</td>
+                  {apartments.map((apartment) => (
+                    <td
+                      key={apartment.apartment_id}
+                      className="w-40 whitespace-nowrap py-2 pl-2 pr-4 text-right tabular-nums"
+                    >
+                      <AmountOrDash entry={entryFor(month, apartment.apartment_id)} />
+                    </td>
+                  ))}
+                </tr>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {months.map((month) => (
-              <tr key={month} className="border-b border-border/40">
-                <td className="py-1 pr-2">{MONTH_NAMES[month - 1]}</td>
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-border font-semibold text-ink">
+                <td className="py-2 pl-4 pr-2">Total</td>
                 {apartments.map((apartment) => (
                   <td
                     key={apartment.apartment_id}
-                    className="whitespace-nowrap py-1 pr-2 text-right tabular-nums"
+                    className="w-40 whitespace-nowrap py-2 pl-2 pr-4 text-right tabular-nums"
                   >
-                    {cellText(month, apartment.apartment_id)}
+                    <AmountOrDash entry={totalFor(apartment)} />
                   </td>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </tfoot>
+          </table>
+        </div>
+      </Card>
     </div>
   )
 }
+
+/** "Show by month": the same text-style disclosure as Upload's "How it
+ * works and tips" -- a <summary> with a chevron that rotates open. */
+const DISCLOSURE_SUMMARY_CLASSES =
+  'flex min-h-[44px] w-fit cursor-pointer select-none list-none items-center gap-1.5 rounded-sm text-sm ' +
+  'font-medium text-ink [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2 focus-visible:outline-brand sm:min-h-0'
+
+const DISCLOSURE_CHEVRON_CLASSES =
+  'h-4 w-4 flex-shrink-0 text-ink-muted transition-transform duration-150 motion-reduce:transition-none ' +
+  'group-open:rotate-90'
 
 const DETAILS_SUMMARY_CLASSES =
   'cursor-pointer select-none text-sm font-semibold text-ink focus-visible:outline ' +
@@ -324,8 +385,8 @@ const EXPORT_SECONDARY_DISABLED_CLASSES =
 const EXPORT_NOTHING_TO_EXPORT_TEXT = 'Nothing to export yet.'
 const EXPORT_PRIVACY_TEXT = 'The ZIP contains personal data and is not encrypted; send it only to your tax advisor.'
 
-function exportPeriodText(year: number, basis: ReportBasis): string {
-  return `${year}, ${basis === 'approved' ? 'approved receipts only' : 'all receipts'}`
+function exportPeriodText(year: number): string {
+  return `${year}, all receipts`
 }
 
 /** "For your tax advisor": the CSV/ZIP download controls below the yearly
@@ -341,9 +402,8 @@ export interface ExportCardProps {
   /** null when there is no year to export at all (no dated receipts) --
    * renders both links as disabled, non-interactive spans instead. */
   year: number | null
-  basis: ReportBasis
   apartments: Apartment[] | null
-  /** What is still open for this year/basis; the short note above the
+  /** What is still open for this year; the short note above the
    * buttons is built from it. Omitted (or all zero) -> no note at all. */
   openItems?: ExportOpenItems
 }
@@ -412,16 +472,15 @@ function DuplicatesList({ groups }: { groups: ReportDuplicateGroup[] }) {
 
 /** The short "check before you send" note above the export buttons: one
  * line "N not reviewed · M with warnings · K possible duplicates" (parts
- * that are 0 left out;
- * "not approved" under basis=approved) with a right-aligned "Review them"
+ * that are 0 left out) with a right-aligned "Review them"
  * link while anything is unreviewed, then one line per non-zero "not in
  * these totals" bucket, then (when there are any) a closed "Show possible
  * duplicates" list. Every line starts with the warning icon and says what
  * it means in words. Nothing at all when everything is zero. */
-function ExportNote({ year, basis, items }: { year: number; basis: ReportBasis; items: ExportOpenItems }) {
+function ExportNote({ year, items }: { year: number; items: ExportOpenItems }) {
   const parts: string[] = []
   if (items.notReviewed > 0) {
-    parts.push(`${items.notReviewed} ${basis === 'approved' ? 'not approved' : 'not reviewed'}`)
+    parts.push(`${items.notReviewed} not reviewed`)
   }
   if (items.withWarnings > 0) {
     parts.push(`${items.withWarnings} with warnings`)
@@ -495,7 +554,7 @@ function ExportNote({ year, basis, items }: { year: number; basis: ReportBasis; 
   )
 }
 
-export function ExportCard({ year, basis, apartments, openItems }: ExportCardProps) {
+export function ExportCard({ year, apartments, openItems }: ExportCardProps) {
   const [apartmentId, setApartmentId] = useState('')
   const [style, setStyle] = useState<ExportStyle>('excel_de')
 
@@ -503,9 +562,9 @@ export function ExportCard({ year, basis, apartments, openItems }: ExportCardPro
     <Card className="flex flex-col gap-4">
       <h2 className="text-base font-semibold text-ink">For your tax advisor</h2>
 
-      {year !== null && openItems && <ExportNote year={year} basis={basis} items={openItems} />}
+      {year !== null && openItems && <ExportNote year={year} items={openItems} />}
 
-      {exportLinks(year, basis, style, apartmentId)}
+      {exportLinks(year, style, apartmentId)}
 
       {year === null && <p className="text-sm text-ink-muted">{EXPORT_NOTHING_TO_EXPORT_TEXT}</p>}
 
@@ -558,7 +617,7 @@ export function ExportCard({ year, basis, apartments, openItems }: ExportCardPro
 
 /** The ZIP (primary) and CSV (secondary) download links -- plain `<a
  * href>`s, or disabled spans when there is no year to export. */
-function exportLinks(year: number | null, basis: ReportBasis, style: ExportStyle, apartmentId: string) {
+function exportLinks(year: number | null, style: ExportStyle, apartmentId: string) {
   return (
       <div className="flex flex-wrap items-center gap-3">
         {year === null ? (
@@ -575,20 +634,20 @@ function exportLinks(year: number | null, basis: ReportBasis, style: ExportStyle
         ) : (
           <>
             <a
-              href={reportExportZipUrl({ year, basis, style, apartmentId: apartmentId || undefined })}
+              href={reportExportZipUrl({ year, style, apartmentId: apartmentId || undefined })}
               className={EXPORT_PRIMARY_LINK_CLASSES}
             >
               <DownloadIcon />
               Download ZIP (CSV and PDFs)
             </a>
             <a
-              href={reportExportCsvUrl({ year, basis, style, apartmentId: apartmentId || undefined })}
+              href={reportExportCsvUrl({ year, style, apartmentId: apartmentId || undefined })}
               className={EXPORT_SECONDARY_LINK_CLASSES}
             >
               <DownloadIcon />
               Download CSV only
             </a>
-            <span className="text-sm text-ink-muted">{exportPeriodText(year, basis)}</span>
+            <span className="text-sm text-ink-muted">{exportPeriodText(year)}</span>
           </>
         )}
       </div>
@@ -633,7 +692,6 @@ export const VAT_FOOTNOTE =
 
 function ReceiptReport() {
   const [urlParams] = useState(readUrlParams)
-  const basis = effectiveBasis(urlParams.basis)
 
   const [years, setYears] = useState<number[] | null>(null)
   const [year, setYear] = useState<number | null>(null)
@@ -644,6 +702,10 @@ function ReceiptReport() {
 
   const isSmallScreen = useMediaQuery('(max-width: 639px)')
   const { apartments: exportApartments } = useApartments(true)
+
+  useEffect(() => {
+    dropBasisParam()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -670,7 +732,7 @@ function ReceiptReport() {
             : yearsResponse.items[0]
         setYear(effectiveYearValue)
 
-        const reportResponse = await getYearlyReport({ year: effectiveYearValue, basis })
+        const reportResponse = await getYearlyReport({ year: effectiveYearValue })
         if (cancelled) return
         setReport(reportResponse)
       } catch (err) {
@@ -685,7 +747,7 @@ function ReceiptReport() {
     return () => {
       cancelled = true
     }
-    // urlParams/basis are captured once per mount (the whole page remounts
+    // urlParams are captured once per mount (the whole page remounts
     // on any navigation).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadToken])
@@ -693,18 +755,13 @@ function ReceiptReport() {
   const retry = () => setReloadToken((n) => n + 1)
 
   const handleYearChange = (value: string) => {
-    navigateTo(buildReportSearch(Number(value), basis))
-  }
-
-  const handleBasisChange = (checked: boolean) => {
-    if (year === null) return
-    navigateTo(buildReportSearch(year, checked ? 'approved' : 'all'))
+    navigateTo(buildReportSearch(Number(value)))
   }
 
   if (isLoading) {
     return (
       <div className="flex w-full flex-col gap-4">
-        <PageHeader title="Yearly report" description={reportDescription(basis)} />
+        <PageHeader title="Yearly report" description={REPORT_DESCRIPTION} />
         <div
           role="status"
           aria-busy="true"
@@ -722,7 +779,7 @@ function ReceiptReport() {
   if (error) {
     return (
       <div className="flex w-full flex-col gap-4">
-        <PageHeader title="Yearly report" description={reportDescription(basis)} />
+        <PageHeader title="Yearly report" description={REPORT_DESCRIPTION} />
         <div className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface p-6 shadow-card">
           <p role="alert" className="text-sm text-danger">
             {error}
@@ -742,13 +799,13 @@ function ReceiptReport() {
   if (!years || years.length === 0) {
     return (
       <div className="flex w-full flex-col gap-4">
-        <PageHeader title="Yearly report" description={reportDescription(basis)} />
+        <PageHeader title="Yearly report" description={REPORT_DESCRIPTION} />
         <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-6">
           <p className="text-sm text-ink-muted">
             No dated receipts yet. Upload and approve receipts to see the report.
           </p>
         </div>
-        <ExportCard year={null} basis="all" apartments={exportApartments} />
+        <ExportCard year={null} apartments={exportApartments} />
       </div>
     )
   }
@@ -761,55 +818,39 @@ function ReceiptReport() {
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <PageHeader title="Yearly report" description={reportDescription(basis)} />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="report-year-select" className="text-sm font-medium text-ink">
-            Year
-          </label>
-          <select
-            id="report-year-select"
-            value={year}
-            onChange={(e) => handleYearChange(e.target.value)}
-            className="h-11 min-h-[44px] rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <label className="flex min-h-[44px] items-center gap-2 text-sm text-ink">
-          <input
-            type="checkbox"
-            checked={basis === 'approved'}
-            onChange={(e) => handleBasisChange(e.target.checked)}
-            className="h-5 w-5 rounded border-border text-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          />
-          Only count receipts I approved
-        </label>
-      </div>
+      <PageHeader
+        title="Yearly report"
+        description={REPORT_DESCRIPTION}
+        actions={
+          // The shared Select (native below sm), a fixed width so the
+          // header doesn't shift between years.
+          <div className="w-40">
+            <Select
+              id="report-year-select"
+              label="Year"
+              value={String(year)}
+              onChange={handleYearChange}
+              options={years.map((y) => ({ value: String(y), label: String(y) }))}
+            />
+          </div>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {report.apartments.map((apartment) => (
-          <ApartmentSummaryCard
-            key={apartment.apartment_id}
-            apartment={apartment}
-            year={year}
-            basis={basis}
-          />
+          <ApartmentSummaryCard key={apartment.apartment_id} apartment={apartment} year={year} />
         ))}
-        <OverallSummaryCard overall={report.overall} year={year} basis={basis} />
+        <OverallSummaryCard overall={report.overall} year={year} />
       </div>
 
       {monthlyTables.length > 0 && (
-        // Not a card of its own: a closed <details> right under the
-        // summary cards it breaks down.
-        <details>
-          <summary className={DETAILS_SUMMARY_CLASSES}>Show by month</summary>
+        // A closed <details> right under the summary cards it breaks
+        // down; once open, each currency's table sits in its own Card.
+        <details className="group">
+          <summary className={DISCLOSURE_SUMMARY_CLASSES}>
+            <ChevronIcon className={DISCLOSURE_CHEVRON_CLASSES} />
+            Show by month
+          </summary>
           <div className="mt-4 flex flex-col gap-4">
             {monthlyTables.map(({ currency, months, cells }) => (
               <MonthlyCurrencyTable
@@ -826,12 +867,7 @@ function ReceiptReport() {
         </details>
       )}
 
-      <ExportCard
-        year={year}
-        basis={basis}
-        apartments={exportApartments}
-        openItems={exportOpenItems(report, basis)}
-      />
+      <ExportCard year={year} apartments={exportApartments} openItems={exportOpenItems(report)} />
 
       <p className="text-sm text-ink-muted">{VAT_FOOTNOTE}</p>
     </div>

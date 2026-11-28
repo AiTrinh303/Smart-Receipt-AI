@@ -1,7 +1,8 @@
-import type { ReportBasis, ReportDuplicateGroup, YearlyReport } from './api/types'
+import type { ReportDuplicateGroup, YearlyReport } from './api/types'
 
-/** Counts behind the export note. `notReviewed` is `counted_unreviewed`
- * under basis=all, or `excluded.not_approved` under basis=approved. */
+/** Counts behind the export note. `notReviewed` is `counted_unreviewed`:
+ * receipts still "Needs review" that are counted in the totals (the page
+ * always uses basis "all"). */
 export interface ExportOpenItems {
   notReviewed: number
   withWarnings: number
@@ -17,9 +18,9 @@ export interface ExportOpenItems {
   duplicateGroups: ReportDuplicateGroup[]
 }
 
-export function exportOpenItems(report: YearlyReport, basis: ReportBasis): ExportOpenItems {
+export function exportOpenItems(report: YearlyReport): ExportOpenItems {
   return {
-    notReviewed: basis === 'approved' ? report.excluded.not_approved : report.counted_unreviewed,
+    notReviewed: report.counted_unreviewed,
     withWarnings: report.with_warnings,
     undated: report.excluded.undated,
     noTotal: report.excluded.no_total,
