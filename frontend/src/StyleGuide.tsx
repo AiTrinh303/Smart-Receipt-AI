@@ -395,6 +395,7 @@ function StyleGuide() {
     'loading' | 'table' | 'cards' | 'empty-unfiltered' | 'empty-filtered' | 'error'
   >('table')
   const [itemsSortSample, setItemsSortSample] = useState('date_desc')
+  const [sgItemsSearch, setSgItemsSearch] = useState('Kaffee')
   const [sgYear, setSgYear] = useState('')
   const [sgStatus, setSgStatus] = useState('')
   const [sgSort, setSgSort] = useState('date_desc')
@@ -1398,20 +1399,90 @@ function StyleGuide() {
           </Button>
         </div>
 
-        <div className="sm:w-48">
-          <Select
-            id="styleguide-items-sort"
-            label="Sort by"
-            value={itemsSortSample}
-            onChange={setItemsSortSample}
-            options={[
-              { value: 'date_desc', label: 'Date (newest first)' },
-              { value: 'date_asc', label: 'Date (oldest first)' },
-              { value: 'amount_desc', label: 'Amount (high to low)' },
-              { value: 'amount_asc', label: 'Amount (low to high)' },
-              { value: 'store', label: 'Store (A-Z)' },
-            ]}
-          />
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-ink-muted">
+            Items' search and filter rows: row 1 the search input group (magnifier, placeholder, "×" while there
+            is text, the secondary "Search" button attached), row 2 Year, Status and Sort by as three equal
+            columns -- every control 44px tall. Type to see the "×".
+          </p>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="styleguide-items-search" className="text-sm font-medium text-ink">
+              Search items or stores
+            </label>
+            <div className="flex">
+              <div className="relative flex-1">
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 20 20"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+                  fill="none"
+                >
+                  <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M12.5 12.5L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <input
+                  id="styleguide-items-search"
+                  type="text"
+                  value={sgItemsSearch}
+                  onChange={(e) => setSgItemsSearch(e.target.value)}
+                  placeholder="e.g. Kaffee, Rossmann"
+                  className="relative h-11 w-full rounded-l-md border border-border bg-surface pl-9 pr-11 text-sm text-ink placeholder:text-ink-muted focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                />
+                {sgItemsSearch && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setSgItemsSearch('')}
+                    className="absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-md text-lg leading-none text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand"
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                className="-ml-px h-11 rounded-r-md border border-border bg-white px-4 text-sm font-medium text-ink hover:bg-slate-50 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                Search
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Select
+              id="styleguide-items-year"
+              label="Year"
+              value=""
+              onChange={() => {}}
+              options={[
+                { value: '', label: 'All years' },
+                { value: '2026', label: '2026' },
+              ]}
+            />
+            <Select
+              id="styleguide-items-status"
+              label="Status"
+              value=""
+              onChange={() => {}}
+              options={[
+                { value: '', label: 'All' },
+                { value: 'needs_review', label: 'Needs review' },
+                { value: 'approved', label: 'Approved' },
+              ]}
+            />
+            <Select
+              id="styleguide-items-sort"
+              label="Sort by"
+              value={itemsSortSample}
+              onChange={setItemsSortSample}
+              options={[
+                { value: 'date_desc', label: 'Date (newest first)' },
+                { value: 'date_asc', label: 'Date (oldest first)' },
+                { value: 'amount_desc', label: 'Amount (high to low)' },
+                { value: 'amount_asc', label: 'Amount (low to high)' },
+                { value: 'store', label: 'Store (A-Z)' },
+              ]}
+            />
+          </div>
         </div>
 
         <Card className="flex flex-col gap-4">

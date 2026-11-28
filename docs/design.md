@@ -2572,6 +2572,37 @@ an "Open" link's modified-click behaviour; no part and no list at 0.
 - **`?view=styleguide`:** the Items table sample shows "Showing 21–40 of
   268" with the pagination instead of "Show more".
 
+## Items: clearer search and filter row
+
+- **Two rows from `md` up:** the search form full width, then Year,
+  Status and Sort by as three equal columns -- the same grid as History.
+  `ReceiptFilters` now always uses that grid and gained a `topRow` slot;
+  BR's `equalColumns` prop and the old flex row were removed. Stacked
+  below `md`.
+- **Search field:** visible label kept; a decorative magnifier inside
+  on the left; placeholder "e.g. Kaffee, Rossmann"; a "×" inside on the
+  right while there is text (`aria-label="Clear search"`), replacing the
+  separate "Clear" button with the same behaviour; the "Search" button
+  is now secondary and attached (input-group style, shared border).
+  Enter still submits; `maxLength` unchanged; Tab: input -> × -> Search
+  -> Year.
+- **One height:** every control in both rows is `h-11` (44px). The
+  attached Search button uses the secondary-button tokens directly:
+  `Button`'s `sm` size is 40px from `sm` and would not match.
+- **Spacing above the list:** the bar above the table/list is rendered
+  only when it has content (single-page count, active-filter summary,
+  "Clear filters"), on Items **and** History -- History had the same
+  empty-row gap with several pages and no filter -- so both pages space
+  the list from the filter row identically. The active-filter summary
+  and "Clear filters" stay there.
+- **Tests:** no existing test changed (none used the old "Clear"
+  button by name). New in `ReceiptItems.test.tsx`: label/placeholder/
+  icon/attached secondary Search/no "Clear"; "×" clears like before;
+  Enter submits and the Tab order; the two rows and equal heights; no
+  empty bar with several pages. New in `ReceiptHistory.test.tsx`: no
+  empty bar with several pages.
+- **`?view=styleguide`:** the Items filter sample shows both rows.
+
 ## Changelog
 
 - **Invisible button investigation (unresolved as a reproducible bug):**

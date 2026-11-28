@@ -57,15 +57,12 @@ interface ReceiptFiltersProps {
   statusValue: ReceiptStatus | null
   onStatusChange: (value: string) => void
   statusSelectId: string
-  /** An optional extra filter control (e.g. the Items view's search box),
-   * rendered in the same row as Year/Status from `md` up. Omitting it
-   * (ReceiptHistory's case) leaves the existing `sm:flex-row` two-select
-   * layout completely unchanged. */
+  /** The third control of the filter row (both pages: "Sort by"). Year,
+   * Status and this one are three equal columns from md up, stacked below. */
   extraFilter?: ReactNode
-  /** Lay Year, Status and `extraFilter` out as three equal columns from md
-   * up (History). Omitted: the Items row (fixed-width Year/Status, the
-   * extra filter taking the rest). */
-  equalColumns?: boolean
+  /** A full-width row between the tabs and the filter row (Items: the
+   * search form). */
+  topRow?: ReactNode
 }
 
 function ReceiptFilters({
@@ -82,7 +79,7 @@ function ReceiptFilters({
   onStatusChange,
   statusSelectId,
   extraFilter,
-  equalColumns = false,
+  topRow,
 }: ReceiptFiltersProps) {
   const tabListRef = useRef<HTMLDivElement>(null)
 
@@ -172,21 +169,16 @@ function ReceiptFilters({
         })}
       </div>
 
-      {equalColumns ? (
-        // History: Year, Status and the extra control (Sort by) as three
-        // equal columns from md up, filling the row to the list's right edge.
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {yearSelect}
-          {statusSelect}
-          {extraFilter}
-        </div>
-      ) : (
-        <div className={`flex flex-col gap-3 md:flex-row ${extraFilter ? 'md:items-end' : ''}`}>
-          <div className={extraFilter ? 'md:w-48 md:flex-none' : 'flex-1'}>{yearSelect}</div>
-          <div className={extraFilter ? 'md:w-48 md:flex-none' : 'flex-1'}>{statusSelect}</div>
-          {extraFilter && <div className="flex flex-1 flex-col gap-1">{extraFilter}</div>}
-        </div>
-      )}
+      {topRow}
+
+      {/* Year, Status and the extra control (Sort by) as three equal
+          columns from md up, filling the row to the list's right edge;
+          stacked below md. The same row on History and Items. */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {yearSelect}
+        {statusSelect}
+        {extraFilter}
+      </div>
     </>
   )
 }

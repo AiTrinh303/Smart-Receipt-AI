@@ -1239,6 +1239,19 @@ describe('ReceiptHistory', () => {
     await waitFor(() => expect(screen.getByText('Showing 13–24 of 30')).toHaveFocus())
   })
 
+  test('with several pages and no filter there is no empty bar between the filter row and the list', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ list: () => Promise.resolve(jsonResponse(200, { items: [oneItem()], count: 1, total: 30 })) }),
+    )
+    render(<ReceiptHistory />)
+    await screen.findByText('Showing 1–12 of 30')
+
+    const row = selectControl('Year').closest('.grid') as HTMLElement
+    const anchor = row.nextElementSibling as HTMLElement
+    expect(anchor.childElementCount).toBe(0)
+    expect(anchor.nextElementSibling).toContainElement(screen.getByRole('link', { name: /store a/i }))
+  })
+
   test('a page from the URL is fetched directly; invalid -> page 1; too large -> the last page, with the URL corrected', async () => {
     const calls: string[] = []
     fetchSpy.mockImplementation(

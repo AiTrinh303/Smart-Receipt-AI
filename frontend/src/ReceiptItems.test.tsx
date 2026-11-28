@@ -247,6 +247,110 @@ describe('ReceiptItems', () => {
     expect(lastCall).toContain('q=milk')
   })
 
+  // --- Search and filter row -------------------------------------------------
+
+  test('the search field: visible label, magnifier icon, placeholder, and a secondary "Search" button attached to its right edge', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
+    )
+    render(<ReceiptItems />)
+    const input = await screen.findByLabelText('Search items or stores')
+
+    // Then the input has its placeholder and keeps maxLength 100
+    expect(input).toHaveAttribute('placeholder', 'e.g. Kaffee, Rossmann')
+    expect(input).toHaveAttribute('maxLength', '100')
+    // And a decorative magnifier sits inside the same wrapper
+    expect((input.parentElement as HTMLElement).querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+    // And the Search button is secondary (not the brand fill) and shares the input's border
+    const search = screen.getByRole('button', { name: 'Search' })
+    expect(search).toHaveAttribute('type', 'submit')
+    expect(search.className).not.toMatch(/\bbg-brand\b/)
+    expect(search).toHaveClass('-ml-px', 'rounded-r-md', 'border-border')
+    expect(input).toHaveClass('rounded-l-md')
+    // And there is no "×" while the field is empty, and no separate "Clear" button
+    expect(screen.queryByRole('button', { name: 'Clear search' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+  })
+
+  test('typing shows "×" inside the field; it clears the text and the search, like the old "Clear" button', async () => {
+    // Given a search already applied
+    window.history.replaceState({}, '', '/?view=items&q=milk')
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
+    )
+    const user = userEvent.setup()
+    render(<ItemsHarness />)
+    const input = await screen.findByLabelText('Search items or stores')
+    expect(input).toHaveValue('milk')
+
+    // When "×" (aria-label "Clear search") is clicked
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+
+    // Then the field is empty and the search is gone from the URL
+    await waitFor(() => expect(window.location.search).not.toContain('q='))
+    expect(await screen.findByLabelText('Search items or stores')).toHaveValue('')
+  })
+
+  test('Enter submits the search; Tab goes input -> "×" -> Search -> Year', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
+    )
+    const user = userEvent.setup()
+    render(<ItemsHarness />)
+    const input = await screen.findByLabelText('Search items or stores')
+
+    // Tab order while the field has text
+    await user.click(input)
+    await user.keyboard('kaffee')
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Clear search' })).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Search' })).toHaveFocus()
+    await user.tab()
+    expect(selectControl('Year')).toHaveFocus()
+
+    // Enter in the field submits
+    await user.click(screen.getByLabelText('Search items or stores'))
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(window.location.search).toContain('q=kaffee'))
+  })
+
+  test('row 1 is the full-width search, row 2 is Year, Status and Sort by as three equal columns; every control is 44px tall', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [], count: 0, total: 0 })) }),
+    )
+    render(<ReceiptItems />)
+    const input = await screen.findByLabelText('Search items or stores')
+
+    // Row 2: the same grid as History, holding exactly the three selects
+    const row = selectControl('Year').closest('.grid') as HTMLElement
+    expect(row).toHaveClass('grid-cols-1', 'md:grid-cols-3')
+    expect(row.children).toHaveLength(3)
+    expect(row).toContainElement(selectControl('Status'))
+    expect(row).toContainElement(selectControl('Sort by'))
+    // Row 1: the search form comes before it and is not part of the grid
+    expect(row).not.toContainElement(input)
+    expect(input.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Same height everywhere: h-11
+    for (const control of [input, screen.getByRole('button', { name: 'Search' }), selectControl('Year'), selectControl('Status'), selectControl('Sort by')]) {
+      expect(control).toHaveClass('h-11')
+    }
+  })
+
+  test('with several pages and no filter there is no empty bar: the table follows the filter row directly, as on History', async () => {
+    fetchSpy.mockImplementation(
+      routeFetch({ items: () => Promise.resolve(jsonResponse(200, { items: [makeRow()], count: 1, total: 60 })) }),
+    )
+    render(<ReceiptItems />)
+    await screen.findByText('Showing 1–20 of 60')
+
+    // Then after the filter grid comes only the (empty) scroll anchor, then the table
+    const row = selectControl('Year').closest('.grid') as HTMLElement
+    const anchor = row.nextElementSibling as HTMLElement
+    expect(anchor.childElementCount).toBe(0)
+    expect((anchor.nextElementSibling as HTMLElement).querySelector('table')).not.toBeNull()
+  })
+
   test('each filter sends its param and they combine', async () => {
     const calls: string[] = []
     fetchSpy.mockImplementation(

@@ -381,12 +381,16 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   **Filter row and `ui/Select`:** Year, Status and "Sort by" are all the
   shared `Select` (a select-only combobox; the native `<select>` below
   `sm` — see `docs/design.md`, "Components"), in both History and Items.
-  History passes `ReceiptFilters` its new `equalColumns` prop: Year,
-  Status and Sort by fill the row as three equal columns from `md` up
-  (`grid grid-cols-1 gap-3 md:grid-cols-3`, right edge aligned with the
-  list card), stacked below `md`. Items' row layout is unchanged
-  (fixed-width Year/Status, search + its own Sort by `Select` beside
-  them). Tests pick and read options through `src/test/select.ts`
+  On both pages `ReceiptFilters` lays out Year, Status and its
+  `extraFilter` (Sort by) as three equal columns from `md` up (`grid
+  grid-cols-1 gap-3 md:grid-cols-3`, right edge aligned with the list
+  card), stacked below `md`; its optional `topRow` slot (Items: the
+  search form) sits full-width between the tabs and that row. (BR's
+  `equalColumns` prop and the old flex layout are gone — both pages use
+  the grid.) The bar above the list ("N receipts"/"N items" for a single
+  page, the active-filter summary, "Clear filters") is rendered only when
+  it has something to show, so with several pages and no filter the list
+  follows the filter row with the same spacing on both pages. Tests pick and read options through `src/test/select.ts`
   (`selectControl` = the `combobox` role by name — both forms have it,
   and the custom listbox shares the label, so `getByLabelText` would
   find two elements; `chooseOption`, `selectValue`, `optionLabels`).
@@ -509,8 +513,17 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   `GET /receipts/facets`'s counts are receipt counts, not item counts,
   and would misrepresent how many rows that tab actually has. State:
   `?view=items&apartment=<id>&year=<v>&status=<v>&q=<v>&sort=<v>`. A search
-  box ("Search items or stores", `maxLength={100}`, a `<form>` so Enter
-  submits, a "Clear" button shown only once `searchInput` is non-empty)
+  form (row 1, full width): the visible label "Search items or stores",
+  an input group — a decorative magnifier inside on the left, placeholder
+  "e.g. Kaffee, Rossmann", `maxLength={100}`, a "×" button inside on the
+  right (`aria-label="Clear search"`, shown only once `searchInput` is
+  non-empty; same behaviour as the former "Clear" button: empties the
+  field and drops `q`), and a secondary "Search" submit button attached
+  to the input's right edge (`-ml-px`, shared border, `rounded-l-md`/
+  `rounded-r-md`). Every control in both rows is `h-11` (44px) — the
+  Search button uses the secondary-button tokens directly rather than
+  `Button`, whose `sm` size is 40px from `sm`. A `<form>` so Enter
+  submits; Tab order: input → × → Search → Year
   commits to the URL on submit, not as-you-type; `effectiveQuery()`
   (local to this file) trims and drops a `q` over 100 chars, same
   "ignored, never sent" spirit as `effectiveYear`/`effectiveStatus`. A
@@ -525,13 +538,8 @@ Per-feature detail for `frontend/`, moved verbatim from CLAUDE.md's former "Proj
   every other "unset means default" param here, but `listItems()` is
   always called with an explicit `sort` (so the request sent and the
   backend's own default agree regardless of what the address bar shows).
-  Both are combined into a single `extraFilter` element (search box
-  `flex-1`, sort `md:w-48`, row switches to `md:flex-row` from `md` up)
-  passed to `ReceiptFilters` as its `extraFilter` prop, so from `md` up
-  they sit on the same row as Year/Status (which then get a fixed
-  `md:w-48`); `ReceiptHistory` never passes `extraFilter`, so its two
-  selects stay `flex-1` (the row itself is `md:flex-row` for both pages —
-  see "Tidying History filters" in docs/design.md). Changing the sort,
+  The search form is `ReceiptFilters`' `topRow`, the sort `Select` its
+  `extraFilter` (row 2's third column). Changing the sort,
   like every other filter/search change
   here, fully remounts the page via `navigateTo()`, so paging resets to
   `offset=0` for free — no separate "reset paging" state exists.

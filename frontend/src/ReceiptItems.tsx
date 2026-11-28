@@ -633,49 +633,60 @@ function ReceiptItems() {
     )
   }
 
+  // Row 1: the search form, full width -- an input group: a magnifier
+  // inside on the left, a "×" (clear) inside on the right while there's
+  // text, and the secondary "Search" button attached to the input's right
+  // edge (shared border). Every control here is h-11 (44px), the same as
+  // the Select controls in row 2. Tab order: input -> × -> Search.
   const searchBox = (
     <form onSubmit={handleSearchSubmit} className="flex flex-col gap-1">
       <label htmlFor="items-search-input" className="text-sm font-medium text-ink">
         Search items or stores
       </label>
-      <div className="flex gap-2">
-        <input
-          id="items-search-input"
-          type="text"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          maxLength={MAX_SEARCH_LENGTH}
-          className="h-11 min-h-[44px] flex-1 rounded-md border border-border bg-surface px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-        />
-        {searchInput && (
-          <Button type="button" variant="ghost" size="sm" onClick={handleClearSearch}>
-            Clear
-          </Button>
-        )}
-        <Button type="submit" size="sm">
+      <div className="flex">
+        <div className="relative flex-1">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+            fill="none"
+          >
+            <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M12.5 12.5L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <input
+            id="items-search-input"
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            maxLength={MAX_SEARCH_LENGTH}
+            placeholder="e.g. Kaffee, Rossmann"
+            className="relative h-11 w-full rounded-l-md border border-border bg-surface pl-9 pr-11 text-sm text-ink placeholder:text-ink-muted focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={handleClearSearch}
+              className="absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-md text-lg leading-none text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand"
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          )}
+        </div>
+        <button
+          type="submit"
+          className="-ml-px h-11 rounded-r-md border border-border bg-white px-4 text-sm font-medium text-ink transition-colors duration-150 hover:bg-slate-50 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none"
+        >
           Search
-        </Button>
+        </button>
       </div>
     </form>
   )
 
+  // Row 2's third column (Year and Status come from ReceiptFilters).
   const sortSelect = (
-    <div className="md:w-48">
-      <Select
-        id="items-sort-select"
-        label="Sort by"
-        value={sort}
-        onChange={handleSortChange}
-        options={SORT_OPTIONS}
-      />
-    </div>
-  )
-
-  const extraFilter = (
-    <div className="flex flex-col gap-3 md:flex-row md:items-end">
-      <div className="flex-1">{searchBox}</div>
-      {sortSelect}
-    </div>
+    <Select id="items-sort-select" label="Sort by" value={sort} onChange={handleSortChange} options={SORT_OPTIONS} />
   )
 
   return (
@@ -694,7 +705,8 @@ function ReceiptItems() {
         statusValue={status}
         onStatusChange={handleStatusChange}
         statusSelectId="items-status-select"
-        extraFilter={extraFilter}
+        topRow={searchBox}
+        extraFilter={sortSelect}
       />
 
       {items && items.length === 0 ? (
@@ -719,26 +731,28 @@ function ReceiptItems() {
         )
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* One page: "N items" here. More: the count moves to the
-                "Showing a–b of N" line under the table (the old "N of M
-                items" would only repeat it). */}
-            {totalPages <= 1 ? (
-              <p role="status" className="text-sm text-ink-muted">
-                {total} {total === 1 ? 'item' : 'items'}
-              </p>
-            ) : (
-              <span />
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              {filterSummaryText && <p className="text-sm text-ink-muted">{filterSummaryText}</p>}
-              {anyFilterActive && (
-                <Button variant="secondary" size="sm" onClick={handleClearFilters}>
-                  Clear filters
-                </Button>
+          {/* The bar above the table: "N items" (one page only), the active
+              filters and "Clear filters" -- rendered only when it has
+              something to show, so an empty bar never adds a gap. */}
+          {(totalPages <= 1 || filterSummaryText || anyFilterActive) && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {totalPages <= 1 ? (
+                <p role="status" className="text-sm text-ink-muted">
+                  {total} {total === 1 ? 'item' : 'items'}
+                </p>
+              ) : (
+                <span />
               )}
+              <div className="flex flex-wrap items-center gap-2">
+                {filterSummaryText && <p className="text-sm text-ink-muted">{filterSummaryText}</p>}
+                {anyFilterActive && (
+                  <Button variant="secondary" size="sm" onClick={handleClearFilters}>
+                    Clear filters
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           <div ref={listTopRef} />
           {isSmallScreen ? (

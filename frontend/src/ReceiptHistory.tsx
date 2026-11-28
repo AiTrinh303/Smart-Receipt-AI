@@ -514,7 +514,6 @@ function ReceiptHistory() {
         statusValue={statusValue}
         onStatusChange={handleStatusChange}
         statusSelectId="history-status-select"
-        equalColumns
         extraFilter={
           <Select
             id="history-sort-select"
@@ -526,22 +525,25 @@ function ReceiptHistory() {
         }
       />
 
-      <div className="flex items-center justify-between gap-2">
-        {/* With one page, today's "N receipts"; with more, the count moves
-            to the "Showing a–b of N" line under the list. */}
-        {totalPages <= 1 ? (
-          <p role="status" className="text-sm text-ink-muted">
-            {`${listTotal} ${listTotal === 1 ? 'receipt' : 'receipts'}`}
-          </p>
-        ) : (
-          <span />
-        )}
-        {anyFilterActive && (
-          <Button variant="secondary" size="sm" onClick={handleClearFilters}>
-            Clear filters
-          </Button>
-        )}
-      </div>
+      {/* With one page, today's "N receipts"; with more, the count moves
+          to the "Showing a–b of N" line under the list. The bar is only
+          rendered when it has something to show (no empty gap). */}
+      {(totalPages <= 1 || anyFilterActive) && (
+        <div className="flex items-center justify-between gap-2">
+          {totalPages <= 1 ? (
+            <p role="status" className="text-sm text-ink-muted">
+              {`${listTotal} ${listTotal === 1 ? 'receipt' : 'receipts'}`}
+            </p>
+          ) : (
+            <span />
+          )}
+          {anyFilterActive && (
+            <Button variant="secondary" size="sm" onClick={handleClearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </div>
+      )}
 
       {items && items.length === 0 ? (
         isUnfiltered ? (
